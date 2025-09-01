@@ -55,6 +55,10 @@
       "aur-deploy.sh"
     ],
     "asarUnpack": [
+      "**/node_modules/onnxruntime-node/**/*.node",
+      "**/node_modules/onnxruntime-node/**/*.so",
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/@img/**/*",
       "Kokoro-82M-ONNX/**/*"
     ],
     "mac": {
@@ -116,7 +120,8 @@
       "icon": "assets/icons/png/256x256.png",
       "artifactName": "socialstreamninja_linux_v${version}_${arch}.${ext}",
       "target": "AppImage",
-      "executableName": "socialstreamninja"
+      "executableName": "socialstreamninja",
+      "executableArgs": ["--no-sandbox"]
     },
     "nsis": {
       "oneClick": false,
@@ -153,25 +158,25 @@
     "afterAllArtifactBuild": "./afterPack.js"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "app-builder-lib": "^25.1.8",
     "archiver": "^7.0.1",
     "electron": "^37.4.0",
     "electron-builder": "^25.1.8",
-    "electron-notarize": "git://github.com/electron/notarize.git",
-    "fs-extra": "11.3.0",
+    "fs-extra": "^11.3.0",
     "jsonfile": "^6.1.0",
     "npm-force-resolutions": "^0.0.10",
-    "rimraf": "^6.0.1",
+    "rimraf": "^5.0.7",
     "run-script-os-fix": "^1.0.4",
     "tsx": "^4.20.5"
   },
   "dependencies": {
     "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js",
-    "app-builder-lib": "^26.0.12",
     "bufferutil": "^4.0.9",
     "color": "^5.0.0",
     "color-convert": "^3.0.1",
     "color-name": "^2.0.0",
-    "electron-context-menu": "3.6.1",
+    "electron-context-menu": "^3.6.1",
     "electron-fetch": "^1.9.1",
     "electron-is-dev": "^3.0.1",
     "electron-prompt": "^1.7.0",
@@ -184,13 +189,23 @@
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
     "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector",
-    "undici": "^7.5.0",
+    "undici": "6.19.8",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.1",
     "yargs": "^17.7.2"
   },
+  "resolutions": {
+    "undici": "6.19.8",
+    "glob": "^10.5.2",
+    "rimraf": "^5.0.7",
+    "npmlog": "^7.0.1",
+    "inflight": "^2.0.0",
+    "gauge": "^5.0.2",
+    "are-we-there-yet": "^4.0.2",
+    "@npmcli/move-file": "^3.0.0"
+  },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }
