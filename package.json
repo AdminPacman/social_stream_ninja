@@ -1,174 +1,19 @@
 {
-  "name": "SocialStream",
+  "name": "socialstreamninja",
   "version": "0.3.52",
-  "description": "Standalone version of Social Stream Ninja",
-  "author": "Steve Seguin <steve@seguin.email>",
+  "description": "Pac's Linux-focused Social Stream Ninja - forked from Steve",
   "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "start2": "electron . --running-from-source",
-    "start3": "electron . --running-from-source --filesource C:/Users/steve/Code/social_stream/",
-    "start4": "electron . --running-from-source --filesource /Users/steveseguin/Code/social_stream/",
-    "test": "electron .",
-    "build": "run-os",
-    "prebuild:win32": "npm run clean && timeout /t 5 /nobreak",
-    "build:win32": "npm run prebuild:win32 && electron-builder --win",
-    "build:darwin": "electron-builder --mac --x64 && electron-builder --mac --arm64",
-    "build:linux": "electron-builder --linux",
-    "build:rpi": "USE_SYSTEM_FPM=true electron-builder --armv7l --linux deb",
-    "clean": "rimraf ./dist",
-    "release": "electron-builder --publish always",
-    "preinstall": "npx npm-force-resolutions"
-  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/steveseguin/ssn_app.git"
+    "url": "https://github.com/AdminPacman/social_stream_ninja.git"
   },
-  "build": {
-    "appId": "socialstream.electron",
-    "productName": "socialstream",
-    "files": [
-      "**/*",
-      "build/Release/*",
-      "assets/icons/*.*",
-      "assets/icons/mac/*.*",
-      "assets/icons/png/*.*",
-      "assets/icons/win/*.*",
-      "worker-tts.js",
-      "!certs/**",
-      "!*.pem",
-      "code-signing-cert.pem",
-      "!*.key",
-      "!*.pfx",
-      "!*.p12",
-      "!*.crt",
-      "!*.cer",
-      "!.claude/**",
-      "!claude-artifacts/**",
-      "!aur/**",
-      "!old-certs-backup/**",
-      "!electron-builder.env",
-      "!build-config.env",
-      "!.env",
-      "!mac.sh",
-      "!*.sh",
-      "aur-deploy.sh"
-    ],
-    "asarUnpack": [
-      "**/node_modules/onnxruntime-node/**/*.node",
-      "**/node_modules/onnxruntime-node/**/*.so",
-      "**/node_modules/sharp/**/*",
-      "**/node_modules/@img/**/*",
-      "Kokoro-82M-ONNX/**/*"
-    ],
-    "mac": {
-      "category": "public.build.automation",
-      "icon": "assets/icons/mac/icon.icns",
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "hardenedRuntime": true,
-      "entitlements": "./build/entitlements.mac.inherit.plist",
-      "extendInfo": {
-        "NSCameraUsageDescription": "This app requires camera access to record video.",
-        "NSMicrophoneUsageDescription": "This app requires microphone access to record audio."
-      },
-      "artifactName": "socialstreamninja_mac_v${version}_${arch}.${ext}"
-    },
-    "dmg": {
-      "contents": [
-        {
-          "x": 110,
-          "y": 150
-        },
-        {
-          "x": 440,
-          "y": 150,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ],
-      "artifactName": "socialstreamninja_mac_v${version}.dmg",
-      "writeUpdateInfo": false
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/icons/win/icon.ico",
-      "signtoolOptions": {
-        "certificateFile": "certs/socialstream.pfx",
-        "publisherName": "Steve Seguin",
-        "timeStampServer": "http://timestamp.digicert.com",
-        "sign": "./customSign.js"
-      }
-    },
-    "linux": {
-      "category": "public.build.automation",
-      "icon": "assets/icons/png/256x256.png",
-      "artifactName": "socialstreamninja_linux_v${version}_${arch}.${ext}",
-      "target": "AppImage",
-      "executableName": "socialstreamninja",
-      "executableArgs": ["--no-sandbox"]
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": false,
-      "createDesktopShortcut": true,
-      "shortcutName": "Social Stream Ninja",
-      "include": "installer.nsh",
-      "artifactName": "socialstreamninja-setup-${version}.${ext}",
-      "installerIcon": "assets/icons/win/icon.ico",
-      "uninstallerIcon": "assets/icons/win/icon.ico",
-      "differentialPackage": false,
-      "warningsAsErrors": false
-    },
-    "portable": {
-      "artifactName": "socialstreamninja-portable.exe",
-      "requestExecutionLevel": "user"
-    },
-    "appx": {
-      "applicationId": "socialstream",
-      "backgroundColor": "#464646",
-      "identityName": "socialstream",
-      "publisherDisplayName": "Steve Seguin",
-      "artifactName": "socialstreamninja-${version}.${ext}"
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "releaseType": "release"
-      }
-    ],
-    "afterSign": "./afterSign.js",
-    "afterAllArtifactBuild": "./afterPack.js"
-  },
-  "devDependencies": {
-    "@electron/rebuild": "^3.7.2",
-    "app-builder-lib": "^25.1.8",
-    "archiver": "^7.0.1",
-    "electron": "^37.4.0",
-    "electron-builder": "^25.1.8",
-    "fs-extra": "^11.3.0",
-    "jsonfile": "^6.1.0",
-    "npm-force-resolutions": "^0.0.10",
-    "rimraf": "^5.0.7",
-    "run-script-os-fix": "^1.0.4",
-    "tsx": "^4.20.5"
+  "license": "GPL-3.0",
+  "scripts": {
+    "start": "electron .",
+    "start2": "electron . --dev",
+    "postinstall": "electron-builder install-app-deps",
+    "build:linux": "electron-builder --linux deb",
+    "dist": "npm run build:linux"
   },
   "dependencies": {
     "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js",
@@ -194,9 +39,67 @@
     "ws": "^8.18.1",
     "yargs": "^17.7.2"
   },
+  "devDependencies": {
+    "electron": "^37.4.0",
+    "electron-builder": "^24.13.3",
+    "@electron/rebuild": "^3.6.0",
+    "app-builder-lib": "^24.13.3",
+    "archiver": "^7.0.1",
+    "fs-extra": "^11.3.0",
+    "jsonfile": "^6.1.0",
+    "run-script-os-fix": "^1.0.4",
+    "tsx": "^4.20.5",
+    "overrides": {
+      "glob": "^10.3.10",
+      "rimraf": "^5.0.7"
+    }
+  },
+  "build": {
+    "appId": "com.socialstreamninja.app",
+    "productName": "Social Stream Ninja",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/*.md",
+      "!darwin/**/*",
+      "!win32/**/*",
+      "!**/*.icns",
+      "!**/*.exe",
+      "!**/dmg/**/*",
+      "!**/nsis/**/*"
+    ],
+    "extraResources": [
+      "assets/**/*"
+    ],
+    "linux": {
+      "target": [
+        {
+          "type": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Utility",
+      "icon": "assets/icon.png",
+      "desktop": {
+        "Name": "Social Stream Ninja",
+        "Comment": "Standalone app for social chat streams",
+        "Categories": "Utility;AudioVideo;"
+      }
+    },
+    "deb": {
+      "compression": "xz",
+      "depends": ["libvips42t64", "espeak-ng"],
+      "maintainer": "Pacman <adminpacman@example.com>",
+      "vendor": "AdminPacman",
+      "synopsis": "Social Stream Ninja for Linux",
+      "fpm": ["--deb-priority=optional"]
+    }
+  },
   "resolutions": {
     "undici": "6.19.8",
-    "glob": "^10.5.2",
+    "glob": "^10.3.10",
     "rimraf": "^5.0.7",
     "npmlog": "^7.0.1",
     "inflight": "^2.0.0",
