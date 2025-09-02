@@ -16,7 +16,7 @@
     "dist": "npm run build:linux"
   },
   "dependencies": {
-    "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js#main",
+    "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js#master",
     "bufferutil": "^4.0.9",
     "color": "^5.0.0",
     "color-convert": "^3.0.1",
@@ -26,18 +26,19 @@
     "electron-is-dev": "^3.0.1",
     "electron-prompt": "^1.7.0",
     "electron-store": "8.2.0",
-    "es5-ext": "git+https://github.com/steveseguin/es5-ext.git#main",
+    "es5-ext": "git+https://github.com/steveseguin/es5-ext.git#master",
     "idb": "^8.0.2",
     "kokoro-js": "^1.2.0",
     "minimalist": "^1.0.0",
-    "minimist": "git+https://github.com/fortiZde/minimist.git#main",
+    "minimist": "git+https://github.com/fortiZde/minimist.git#master",
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
     "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector#main",
     "undici": "6.19.8",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.1",
-    "yargs": "^17.7.2"
+    "yargs": "^17.7.2",
+    "onnxruntime-node": "^1.21.0"
   },
   "devDependencies": {
     "electron": "^37.4.0",
@@ -68,7 +69,11 @@
       "!**/*.icns",
       "!**/*.exe",
       "!**/dmg/**/*",
-      "!**/nsis/**/*"
+      "!**/nsis/**/*",
+      "!**/win/**/*",
+      "!**/mac/**/*",
+      "!**/*.dmg",
+      "!**/*.msi"
     ],
     "extraResources": [
       "assets/**/*"
