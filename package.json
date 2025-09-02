@@ -16,7 +16,7 @@
     "dist": "npm run build:linux"
   },
   "dependencies": {
-    "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js",
+    "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js#main",
     "bufferutil": "^4.0.9",
     "color": "^5.0.0",
     "color-convert": "^3.0.1",
@@ -30,10 +30,10 @@
     "idb": "^8.0.2",
     "kokoro-js": "^1.2.0",
     "minimalist": "^1.0.0",
-    "minimist": "git+https://github.com/fortiZde/minimist.git",
+    "minimist": "git+https://github.com/fortiZde/minimist.git#main",
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
-    "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector",
+    "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector#main",
     "undici": "6.19.8",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.1",
@@ -48,11 +48,11 @@
     "fs-extra": "^11.3.0",
     "jsonfile": "^6.1.0",
     "run-script-os-fix": "^1.0.4",
-    "tsx": "^4.20.5",
-    "overrides": {
-      "glob": "^10.3.10",
-      "rimraf": "^5.0.7"
-    }
+    "tsx": "^4.20.5"
+  },
+  "overrides": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.7"
   },
   "build": {
     "appId": "com.socialstreamninja.app",
@@ -102,7 +102,7 @@
     "glob": "^10.3.10",
     "rimraf": "^5.0.7",
     "npmlog": "^7.0.1",
-    "inflight": "^2.0.0",
+    "inflight": "1.0.6",
     "gauge": "^5.0.2",
     "are-we-there-yet": "^4.0.2",
     "@npmcli/move-file": "^3.0.0"
