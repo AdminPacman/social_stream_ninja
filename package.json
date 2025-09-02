@@ -16,7 +16,7 @@
     "dist": "npm run build:linux"
   },
   "dependencies": {
-    "@huggingface/transformers": "git+https://github.com/steveseguin/transformers.js#master",
+    "@huggingface/transformers": "^3.4.1",
     "bufferutil": "^4.0.9",
     "color": "^5.0.0",
     "color-convert": "^3.0.1",
@@ -26,11 +26,11 @@
     "electron-is-dev": "^3.0.1",
     "electron-prompt": "^1.7.0",
     "electron-store": "8.2.0",
-    "es5-ext": "git+https://github.com/steveseguin/es5-ext.git#master",
+    "es5-ext": "^0.10.64",
     "idb": "^8.0.2",
     "kokoro-js": "^1.2.0",
     "minimalist": "^1.0.0",
-    "minimist": "git+https://github.com/fortiZde/minimist.git#master",
+    "minimist": "^1.2.8",
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
     "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector#main",
@@ -54,6 +54,9 @@
   "overrides": {
     "glob": "^10.3.10",
     "rimraf": "^5.0.7"
+  },
+  "optionalDependencies": {
+    "@img/sharp-linux-x64": "^0.33.5"
   },
   "build": {
     "appId": "com.socialstreamninja.app",
@@ -96,9 +99,9 @@
     "deb": {
       "compression": "xz",
       "depends": ["libvips42t64", "espeak-ng"],
-      "maintainer": "Pacman <adminpacman@example.com>",
-      "vendor": "AdminPacman",
-      "synopsis": "Social Stream Ninja for Linux",
+      "maintainer": "Pacman <pac@darkenedminds.com>",
+      "vendor": "steveseguin, AdminPacman",
+      "synopsis": "Social Stream Ninja for Debian distros",
       "fpm": ["--deb-priority=optional"]
     }
   },
