@@ -33,7 +33,7 @@
     "minimist": "^1.2.8",
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
-    "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector#main",
+    "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector#6a5a4e3",
     "undici": "6.19.8",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.1",
@@ -99,9 +99,9 @@
     "deb": {
       "compression": "xz",
       "depends": ["libvips42t64", "espeak-ng"],
-      "maintainer": "Pacman <pac@darkenedminds.com>",
-      "vendor": "steveseguin, AdminPacman",
-      "synopsis": "Social Stream Ninja for Debian distros",
+      "maintainer": "Pacman <adminpacman@example.com>",
+      "vendor": "AdminPacman",
+      "synopsis": "Social Stream Ninja for Linux",
       "fpm": ["--deb-priority=optional"]
     }
   },
