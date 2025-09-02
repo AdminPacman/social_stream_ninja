@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.4.1",
+    "@zerodytrash/tiktok-live-connector": "^1.0.5",
     "bufferutil": "^4.0.9",
     "color": "^5.0.0",
     "color-convert": "^3.0.1",
@@ -33,7 +34,6 @@
     "minimist": "^1.2.8",
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
-    "tiktok-live-connector": "github:steveseguin/TikTok-Live-Connector#6a5a4e3",
     "undici": "6.19.8",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.1",
