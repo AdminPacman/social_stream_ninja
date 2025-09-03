@@ -5,7 +5,7 @@
   "main": "main.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AdminPacman/social_stream_ninja.git"
+    "url": "git+https://github.com/AdminPacman/social_stream_ninja.git"
   },
   "license": "GPL-3.0",
   "scripts": {
@@ -34,11 +34,11 @@
     "minimist": "^1.2.8",
     "phonemizer": "^1.2.1",
     "sharp": "^0.33.5",
-    "undici": "6.19.8",
+    "undici": "^6.21.2",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.1",
     "yargs": "^17.7.2",
-    "onnxruntime-node": "^1.21.0"
+    "onnxruntime-node": "1.21.0"
   },
   "devDependencies": {
     "electron": "^37.4.0",
@@ -85,7 +85,9 @@
       "target": [
         {
           "type": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Utility",
@@ -98,11 +100,16 @@
     },
     "deb": {
       "compression": "xz",
-      "depends": ["libvips42t64", "espeak-ng"],
+      "depends": [
+        "libvips42t64",
+        "espeak-ng"
+      ],
       "maintainer": "Pacman <adminpacman@example.com>",
       "vendor": "AdminPacman",
       "synopsis": "Social Stream Ninja for Linux",
-      "fpm": ["--deb-priority=optional"]
+      "fpm": [
+        "--deb-priority=optional"
+      ]
     }
   },
   "resolutions": {
@@ -118,5 +125,11 @@
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
-  }
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/AdminPacman/social_stream_ninja/issues"
+  },
+  "homepage": "https://github.com/AdminPacman/social_stream_ninja#readme"
 }
