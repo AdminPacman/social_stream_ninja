@@ -23,6 +23,7 @@ const BASE_PATTERNS = [
     '/*.txt',
     '/actions/**',
     '/audio/**',
+    '/games/**',
     '/icons/**',
     '/js/**',
     '/libs/**',
@@ -33,10 +34,7 @@ const BASE_PATTERNS = [
     '/shared/**',
     '/sources/**',
     '/translations/**',
-    '/thirdparty/NotoColorEmoji.ttf',
-    '/thirdparty/NotoColorEmoji.full.ttf',
-    '/thirdparty/xMQbuFFYT72XzQspDre2.woff2',
-    '/thirdparty/xMQbuFFYT72XzQUpDg.woff2',
+    '/thirdparty/**',
     '/thirdparty/webmidi3.js',
     '/thirdparty/sentiment.js',
     '/thirdparty/lunr.js',
@@ -137,6 +135,16 @@ function updateFallback() {
             }
         });
         console.log('[fallback] Bundle update complete.');
+
+        // Re-apply local customizations after the refresh wipes the bundle.
+        // Mirrors the bundle layout: <overrides>/main/... -> social_stream_fallback/main/...
+        const overridesDir = process.env.SSN_LOCAL_OVERRIDES
+            || path.join(os.homedir(), 'dev', 'pacsarcade', 'ssn-custom');
+        if (fs.existsSync(overridesDir)) {
+            console.log(`[fallback] Applying local overrides from ${overridesDir}`);
+            fs.copySync(overridesDir, path.join(__dirname, '..', 'resources', 'social_stream_fallback'), { dereference: true });
+            console.log('[fallback] Local overrides applied.');
+        }
     } catch (error) {
         console.error('[fallback] Failed to update Social Stream fallback bundle:', error && error.message ? error.message : error);
         process.exit(1);

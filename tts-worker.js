@@ -17,6 +17,88 @@ const modelPath = (() => {
   const { appPath } = workerData;
   return appPath;
 })();
+
+// Chat text arrives HTML-escaped; decode it so the model doesn't try to
+// pronounce entity codes like &#39; — and bound input size so a wall of
+// text can't balloon the onnxruntime allocation and abort the process.
+const MAX_TTS_INPUT_CHARS = 1000;
+const MAX_TTS_CHUNK_CHARS = 300;
+
+const NAMED_ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  hellip: '…', mdash: '—', ndash: '–',
+  lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”'
+};
+
+function decodeHtmlEntities(text) {
+  return String(text)
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+      const code = parseInt(hex, 16);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    })
+    .replace(/&#(\d+);/g, (match, dec) => {
+      const code = parseInt(dec, 10);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    })
+    .replace(/&([a-z]+);/gi, (match, name) => {
+      const lower = name.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, lower) ? NAMED_ENTITIES[lower] : match;
+    });
+}
+
+function prepareTtsText(rawText) {
+  let text = decodeHtmlEntities(rawText || '');
+  // Strip real markup and markup-that-became-text (corrupted upstream HTML):
+  // tags, orphaned attribute fragments, and link-stripper placeholders all
+  // read as gibberish aloud.
+  text = text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\b(?:src|alt|title|class|href|style)\s*=\s*"[^"]*"/gi, ' ')
+    .replace(/\[Link\]/gi, ' ');
+  // Emojis explode into huge phoneme sequences and abort onnxruntime on
+  // long runs (emoji-wall spam); they're visual-only, so drop them from speech.
+  text = text
+    .replace(/[\u{FE0F}\u{200D}]/gu, '')
+    .replace(/\p{Extended_Pictographic}/gu, ' ')
+    .replace(/[\u{1F3FB}-\u{1F3FF}\u{20E3}]/gu, '');
+  // Collapse absurd repeated-character runs ("aaaaaaaaah" walls)
+  text = text.replace(/(.)\1{3,}/gu, '$1$1$1');
+  text = text.replace(/\s+/g, ' ').trim();
+  if (text.length > MAX_TTS_INPUT_CHARS) {
+    const cut = text.lastIndexOf(' ', MAX_TTS_INPUT_CHARS);
+    text = text.slice(0, cut > MAX_TTS_INPUT_CHARS / 2 ? cut : MAX_TTS_INPUT_CHARS);
+  }
+  return text;
+}
+
+function chunkTtsText(text) {
+  if (!text) return [];
+  if (text.length <= MAX_TTS_CHUNK_CHARS) return [text];
+  const chunks = [];
+  let current = '';
+  const sentences = text.match(/[^.!?]+[.!?]*\s*/g) || [text];
+  for (const sentence of sentences) {
+    let piece = sentence;
+    while (piece.length > MAX_TTS_CHUNK_CHARS) {
+      let cut = piece.lastIndexOf(' ', MAX_TTS_CHUNK_CHARS);
+      if (cut <= 0) cut = MAX_TTS_CHUNK_CHARS;
+      if (current.trim()) {
+        chunks.push(current.trim());
+        current = '';
+      }
+      chunks.push(piece.slice(0, cut).trim());
+      piece = piece.slice(cut);
+    }
+    if ((current + piece).length > MAX_TTS_CHUNK_CHARS) {
+      if (current.trim()) chunks.push(current.trim());
+      current = piece;
+    } else {
+      current += piece;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
 let ttsModelPromise = null;
 let ttsModelLoadCount = 0;
 
@@ -78,10 +160,34 @@ parentPort.on('message', async (message) => {
 
   try {
     const tts = await getTtsModel();
-    
-    const audio = await tts.generate(data.text, { voice: (data?.settings?.voice || data?.settings?.voiceName || "af_aoede"), speed: (data?.settings?.speed || data?.settings?.rate || 1.0) });
-    const audioData = audio.audio;
-    
+
+    const text = prepareTtsText(data && data.text);
+    if (!text) {
+      parentPort.postMessage({ id: requestId, error: 'Empty TTS text after sanitizing', modelLoadCount: ttsModelLoadCount });
+      return;
+    }
+
+    const voice = (data?.settings?.voice || data?.settings?.voiceName || "af_aoede");
+    const speed = (data?.settings?.speed || data?.settings?.rate || 1.0);
+
+    // Synthesize in bounded chunks and stitch the audio back together
+    const chunks = chunkTtsText(text);
+    const pieces = [];
+    let samplingRate = 24000;
+    let totalSamples = 0;
+    for (const chunk of chunks) {
+      const audio = await tts.generate(chunk, { voice, speed });
+      samplingRate = audio.sampling_rate || samplingRate;
+      pieces.push(audio.audio);
+      totalSamples += audio.audio.length;
+    }
+    const audioData = new Float32Array(totalSamples);
+    let sampleOffset = 0;
+    for (const piece of pieces) {
+      audioData.set(piece, sampleOffset);
+      sampleOffset += piece.length;
+    }
+
     // Convert Float32Array to Int16Array for WAV format
     const int16Data = new Int16Array(audioData.length);
     
@@ -94,7 +200,7 @@ parentPort.on('message', async (message) => {
     
     // Convert to WAV format
     const wavBuffer = convertToWav(rawBuffer, {
-      sampleRate: audio.sampling_rate,
+      sampleRate: samplingRate,
       channels: 1,
       bitDepth: 16
     });
