@@ -225,6 +225,9 @@
         </div>
 
         <div id="chat-page" style="display:none;">
+            <div id="chat-empty-hint" style="display:none;padding:8px 14px;font-size:13px;line-height:1.4;background:rgba(255,193,7,0.12);border-bottom:1px solid rgba(255,193,7,0.35);color:#e8c15a;">
+                💤 No sources are capturing right now — start one in 🎭 Sources and Settings to see live chat here.
+            </div>
             <iframe id="chat-dock-frame" class="loading" style="height:100%;width:100%;border:0"
                 allow="autoplay *; clipboard-write *; encrypted-media *; fullscreen *"
                 title="Combined Chat Dock"></iframe>
@@ -11548,6 +11551,7 @@
             if (frame3) frame3.style.setProperty('display', 'none', 'important');
             if (streamDeckFrame) streamDeckFrame.style.setProperty('display', 'none', 'important');
             if (chatDockFrame) chatDockFrame.style.setProperty('display', 'none', 'important');
+            stopChatEmptyHintWatch();
 
 
             const streamsPage = document.getElementById('streams-page');
@@ -11595,6 +11599,7 @@
             } else if (pageId === 'chat') {
                 if (chatPage) chatPage.style.display = 'block';
                 if (chatDockFrame) chatDockFrame.style.display = 'block';
+                startChatEmptyHintWatch();
             }
 
             if ((pageId === 'dashboard' || pageId === 'event-flow-editor') && frame2 && (!frame2.src || frame2.src === "about:blank")) {
@@ -13077,6 +13082,31 @@
         }
 
         let chatDockRetryTimer = null;
+        let chatEmptyHintTimer = null;
+
+        function updateChatEmptyHint() {
+            const hint = document.getElementById('chat-empty-hint');
+            if (!hint) return;
+            try {
+                const anyActive = (stateManager.getSources() || []).some(source => source.status === 'active');
+                hint.style.display = anyActive ? 'none' : 'block';
+            } catch (_) {
+                hint.style.display = 'none';
+            }
+        }
+
+        function startChatEmptyHintWatch() {
+            stopChatEmptyHintWatch();
+            updateChatEmptyHint();
+            chatEmptyHintTimer = setInterval(updateChatEmptyHint, 5000);
+        }
+
+        function stopChatEmptyHintWatch() {
+            if (chatEmptyHintTimer) {
+                clearInterval(chatEmptyHintTimer);
+                chatEmptyHintTimer = null;
+            }
+        }
 
         function getChatDockSessionId() {
             return new Promise(resolve => {
