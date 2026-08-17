@@ -9,6 +9,9 @@
     <meta http-equiv="Content-Security-Policy"
         content="script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;" />
     <link rel="stylesheet" type="text/css" href="main.css" />
+    <!-- Arcade shell (Pac's Arcade chrome layer). Every rule is scoped under
+         body.arcade-shell — inert unless that class is present (SSN_SHELL=arcade). -->
+    <link rel="stylesheet" type="text/css" href="arcade-shell.css" />
     <script src="resources/social_stream_fallback/main/thirdparty/vdoninja-sdk.js"></script>
     <script>
         window.SSAPP_DEBUG_LOGS = Boolean(window.SSAPP_DEBUG_LOGS);
@@ -96,6 +99,20 @@
 </head>
 
 <body>
+    <script>
+        // Arcade shell switch (Phase 2 Shell Alpha). SSN_SHELL is set by the launcher
+        // the same way SSN_CHANNEL already is; process.env is readable here because
+        // this window runs with nodeIntegration on for local/sourcemode loads (same
+        // mechanism SSAPP_TIKTOK_SIGNING_GUIDE_URL already relies on elsewhere in this
+        // file). Unset/anything else = stock, byte-for-byte unchanged.
+        (function () {
+            try {
+                if (typeof process !== 'undefined' && process && process.env && process.env.SSN_SHELL === 'arcade') {
+                    document.body.classList.add('arcade-shell');
+                }
+            } catch (e) { /* no process.env access — stay stock */ }
+        })();
+    </script>
     <nav id="main-navigation">
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
         <ul>
@@ -16457,6 +16474,10 @@
         }
 
     </script>
+    <!-- Arcade shell chrome module — inert unless <body class="arcade-shell">.
+         Loaded last so window.stateManager / window.showPage /
+         window.SSAppStreamDeckBridge / window.getSourceIconUrl above already exist. -->
+    <script src="arcade-shell.js"></script>
 </body>
 
 </html>
