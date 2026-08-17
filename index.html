@@ -100,6 +100,7 @@
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
         <ul>
             <li><a href="#" data-page="streams">🎭 Sources and Settings</a></li>
+            <li><a href="#" data-page="chat">💬 Chat</a></li>
             <li><a href="#" data-page="dashboard">📰 Status and Logs</a></li>
             <li><a href="#" data-page="event-flow-editor">⚡ Event Flow Editor</a></li>
             <li><a href="#" data-page="vdo-ninja">🎦 Remote Camera Feed</a></li>
@@ -221,6 +222,12 @@
         <div id="streamdeck-page" style="display:none;">
             <iframe id="streamdeck-setup-frame" class="loading" style="height:100%;width:100%;border:0"
                 allow="clipboard-write" title="Stream Deck Setup"></iframe>
+        </div>
+
+        <div id="chat-page" style="display:none;">
+            <iframe id="chat-dock-frame" class="loading" style="height:100%;width:100%;border:0"
+                allow="autoplay *; clipboard-write *; encrypted-media *; fullscreen *"
+                title="Combined Chat Dock"></iframe>
         </div>
 
         <div id="sessions-page" style="display:none;">
@@ -11523,6 +11530,7 @@
             const frame2 = document.getElementById('frame2');
             const frame3 = document.getElementById('frame3');
             const streamDeckFrame = document.getElementById('streamdeck-setup-frame');
+            const chatDockFrame = document.getElementById('chat-dock-frame');
 
         async function switchToPage(pageId) {
             navigationLinks.forEach(link => {
@@ -11534,10 +11542,12 @@
             //document.getElementById('link-overlay-page')?.style.setProperty('display', 'none', 'important');
             document.getElementById('vdo-ninja-page')?.style.setProperty('display', 'none', 'important');
             document.getElementById('streamdeck-page')?.style.setProperty('display', 'none', 'important');
+            document.getElementById('chat-page')?.style.setProperty('display', 'none', 'important');
             // if (frame1) frame1.style.setProperty('display', 'none', 'important');
             if (frame2) frame2.style.setProperty('display', 'none', 'important');
             if (frame3) frame3.style.setProperty('display', 'none', 'important');
             if (streamDeckFrame) streamDeckFrame.style.setProperty('display', 'none', 'important');
+            if (chatDockFrame) chatDockFrame.style.setProperty('display', 'none', 'important');
 
 
             const streamsPage = document.getElementById('streams-page');
@@ -11545,6 +11555,7 @@
             //const linkOverlayPage = document.getElementById('link-overlay-page');
             const vdoNinjaPage = document.getElementById('vdo-ninja-page');
             const streamDeckPage = document.getElementById('streamdeck-page');
+            const chatPage = document.getElementById('chat-page');
 
             if (pageId === 'dashboard' || pageId === 'event-flow-editor') {
                 if (dashboardPage) dashboardPage.style.display = 'block';
@@ -11581,6 +11592,9 @@
             } else if (pageId === 'streamdeck') {
                 if (streamDeckPage) streamDeckPage.style.display = 'block';
                 if (streamDeckFrame) streamDeckFrame.style.display = 'block';
+            } else if (pageId === 'chat') {
+                if (chatPage) chatPage.style.display = 'block';
+                if (chatDockFrame) chatDockFrame.style.display = 'block';
             }
 
             if ((pageId === 'dashboard' || pageId === 'event-flow-editor') && frame2 && (!frame2.src || frame2.src === "about:blank")) {
@@ -11600,6 +11614,8 @@
                 }
             } else if (pageId === 'streamdeck') {
                 await ensureStreamDeckSetupLoaded();
+            } else if (pageId === 'chat') {
+                await ensureChatDockLoaded();
             }
             stateManager.updateGlobal({ currentPage: pageId });
         }
@@ -13060,6 +13076,95 @@
             }
         }
 
+        let chatDockRetryTimer = null;
+
+        function getChatDockSessionId() {
+            return new Promise(resolve => {
+                const finish = response => {
+                    let sessionId = response && response.streamID ? String(response.streamID) : '';
+                    if (!sessionId) {
+                        try {
+                            const backgroundFrame = document.getElementById('frame2');
+                            sessionId = backgroundFrame && backgroundFrame.contentWindow && backgroundFrame.contentWindow.streamID
+                                ? String(backgroundFrame.contentWindow.streamID)
+                                : '';
+                        } catch (_) { }
+                    }
+                    resolve(sessionId);
+                };
+                try {
+                    if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                        window.ninjafy.sendMessage(null, { getSettings: true }, finish);
+                    } else {
+                        finish({});
+                    }
+                } catch (error) {
+                    console.warn('Failed to read the Social Stream session ID for the chat dock:', error);
+                    finish({});
+                }
+            });
+        }
+
+        async function ensureChatDockLoaded(forceReload = false) {
+            const frame = document.getElementById('chat-dock-frame');
+            if (!frame) return false;
+            if (!forceReload && frame.src && frame.src !== 'about:blank') return true;
+            clearTimeout(chatDockRetryTimer);
+            const sessionId = await getChatDockSessionId();
+            if (!sessionId) {
+                // Session not published yet (background frame still booting); retry while the page is visible.
+                const page = document.getElementById('chat-page');
+                if (page && page.style.display !== 'none') {
+                    chatDockRetryTimer = setTimeout(() => {
+                        ensureChatDockLoaded(forceReload).catch(error => console.error('Failed to load the chat dock:', error));
+                    }, 750);
+                }
+                return false;
+            }
+            try {
+                // House dock defaults: mirrors the OBS Chat-Ninja source URL minus its TTS/audio
+                // params (the app already speaks), plus groupuser message grouping.
+                const dockParams = [
+                    `session=${encodeURIComponent(sessionId)}`,
+                    'groupuser',
+                    'scale=1.45',
+                    'opacity=0.65',
+                    'darkmode',
+                    'showtime=300000',
+                    'alignbottom',
+                    'font=opendyslexic',
+                    'color',
+                    'notime',
+                    'badkarma',
+                    'hidecommands',
+                    'quietcommands',
+                    'textglow',
+                    'largeavatar',
+                    'bubble',
+                    'twolines',
+                    'fadein',
+                    'emoji',
+                    'animatein=fadeInLeft',
+                    'animateout=fadeOutUp',
+                    'fadeout',
+                    'smooth'
+                ];
+                const resolved = await resolveSocialStreamPage('dock.html', {
+                    versionParam: 'v=1',
+                    extraParams: dockParams.concat(getLanguageExtraParams())
+                });
+                if (!resolved || !resolved.url) throw new Error('Chat dock page unavailable');
+                frame.src = resolved.url;
+                frame.dataset.ssappOrigin = resolved.origin || '';
+                frame.classList.add('loading');
+                return true;
+            } catch (error) {
+                console.error('Failed to load the chat dock:', error);
+                Toast.error('Chat', 'Could not load the combined chat dock.');
+                return false;
+            }
+        }
+
         async function checkForUpdates() {
             try {
                 const response = await fetchWithDeadline('https://api.github.com/repos/steveseguin/social_stream/releases', {
@@ -13444,6 +13549,10 @@
                     ensureStreamDeckSetupLoaded().catch(error => console.error('Failed to open Stream Deck setup:', error));
                 }
 
+                if (pageName === 'chat') {
+                    ensureChatDockLoaded().catch(error => console.error('Failed to open the chat dock:', error));
+                }
+
                 if (iframePages[pageName]) {
                     if (!existingIframe) {
                         // Create iframe if it doesn't exist
@@ -13495,6 +13604,7 @@
             'en': {
                 // Navigation
                 'nav.streams': '🎭 Sources and Settings',
+                'nav.chat': '💬 Chat',
                 'nav.linkoverlay': '🔗 Links and Settings',
                 'nav.dashboard': '📰 Status and Logs',
                 'nav.eventfloweditor': '🪤 Event Flow Editor',
