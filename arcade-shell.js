@@ -669,6 +669,25 @@
     var stylePreviewTimer = null;
     var stylePanelLive = false;
 
+    // My Presets (v1.1, part A) — named user presets, SAME ninjafy
+    // saveSetting/getSettings plumbing v1 uses for cssb64, under its own
+    // top-level settings key (the handler accepts arbitrary keys; never
+    // nest under cssb64). Value = JSON array of {id, name, state, userCss}.
+    var MY_PRESETS_KEY = 'arcadeStylePresets';
+    var MY_PRESETS_CAP = 24;
+    var myStylePresets = [];
+    var pendingDeleteId = null;   // confirm-on-second-click armed preset id (no window.confirm)
+    var pendingDeleteBtn = null;
+    var pendingDeleteTimer = null;
+    // Same confirm-on-second-click shape, for Apply's Custom-CSS conflict:
+    // stock presets never touch userCss, but a My Preset carries its own —
+    // silently clobbering an unsaved textarea would be a one-click data
+    // loss, so the CSS half needs its own arm/confirm when it would replace
+    // something non-empty and different (gate fix 0018.05.27).
+    var pendingApplyId = null;
+    var pendingApplyBtn = null;
+    var pendingApplyTimer = null;
+
     var STYLE_CONTROLS = [
         { group: 'COLORS' },
         { id: 'transparent', label: 'Transparent background', kind: 'toggle' },
@@ -719,6 +738,59 @@
                 msgSize: 26, nameSize: 22, zoom: 1.4, rowPad: 12, avatar: 48, strokeW: 1, strokeC: '#000000'
             }
         }
+    ];
+
+    // Theme Pages (v1.1, part B) — the real bundle inventory under
+    // resources/social_stream_fallback/main/themes/, verified against disk
+    // 0018.05.26: the 19 top-level pages + notable subdirs (featured-styles/*
+    // 13, Neutron chatOnly/stream, deuks 1/2, huan-kiara, LuckyLootTube,
+    // rainbowpuke, t3nk3y, Windows3.1) = 41 entries. `file` is the path under
+    // themes/ passed straight into resolveSocialStreamPage('themes/' + file).
+    // These are STANDALONE overlay pages (dock.html has no theme param —
+    // 0018.05.25 scout), NOT dock skins: browse+copy only, never applied by
+    // the Style controls above.
+    var THEME_PAGES = [
+        { name: 'Compact Classic', file: 'compact-classic.html' },
+        { name: 'Compact Clean', file: 'compact-clean.html' },
+        { name: 'Compact Glass', file: 'compact-glass.html' },
+        { name: 'Horizontal', file: 'horizontal.html' },
+        { name: 'No Timeout Messages', file: 'notimeoutmessages.html' },
+        { name: 'Bubbles', file: 'overlay-bubbles.html' },
+        { name: 'Cards', file: 'overlay-cards.html' },
+        { name: 'Comic Classic', file: 'overlay-comic-classic.html' },
+        { name: 'Comic Pop', file: 'overlay-comic-pop.html' },
+        { name: 'Credits', file: 'overlay-credits.html' },
+        { name: 'Danmaku', file: 'overlay-danmaku.html' },
+        { name: 'Neon Cyberpunk', file: 'overlay-neon-cyberpunk.html' },
+        { name: 'Particles', file: 'overlay-particles.html' },
+        { name: 'Ticker News', file: 'overlay-ticker-news.html' },
+        { name: 'Typewriter', file: 'overlay-typewriter.html' },
+        { name: 'X-acception', file: 'overlay-xacception.html' },
+        { name: 'Pretty', file: 'pretty.html' },
+        { name: 'Sample Overlay (Reverse)', file: 'sampleoverlay_reverse.html' },
+        { name: 'Spirit Overlay', file: 'spiritoverlay.html' },
+        { name: 'Featured — 3D', file: 'featured-styles/featured-3d.html' },
+        { name: 'Featured — Animated', file: 'featured-styles/featured-animated.html' },
+        { name: 'Featured — Cyberpunk', file: 'featured-styles/featured-cyberpunk.html' },
+        { name: 'Featured — Dynamic', file: 'featured-styles/featured-dynamic.html' },
+        { name: 'Featured — Elegant', file: 'featured-styles/featured-elegant.html' },
+        { name: 'Featured — Gaming', file: 'featured-styles/featured-gaming.html' },
+        { name: 'Featured — Glass', file: 'featured-styles/featured-glass.html' },
+        { name: 'Featured — Gradient', file: 'featured-styles/featured-gradient.html' },
+        { name: 'Featured — Modern', file: 'featured-styles/featured-modern.html' },
+        { name: 'Featured — Neon', file: 'featured-styles/featured-neon.html' },
+        { name: 'Featured — Particles', file: 'featured-styles/featured-particles.html' },
+        { name: 'Featured — Retro', file: 'featured-styles/featured-retro.html' },
+        { name: 'Featured — Slide', file: 'featured-styles/featured-slide.html' },
+        { name: 'Neutron — Chat Only', file: 'Neutron/chatOnly.html' },
+        { name: 'Neutron — Stream', file: 'Neutron/stream.html' },
+        { name: 'Deuks Overlay 1', file: 'deuks_overlay/overlay1.html' },
+        { name: 'Deuks Overlay 2', file: 'deuks_overlay/overlay2.html' },
+        { name: 'Huan-Kiara', file: 'huan-kiara/index.html' },
+        { name: 'LuckyLootTube', file: 'LuckyLootTube/luckyloottube.html' },
+        { name: 'Rainbow Puke', file: 'rainbowpuke/index.html' },
+        { name: 't3nk3y', file: 't3nk3y/index.html' },
+        { name: 'Windows 3.1', file: 'Windows3.1/index.html' }
     ];
 
     function styleControlById(id) {
@@ -796,6 +868,14 @@
             '</div>' +
             '<div class="arcade-style-body">' +
             '<div class="arcade-style-presets" id="arcade-style-presets"><span class="arcade-k">PRESETS</span></div>' +
+            '<div class="arcade-style-mypresets" id="arcade-style-mypresets">' +
+            '<span class="arcade-k">MY PRESETS</span>' +
+            '<div class="arcade-style-mypresets-pills" id="arcade-style-mypresets-pills"></div>' +
+            '<div class="arcade-style-mypresets-save">' +
+            '<input type="text" id="arcade-style-mypreset-name" class="arcade-style-mypreset-name" placeholder="Save current as…" maxlength="40">' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mypreset-save">Save</button>' +
+            '</div>' +
+            '</div>' +
             '<div class="arcade-style-cols">' +
             '<div class="arcade-style-controls" id="arcade-style-controls"></div>' +
             '<div class="arcade-style-preview">' +
@@ -809,10 +889,21 @@
             '<div class="arcade-field"><label for="arcade-style-usercss">CUSTOM CSS (advanced)</label>' +
             '<span class="arcade-field__hint">appended verbatim after the generated style — yours is never overwritten</span></div>' +
             '<textarea id="arcade-style-usercss" spellcheck="false" rows="4"></textarea>' +
+            '<div class="arcade-style-themes" id="arcade-style-themes">' +
+            '<button type="button" class="arcade-style-themes-toggle" id="arcade-style-themes-toggle" aria-expanded="false" aria-controls="arcade-style-themes-row">' +
+            '<span class="arcade-k">THEME PAGES</span>' +
+            '<span class="arcade-style-themes-count" id="arcade-style-themes-count"></span>' +
+            '<span class="arcade-style-themes-chevron" id="arcade-style-themes-chevron">▸</span>' +
+            '</button>' +
+            '<span class="arcade-style-hint">Full theme pages — separate overlays with their own look; copy a URL into OBS (your dock styles don\'t apply here).</span>' +
+            '<div class="arcade-style-themes-row" id="arcade-style-themes-row" hidden></div>' +
+            '</div>' +
             '</div>';
         document.body.appendChild(panel);
         renderStylePresets(panel);
         renderStyleControls(panel);
+        renderMyPresetsSection(panel);
+        renderThemePagesSection(panel);
         panel.querySelector('#arcade-style-save').addEventListener('click', saveStyleBlob);
         panel.querySelector('#arcade-style-testmsg').addEventListener('click', sendStyleTestMessage);
         panel.querySelector('#arcade-style-usercss').addEventListener('input', function (e) {
@@ -835,6 +926,269 @@
             });
             host.appendChild(btn);
         });
+    }
+
+    // --------------------------------------------------------------------
+    // My Presets (v1.1, part A) — save/apply/delete named user styles.
+    // Loaded lazily by ensureStylePanelLive() alongside the saved style
+    // blob (one Style-tab boot, two independent ninjafy settings reads —
+    // arcadeStylePresets is its OWN top-level key, never nested under
+    // cssb64). Apply loads state+userCss into the SAME controls the stock
+    // PRESETS row uses, so it rides the existing sync/preview path.
+    // --------------------------------------------------------------------
+    function renderMyPresetsSection(panel) {
+        renderMyPresetPills();
+        var input = panel.querySelector('#arcade-style-mypreset-name');
+        var saveBtn = panel.querySelector('#arcade-style-mypreset-save');
+        saveBtn.addEventListener('click', function () { saveCurrentAsMyPreset(input.value); input.value = ''; });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); saveCurrentAsMyPreset(input.value); input.value = ''; }
+        });
+    }
+
+    function renderMyPresetPills() {
+        var host = document.getElementById('arcade-style-mypresets-pills');
+        if (!host) return;
+        host.innerHTML = '';
+        resetPendingDelete();
+        resetPendingApply();
+        if (!myStylePresets.length) {
+            var empty = document.createElement('span');
+            empty.className = 'arcade-style-mypresets-empty';
+            empty.textContent = 'No saved presets yet';
+            host.appendChild(empty);
+            return;
+        }
+        myStylePresets.forEach(function (preset) { host.appendChild(buildMyPresetPill(preset)); });
+    }
+
+    function buildMyPresetPill(preset) {
+        var pill = document.createElement('span');
+        pill.className = 'arcade-style-preset-pill';
+        var apply = document.createElement('button');
+        apply.type = 'button';
+        apply.className = 'arcade-style-preset-apply';
+        apply.textContent = preset.name;
+        apply.title = 'Apply "' + preset.name + '"';
+        apply.addEventListener('click', function () { applyMyPreset(preset, apply); });
+        pill.appendChild(apply);
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-preset-del';
+        del.title = 'Delete "' + preset.name + '"';
+        del.setAttribute('aria-label', 'Delete ' + preset.name);
+        del.textContent = '×';
+        del.addEventListener('click', function () { armPresetDelete(preset.id, preset.name, del); });
+        pill.appendChild(del);
+        return pill;
+    }
+
+    // Stock presets never touch userCss (v1), but a My Preset carries its
+    // own — applying one over an unsaved, DIFFERENT non-empty textarea would
+    // be a silent one-click loss. Only the state/controls half applies on
+    // the first click when that conflict exists; the CSS half needs the
+    // SAME confirm-on-second-click arming armPresetDelete uses below. No
+    // conflict (textarea empty, or already matches the preset) → apply
+    // everything immediately, same as before.
+    function applyMyPreset(preset, btn) {
+        if (pendingApplyId === preset.id) {
+            // second click within the window — confirm the Custom CSS half
+            resetPendingApply();
+            styleUserCss = preset.userCss || '';
+            var ta2 = document.getElementById('arcade-style-usercss');
+            if (ta2) ta2.value = styleUserCss;
+            queueStylePreviewRefresh();
+            setStyleStatus('Applied "' + preset.name + '" — Custom CSS replaced', false);
+            return;
+        }
+        resetPendingDelete();
+        resetPendingApply();
+        var incomingCss = preset.userCss || '';
+        var conflict = styleUserCss.trim() !== '' && styleUserCss !== incomingCss;
+        styleState = JSON.parse(JSON.stringify(preset.state || {}));
+        syncStyleControlsFromState();
+        queueStylePreviewRefresh();
+        if (!conflict) {
+            styleUserCss = incomingCss;
+            var ta = document.getElementById('arcade-style-usercss');
+            if (ta) ta.value = styleUserCss;
+            setStyleStatus('Applied "' + preset.name + '"', false);
+            return;
+        }
+        pendingApplyId = preset.id;
+        pendingApplyBtn = btn;
+        btn.classList.add('is-confirm');
+        btn.title = 'Click again to also apply this preset’s Custom CSS (replaces yours)';
+        clearTimeout(pendingApplyTimer);
+        pendingApplyTimer = setTimeout(resetPendingApply, 2800);
+        setStyleStatus('Applied "' + preset.name + '" style — this preset also replaces your Custom CSS — click again within a moment to apply that too', true);
+    }
+
+    function saveCurrentAsMyPreset(rawName) {
+        var name = String(rawName || '').trim();
+        if (!name) { setStyleStatus('Name your preset before saving', true); return; }
+        var existingIdx = -1;
+        for (var i = 0; i < myStylePresets.length; i++) {
+            if (myStylePresets[i].name === name) { existingIdx = i; break; }
+        }
+        if (existingIdx === -1 && myStylePresets.length >= MY_PRESETS_CAP) {
+            setStyleStatus('Preset limit reached (' + MY_PRESETS_CAP + ') — delete one to save more', true);
+            return;
+        }
+        var entry = {
+            id: existingIdx !== -1 ? myStylePresets[existingIdx].id : ('p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)),
+            name: name,
+            state: JSON.parse(JSON.stringify(styleState)),
+            userCss: styleUserCss
+        };
+        var overwrote = existingIdx !== -1;
+        if (overwrote) myStylePresets[existingIdx] = entry; else myStylePresets.push(entry);
+        setStyleStatus('Saving…', false);
+        renderMyPresetPills();
+        saveMyPresets(function () {
+            setStyleStatus((overwrote ? 'Saved ✓ — overwrote "' : 'Saved ✓ — "') + name + '"', false);
+            setTimeout(function () { setStyleStatus('', false); }, 4000);
+        });
+    }
+
+    // Confirm-on-second-click delete — NOT window.confirm. First click arms
+    // (button flips to a danger "✓" and auto-disarms after ~2.8s); a second
+    // click on the SAME button while armed deletes for real. Clicking a
+    // different preset's delete (or any re-render) disarms the old one.
+    function resetPendingDelete() {
+        if (pendingDeleteBtn) {
+            pendingDeleteBtn.textContent = '×';
+            pendingDeleteBtn.classList.remove('is-confirm');
+        }
+        pendingDeleteId = null;
+        pendingDeleteBtn = null;
+        clearTimeout(pendingDeleteTimer);
+    }
+
+    // Same confirm-on-second-click shape as delete's — arms the Apply
+    // button's Custom-CSS confirmation (see applyMyPreset's comment above).
+    // Disarms on re-render, on arming a DIFFERENT preset's apply, and on
+    // arming delete (they share a pill, so one action disarms the other).
+    function resetPendingApply() {
+        if (pendingApplyBtn) pendingApplyBtn.classList.remove('is-confirm');
+        pendingApplyId = null;
+        pendingApplyBtn = null;
+        clearTimeout(pendingApplyTimer);
+    }
+
+    function armPresetDelete(id, name, btn) {
+        if (pendingDeleteId === id) {
+            resetPendingDelete();
+            deleteMyPreset(id, name);
+            return;
+        }
+        resetPendingDelete();
+        resetPendingApply();
+        pendingDeleteId = id;
+        pendingDeleteBtn = btn;
+        btn.textContent = '✓';
+        btn.classList.add('is-confirm');
+        btn.title = 'Click again to delete "' + name + '"';
+        pendingDeleteTimer = setTimeout(resetPendingDelete, 2800);
+    }
+
+    function deleteMyPreset(id, name) {
+        myStylePresets = myStylePresets.filter(function (p) { return p.id !== id; });
+        renderMyPresetPills();
+        setStyleStatus('Saving…', false);
+        saveMyPresets(function () {
+            setStyleStatus('Deleted "' + name + '"', false);
+            setTimeout(function () { setStyleStatus('', false); }, 4000);
+        });
+    }
+
+    function loadMyPresets() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var entry = response && response.settings && response.settings[MY_PRESETS_KEY];
+                            var raw = entry && typeof entry.textparam1 === 'string' ? entry.textparam1 : '';
+                            var parsed = raw ? JSON.parse(raw) : [];
+                            myStylePresets = Array.isArray(parsed) ? parsed : [];
+                        } catch (e) {
+                            console.error('[arcade-shell] my-presets load parse failed:', e);
+                            myStylePresets = [];
+                        }
+                        renderMyPresetPills();
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] my-presets load failed:', e); }
+            renderMyPresetPills();
+            resolve();
+        });
+    }
+
+    // Same fire-and-honestly-confirm shape as v1's saveStyleBlob (gate fix
+    // #2): onDone only fires once the bridge actually answers; an unanswered
+    // save says so rather than claiming success.
+    function saveMyPresets(onDone) {
+        try {
+            if (!(window.ninjafy && typeof window.ninjafy.sendMessage === 'function')) {
+                setStyleStatus('settings bridge unavailable — could not save preset', true);
+                return;
+            }
+            var value = JSON.stringify(myStylePresets);
+            var confirmed = false;
+            window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: MY_PRESETS_KEY, value: value }, function () {
+                confirmed = true;
+                if (onDone) onDone();
+            });
+            setTimeout(function () {
+                if (!confirmed) setStyleStatus('Save sent — no confirmation received', false);
+            }, 3000);
+        } catch (e) {
+            console.error('[arcade-shell] my-presets save failed:', e);
+            setStyleStatus('Save failed — see console', true);
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // Theme Pages strip (v1.1, part B) — browse+copy surface for the
+    // standalone overlay pages in THEME_PAGES. Collapsed by default so it
+    // doesn't dominate the panel; reuses v1's element-registry copy plumbing
+    // verbatim (buildElementOverlayUrl/copyElementOverlayUrl take any object
+    // with overlayPage+params, so a theme entry is just a one-off "element").
+    // --------------------------------------------------------------------
+    function renderThemePagesSection(panel) {
+        var toggle = panel.querySelector('#arcade-style-themes-toggle');
+        var row = panel.querySelector('#arcade-style-themes-row');
+        var chevron = panel.querySelector('#arcade-style-themes-chevron');
+        var countEl = panel.querySelector('#arcade-style-themes-count');
+        countEl.textContent = THEME_PAGES.length;
+        THEME_PAGES.forEach(function (entry) { row.appendChild(buildThemePagePill(entry)); });
+        toggle.addEventListener('click', function () {
+            var expanded = toggle.getAttribute('aria-expanded') === 'true';
+            toggle.setAttribute('aria-expanded', String(!expanded));
+            row.hidden = expanded;
+            chevron.textContent = expanded ? '▸' : '▾';
+        });
+    }
+
+    function buildThemePagePill(entry) {
+        var pill = document.createElement('span');
+        pill.className = 'arcade-style-theme-pill';
+        var name = document.createElement('span');
+        name.className = 'arcade-style-theme-pill__name';
+        name.textContent = entry.name;
+        pill.appendChild(name);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm';
+        btn.textContent = 'Copy URL';
+        btn.addEventListener('click', function () {
+            copyElementOverlayUrl({ overlayPage: 'themes/' + entry.file, params: [] }, btn);
+        });
+        pill.appendChild(btn);
+        return pill;
     }
 
     function renderStyleControls(panel) {
@@ -942,7 +1296,7 @@
     function ensureStylePanelLive() {
         if (stylePanelLive) { queueStylePreviewRefresh(); return; }
         stylePanelLive = true;
-        loadSavedStyleBlob().then(function () { refreshStylePreview(); });
+        Promise.all([loadSavedStyleBlob(), loadMyPresets()]).then(function () { refreshStylePreview(); });
     }
 
     function loadSavedStyleBlob() {
