@@ -467,7 +467,13 @@ body.arcade-shell .arcade-stat__sub {
 /* follower-delta rows — badge · label left · total · delta right */
 body.arcade-shell .arcade-frow-list { list-style: none; margin: 0; padding: 0; }
 body.arcade-shell .arcade-frow {
-  display: grid; grid-template-columns: 34px minmax(0,1fr) auto 48px;
+  /* badge track was a fixed 34px, but .arcade-pill's own min-width (also 34px)
+     plus its 0 6px padding renders wider than that for real 2-char mono badges
+     (e.g. "KI") — a fixed track doesn't clip a grid item, so the badge visibly
+     BLED into the label column, covering the label's first character (the
+     vdomain1.png "dminpacman" nit). minmax(34px, auto) lets the track grow to
+     the badge's real rendered width instead of overlapping it. */
+  display: grid; grid-template-columns: minmax(34px, auto) minmax(0,1fr) auto 48px;
   align-items: center; gap: 10px; padding: 7px 4px;
   border-bottom: 1px solid var(--arc-edge-soft); font-size: 12px; color: var(--arc-ink);
 }
@@ -647,6 +653,31 @@ body.arcade-shell .arcade-style-body {
   display: flex; flex-direction: column; gap: 12px;
   padding: 14px 18px; overflow-y: auto; flex: 1; min-height: 0;
 }
+/* v2 — PROFILE segmented control (STREAM WIDGET | DOCK (APP)) at the top of
+   the panel; reuses the generic .arcade-seg control (see the analytics
+   period selector) and .arcade-k label token. */
+body.arcade-shell .arcade-style-profile-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+body.arcade-shell .arcade-style-profile-row .arcade-k {
+  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
+}
+/* armed-for-profile-switch (second click confirms, discarding unsaved edits
+   from view) — same warning-amber token as My Presets' apply-conflict arm. */
+body.arcade-shell .arcade-style-profile-row .arcade-seg button.is-confirm {
+  color: var(--arc-warning); text-decoration: underline dotted;
+}
+
+/* v2 — CLOCK control group (mode segmented + seconds toggle), small, sits
+   just below the presets rows. */
+body.arcade-shell .arcade-clock { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+body.arcade-shell .arcade-clock .arcade-k {
+  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
+}
+body.arcade-shell .arcade-clock-seconds {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: 500 11px/1 var(--arc-font-ui); color: var(--arc-muted);
+}
+body.arcade-shell .arcade-clock-seconds input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--arc-info); }
+
 body.arcade-shell .arcade-style-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 body.arcade-shell .arcade-style-presets .arcade-k {
   font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
@@ -701,6 +732,12 @@ body.arcade-shell .arcade-style-preview {
 body.arcade-shell .arcade-style-preview-bar { display: flex; align-items: center; gap: 10px; }
 body.arcade-shell .arcade-style-hint {
   font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-faint); flex: 1; min-width: 0;
+}
+/* v2 — "Previewing: STREAM WIDGET" / "Previewing: DOCK (APP)" label next to
+   the Reload preview button, so it's always clear which profile's real
+   dockParams the preview iframe is mirroring. */
+body.arcade-shell .arcade-style-preview-profile {
+  font: 600 10px/1 var(--arc-font-mono); letter-spacing: 0.06em; color: var(--arc-muted); white-space: nowrap;
 }
 body.arcade-shell .arcade-style-preview iframe {
   flex: 1; min-height: 0; width: 100%;

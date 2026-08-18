@@ -119,6 +119,19 @@
     }
 
     // --------------------------------------------------------------------
+    // CLOCK state (v2, Style panel control group) — persisted settings +
+    // live hooks the CLOCK control writes into without re-running the whole
+    // startBftClock() closure. See the big comment above startBftClock().
+    // --------------------------------------------------------------------
+    var CLOCK_MODE_KEY = 'arcadeClockMode';
+    var CLOCK_SECONDS_KEY = 'arcadeClockSeconds';
+    var bftClockMode = 'bft';               // 'bft' | 'local'
+    var bftClockSeconds = false;
+    var bftRenderDisplay = null;            // set inside startBftClock(); immediate redraw, no fetch
+    var bftRescheduleTick = null;           // set inside startBftClock(); re-picks the 30s/60s height-poll cadence
+    var bftRescheduleSecondsTimer = null;   // set inside startBftClock(); starts/stops the 1s display-only ticker
+
+    // --------------------------------------------------------------------
     // Topbar
     // --------------------------------------------------------------------
     function buildTopbar() {
@@ -216,38 +229,118 @@
     }
 
     // --------------------------------------------------------------------
-    // BFT clock chip — honest dash-faces until a REAL beacon answers, ~
-    // only on a genuine estimate (fleet law). Two live sources tried in
-    // order every tick: the arcade's own beacon (time.pacsarcade.org, a
-    // shim over the fleet's bitcoind) first, mempool.space as fallback.
-    // The synthetic local estimate is a LAST resort — only when both
-    // network reads fail — and always wears the ~ when used. Dash-faces
-    // (set in the topbar markup) are never overwritten with an estimate
-    // before the first real network answer lands.
+    // BFT clock chip (v2, 0018.05.26 — Pac's stream-desk feedback) — honest
+    // dash-faces until a REAL beacon answers. Two live sources tried in order
+    // every tick: the arcade's own beacon (time.pacsarcade.org, a shim over
+    // the fleet's bitcoind) first, mempool.space as fallback.
+    //
+    // Pac ruling 0018.05.26: no synthetic time ever — dashes over estimates.
+    // There is no local-estimate rung anymore: if BOTH network sources fail
+    // on a tick, the chip wipes back to honest dash-faces (a stale height is
+    // wrong within minutes; dashes are the honest state until a REAL answer
+    // returns) rather than ever showing a computed guess.
+    //
+    // CLOCK control (Style panel) adds a mode toggle — BFT (default) | LOCAL
+    // — and a seconds toggle, persisted as arcadeClockMode/arcadeClockSeconds
+    // (textparam1, canonical saveSetting; read at boot via loadClockSettings(),
+    // applied live via the bft* hooks below — no re-render of this whole
+    // function). LOCAL mode shows the user's real Gregorian date/time
+    // (Intl default), visibly NOT wearing the "a₿" dress a BFT reading wears.
+    // Star-box height is ALWAYS the real value (or dash) in both modes —
+    // height is height, independent of which clock face is showing.
+    //
+    // Seconds mode does INTRA-BLOCK INTERPOLATION, not a bare looping :SS —
+    // 1 block = 10 BFT minutes, so the raw (bid%6)*10 minute digit is frozen
+    // for the whole block otherwise. blockObservedAt anchors wall-clock time
+    // to the moment THIS shell first observed the height change; elapsed
+    // wall-time since then becomes the sub-block minute-ones-digit + seconds,
+    // HARD-CAPPED at :M9:59 so it never invents a block that hasn't landed.
+    // Three real states: (1) no real height yet (or sources just failed) —
+    // full dash-faces; (2) real height, but no CHANGE observed yet this boot
+    // (phase unknown) — coarse HH:M0:-- , sub-block digits honestly dashed;
+    // (3) a height change was observed — interpolating (or capped-waiting at
+    // :M9:59) off that real anchor. Interpolation only ever runs on top of a
+    // REAL height; the 1s display ticker is presentation-only (no fetching)
+    // and the height-poll cadence itself tightens 60s → 30s while seconds
+    // mode is on (phase error bound ≤ poll interval; the extra load is on
+    // our own beacon first).
     // --------------------------------------------------------------------
+    function pad(n, w) { return String(n).padStart(w, '0'); }
+
     function startBftClock(bftEl) {
         var BPD = 144, BPM = 4032, BPY = 52416;
-        var ANCHOR = { ms: Date.UTC(2026, 7, 17, 14, 33), height: 962901 };
 
-        function pad(n, w) { return String(n).padStart(w, '0'); }
+        var lastRealHeight = null;   // ONLY ever a real network answer — never an estimate.
+        var blockObservedAt = null;  // wall-clock ms when lastRealHeight last genuinely CHANGED
 
-        function render(h, est) {
+        function renderHeight() {
+            var hEl = bftEl.querySelector('.h');
+            if (!hEl) return;
+            hEl.textContent = lastRealHeight == null ? '---,---' : lastRealHeight.toLocaleString('en-US');
+        }
+
+        function renderLocal() {
+            var now = new Date();
+            var dEl = bftEl.querySelector('.date'), tEl = bftEl.querySelector('.time'), abEl = bftEl.querySelector('.ab');
+            if (dEl) dEl.textContent = now.getFullYear() + '.' + pad(now.getMonth() + 1, 2) + '.' + pad(now.getDate(), 2);
+            var t = pad(now.getHours(), 2) + ':' + pad(now.getMinutes(), 2);
+            if (bftClockSeconds) t += ':' + pad(now.getSeconds(), 2);
+            if (tEl) tEl.textContent = t;
+            if (abEl) abEl.textContent = ''; // LOCAL is honestly Gregorian — never wears the a₿ dress
+            renderHeight(); // height/star-box always real, regardless of mode
+        }
+
+        function renderBft() {
+            var abEl = bftEl.querySelector('.ab');
+            if (abEl) abEl.textContent = 'a₿';
+            renderHeight();
+            var dEl = bftEl.querySelector('.date'), tEl = bftEl.querySelector('.time');
+            if (lastRealHeight == null) {
+                if (dEl) dEl.textContent = '----.--.--';
+                if (tEl) tEl.textContent = '--:--';
+                return;
+            }
+            var h = lastRealHeight;
             var rem = ((h % BPY) + BPY) % BPY;
             var y = Math.floor(h / BPY);
             var m = Math.floor(rem / BPM) + 1;
             var d = Math.floor((rem % BPM) / BPD) + 1;
             var bid = ((h % BPD) + BPD) % BPD;
-            var t = pad(Math.floor(bid / 6), 2) + ':' + pad((bid % 6) * 10, 2);
-            var date = pad(y, 4) + '.' + pad(m, 2) + '.' + pad(d, 2);
-            var tilde = est ? '~' : '';
-            var dEl = bftEl.querySelector('.date'), tEl = bftEl.querySelector('.time'), hEl = bftEl.querySelector('.h');
-            if (dEl) dEl.textContent = tilde + date;
-            if (tEl) tEl.textContent = tilde + t;
-            if (hEl) hEl.textContent = tilde + h.toLocaleString('en-US');
+            var hh = Math.floor(bid / 6);
+            var decadeMin = (bid % 6) * 10; // 1 block = 10 BFT minutes — coarse, frozen for the whole block
+            if (dEl) dEl.textContent = pad(y, 4) + '.' + pad(m, 2) + '.' + pad(d, 2);
+            if (!tEl) return;
+            if (!bftClockSeconds) {
+                tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin, 2);
+                return;
+            }
+            if (blockObservedAt == null) {
+                // Real height known, but no observed transition yet this boot —
+                // phase inside the block is genuinely unknown; dash the sub-block
+                // digits rather than pretend to know where in the block we are.
+                tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin, 2) + ':--';
+                return;
+            }
+            var elapsed = Math.min(Date.now() - blockObservedAt, 9 * 60000 + 59000); // hard cap :M9:59
+            var minOffset = Math.floor(elapsed / 60000);
+            var ss = Math.floor(elapsed / 1000) % 60;
+            tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin + minOffset, 2) + ':' + pad(ss, 2);
         }
 
-        function estimate() {
-            return Math.max(0, Math.round(ANCHOR.height + (Date.now() - ANCHOR.ms) / 600000));
+        function renderDisplay() {
+            if (bftClockMode === 'local') renderLocal(); else renderBft();
+        }
+        bftRenderDisplay = renderDisplay;
+
+        function observeHeight(h) {
+            if (lastRealHeight === null || h !== lastRealHeight) {
+                // null→number = first real height this boot (or since a wipe):
+                // phase unknown, blockObservedAt stays null. number→different-
+                // number = a genuine block change: anchor the interpolation clock.
+                blockObservedAt = (lastRealHeight === null) ? null : Date.now();
+                lastRealHeight = h;
+            }
+            renderDisplay();
         }
 
         function fetchArcadeBeacon() {
@@ -272,19 +365,97 @@
 
         function tick() {
             fetchArcadeBeacon()
-                .then(function (h) { render(h, false); })
+                .then(observeHeight)
                 .catch(function () {
                     fetchMempoolFallback()
-                        .then(function (h) { render(h, false); })
-                        .catch(function () { render(estimate(), true); });
+                        .then(observeHeight)
+                        .catch(function () {
+                            // Pac ruling 0018.05.26: no synthetic time ever — dashes
+                            // over estimates. Both real sources failed this tick:
+                            // wipe to honest dash-faces instead of leaving a
+                            // possibly-stale height/time on screen.
+                            lastRealHeight = null;
+                            blockObservedAt = null;
+                            renderDisplay();
+                        });
                 });
         }
+
+        var tickTimer = null;
+        function scheduleTick() {
+            clearInterval(tickTimer);
+            tickTimer = setInterval(tick, bftClockSeconds ? 30000 : 60000);
+        }
+        bftRescheduleTick = scheduleTick;
+
+        var secondsTimer = null;
+        function scheduleSecondsTicker() {
+            clearInterval(secondsTimer);
+            if (bftClockSeconds) secondsTimer = setInterval(renderDisplay, 1000); // display-only, never fetches
+        }
+        bftRescheduleSecondsTimer = scheduleSecondsTicker;
 
         // No synchronous render here — the chip keeps its markup dash-faces
         // (----.--.--  --:--  ---,---) until this first tick actually
         // resolves, honest-time law's "dash-face on first paint".
         tick();
-        setInterval(tick, 60000);
+        scheduleTick();
+        scheduleSecondsTicker();
+    }
+
+    // Read at shell boot (before the Style tab has ever been visited — the
+    // topbar clock is always on screen) and applied live via the bft* hooks;
+    // same ninjafy getSettings/saveSetting plumbing as everything else here.
+    function loadClockSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var modeEntry = settings[CLOCK_MODE_KEY];
+                            var modeRaw = modeEntry && typeof modeEntry.textparam1 === 'string' ? modeEntry.textparam1 : '';
+                            if (modeRaw === 'local' || modeRaw === 'bft') bftClockMode = modeRaw;
+                            var secEntry = settings[CLOCK_SECONDS_KEY];
+                            var secRaw = secEntry && typeof secEntry.textparam1 === 'string' ? secEntry.textparam1 : '';
+                            bftClockSeconds = secRaw === 'true';
+                        } catch (e) { console.error('[arcade-shell] clock settings parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] clock settings load failed:', e); }
+            resolve(); // settings bridge unavailable — clock stays at its BFT/no-seconds defaults
+        });
+    }
+
+    function saveClockSetting(key, value) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: key, value: value }, function () { /* fire-and-forget, same as v1's non-critical settings */ });
+            }
+        } catch (e) { console.error('[arcade-shell] clock setting save failed:', e); }
+    }
+
+    function applyClockSettingChange() {
+        // Re-render immediately (no fetch), then re-arm the two timers that
+        // depend on seconds mode (poll cadence 30s/60s, 1s display ticker).
+        if (typeof bftRenderDisplay === 'function') bftRenderDisplay();
+        if (typeof bftRescheduleTick === 'function') bftRescheduleTick();
+        if (typeof bftRescheduleSecondsTimer === 'function') bftRescheduleSecondsTimer();
+    }
+
+    function syncClockControls() {
+        var seg = document.getElementById('arcade-clock-seg');
+        if (seg) {
+            seg.querySelectorAll('button').forEach(function (btn) {
+                var on = btn.dataset.arcadeClockMode === bftClockMode;
+                btn.classList.toggle('is-on', on);
+                btn.setAttribute('aria-pressed', String(on));
+            });
+        }
+        var secondsToggle = document.getElementById('arcade-clock-seconds');
+        if (secondsToggle) secondsToggle.checked = bftClockSeconds;
     }
 
     // --------------------------------------------------------------------
@@ -654,20 +825,87 @@
     // (dock) setting (cssb64 / textparam1), so the OBS-copied dock URL
     // inherits the style with zero extra plumbing, and ensureChatDockLoaded's
     // dockParams pick it up for the embedded Chat view (see index.html).
-    // Live preview = dock.html iframe (current blob as &cssb64) + the app's
-    // fakemsg test personas (exercise dono/member/VIP/avatar paths).
     // Control targets are the REAL dock.html custom properties (its :root
     // block) — !important on every var because the dock runtime also sets
     // some vars inline (setProperty beats stylesheets). Presets follow the
     // sanctioned themes/sample.css shape (a plain :root var blob).
     // Spec: pacsarcade design-briefs/ssn-ui-overhaul/style-builder-v1-spec.md.
+    //
+    // v2 (0018.05.26, Pac's stream-desk feedback, style-builder-v2-spec.md):
+    // - Preview overhaul: NO fakemsg into the live session anymore (that
+    //   injected into the REAL session mid-stream — unacceptable). The
+    //   preview seeds itself in priority order: (1) dock.html's OWN native
+    //   loadlast=30 history request (its one-shot getRecentHistory latch,
+    //   dock.html:8683/6799 — zero custom plumbing, works over the real P2P
+    //   transport); (2) if nothing rendered after ~6s (transport handshake
+    //   can race/fail offline), the same-origin fallback this module already
+    //   uses for analytics — frame2.contentWindow.getLastMessagesDB(30) fed
+    //   into the preview frame's own processInput({recentHistory}) (same
+    //   shape the background sends, dock.html:7483/7809 branch, inherits
+    //   dedupe/normalize/reloaded handling + its 1s deferral); (3) last
+    //   resort, 6-8 OBVIOUSLY-fake canned sample messages via that same
+    //   processInput shape, with an honest hint. All same-origin touches are
+    //   feature-detected + try/catch (dock.html's own postMessage listener
+    //   rejects parent-frame messages — dock.html:8645 — so a direct function
+    //   call on contentWindow is the only parent path there is).
+    // - Live restyle without reload: while the preview frame's
+    //   dataset.ssappOrigin is the local family (sourcemode|local|cache —
+    //   legal same-origin access because file:// mode runs with
+    //   webSecurity:false, main.js:7405-7407), control changes update ONE
+    //   <style id="arcade-style-live"> in the preview frame's contentDocument
+    //   instead of reloading the iframe. Any other origin falls back to the
+    //   original debounced full-reload-on-src-change behavior.
+    // - Two independent profiles (STREAM WIDGET vs DOCK (APP), part B below)
+    //   — same STYLE_CONTROLS/presets/My-Presets UI, but the save KEY and the
+    //   preview's dockParams differ per profile.
     // --------------------------------------------------------------------
     var STYLE_MARKER = '/* pacs-arcade style-builder v1';
     var STYLE_USER_MARK = '/* user custom css below (preserved) */';
-    var styleState = {};      // controlId -> value; only touched controls are present
-    var styleUserCss = '';    // foreign/advanced CSS — preserved VERBATIM, never clobbered
+    var styleState = {};      // controlId -> value; only touched controls are present — ACTIVE PROFILE's working copy
+    var styleUserCss = '';    // foreign/advanced CSS — preserved VERBATIM, never clobbered — ACTIVE PROFILE's working copy
     var stylePreviewTimer = null;
     var stylePanelLive = false;
+
+    // --------------------------------------------------------------------
+    // Two profiles (v2, part B) — STREAM WIDGET (today's cssb64/textparam1,
+    // unchanged plumbing — the popup's OBS dock URL inherits it) vs
+    // DOCK (APP) (new arcadeDockCss/textparam1 — index.html's
+    // getSavedDockCustomCss() reads this FIRST, falling back to cssb64 so an
+    // uncustomized app dock still matches the stream style). Switching always
+    // reloads the TARGET profile's last-SAVED blob from disk (not an
+    // in-memory scratch copy) — if the profile you're leaving has unsaved
+    // edits, the segmented button arms a warning-amber confirm-on-second-
+    // click (v1.1's exact pattern) before discarding them from view.
+    // My Presets / stock PRESETS stay profile-agnostic — applying one always
+    // fills whichever profile is currently active.
+    // --------------------------------------------------------------------
+    var STYLE_PROFILES = ['widget', 'dock'];
+    var STYLE_PROFILE_SAVE_KEY = { widget: 'cssb64', dock: 'arcadeDockCss' };
+    var STYLE_PROFILE_LABEL = { widget: 'STREAM WIDGET', dock: 'DOCK (APP)' };
+    var activeStyleProfile = 'widget';
+    var styleProfileSavedRaw = { widget: '', dock: '' }; // last-known-saved raw blob per profile (dirty-check baseline)
+    var pendingProfileSwitchTo = null;
+    var pendingProfileSwitchBtn = null;
+    var pendingProfileSwitchTimer = null;
+
+    // --------------------------------------------------------------------
+    // Preview frame state (v2, part A) — see the big comment above.
+    // --------------------------------------------------------------------
+    var LOCAL_ORIGIN_FAMILY = { sourcemode: true, local: true, cache: true }; // resolveSocialStreamPage's origin values for same-origin-safe frames
+    var stylePreviewSeedToken = 0; // bumped on every (re)load so a stale async seed callback can't land on a newer frame
+    // House dock defaults mirrored from index.html's ensureChatDockLoaded
+    // dockParams (~line 13198) MINUS session/cssb64 (added separately) — so
+    // the DOCK (APP) preview is tuned against the SAME truth the embedded
+    // app dock actually renders with. Kept in sync manually; if the house
+    // defaults change there, update here too.
+    var ARCADE_DOCK_APP_PREVIEW_PARAMS = [
+        'groupuser', 'scale=1.45', 'opacity=0.65', 'darkmode', 'showtime=300000', 'alignbottom',
+        'font=opendyslexic', 'color', 'notime', 'badkarma', 'hidecommands', 'quietcommands',
+        'textglow', 'largeavatar', 'bubble', 'twolines', 'fadein', 'emoji',
+        'animatein=fadeInLeft', 'animateout=fadeOutUp', 'fadeout', 'smooth'
+    ];
+    // STREAM WIDGET preview keeps v1's original preview params.
+    var ARCADE_WIDGET_PREVIEW_PARAMS = ['groupuser', 'darkmode', 'bubble', 'twolines', 'largeavatar', 'emoji'];
 
     // My Presets (v1.1, part A) — named user presets, SAME ninjafy
     // saveSetting/getSettings plumbing v1 uses for cssb64, under its own
@@ -867,6 +1105,14 @@
             '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-style-save">Save style</button>' +
             '</div>' +
             '<div class="arcade-style-body">' +
+            '<div class="arcade-style-profile-row">' +
+            '<span class="arcade-k">PROFILE</span>' +
+            '<div class="arcade-seg" role="group" aria-label="Style profile" id="arcade-style-profile-seg">' +
+            '<button type="button" class="is-on" data-arcade-style-profile="widget" aria-pressed="true">STREAM WIDGET</button>' +
+            '<button type="button" data-arcade-style-profile="dock" aria-pressed="false">DOCK (APP)</button>' +
+            '</div>' +
+            '<span class="arcade-style-hint">STREAM WIDGET = the OBS-copied dock URL · DOCK (APP) = this app\'s own embedded chat view — independent saved styles</span>' +
+            '</div>' +
             '<div class="arcade-style-presets" id="arcade-style-presets"><span class="arcade-k">PRESETS</span></div>' +
             '<div class="arcade-style-mypresets" id="arcade-style-mypresets">' +
             '<span class="arcade-k">MY PRESETS</span>' +
@@ -876,12 +1122,22 @@
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mypreset-save">Save</button>' +
             '</div>' +
             '</div>' +
+            '<div class="arcade-clock" id="arcade-clock">' +
+            '<span class="arcade-k">CLOCK</span>' +
+            '<div class="arcade-seg" role="group" aria-label="Clock mode" id="arcade-clock-seg">' +
+            '<button type="button" class="is-on" data-arcade-clock-mode="bft" aria-pressed="true">BFT</button>' +
+            '<button type="button" data-arcade-clock-mode="local" aria-pressed="false">LOCAL</button>' +
+            '</div>' +
+            '<label class="arcade-clock-seconds"><input type="checkbox" id="arcade-clock-seconds"><span>seconds</span></label>' +
+            '</div>' +
             '<div class="arcade-style-cols">' +
             '<div class="arcade-style-controls" id="arcade-style-controls"></div>' +
             '<div class="arcade-style-preview">' +
             '<div class="arcade-style-preview-bar">' +
-            '<span class="arcade-style-hint">Preview connects to your session — send a test message to see styles on real bubbles.</span>' +
-            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-testmsg">Send test message</button>' +
+            '<span class="arcade-style-hint" id="arcade-style-preview-hint">Loading preview…</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-style-preview-profile" id="arcade-style-preview-profile"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-reload">Reload preview</button>' +
             '</div>' +
             '<iframe id="arcade-style-preview-frame" title="Chat dock style preview"></iframe>' +
             '</div>' +
@@ -904,12 +1160,47 @@
         renderStyleControls(panel);
         renderMyPresetsSection(panel);
         renderThemePagesSection(panel);
+        initStyleProfileSeg(panel);
+        initClockControls(panel);
+        syncClockControls(); // no-op until loadClockSettings() resolves, but safe if it already has
         panel.querySelector('#arcade-style-save').addEventListener('click', saveStyleBlob);
-        panel.querySelector('#arcade-style-testmsg').addEventListener('click', sendStyleTestMessage);
+        panel.querySelector('#arcade-style-reload').addEventListener('click', function () { initStylePreviewFrame(); });
         panel.querySelector('#arcade-style-usercss').addEventListener('input', function (e) {
             styleUserCss = e.target.value;
             queueStylePreviewRefresh();
         });
+    }
+
+    function initStyleProfileSeg(panel) {
+        var seg = panel.querySelector('#arcade-style-profile-seg');
+        if (!seg) return;
+        seg.addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-arcade-style-profile]');
+            if (!btn || !seg.contains(btn)) return;
+            switchStyleProfile(btn.dataset.arcadeStyleProfile, btn);
+        });
+    }
+
+    function initClockControls(panel) {
+        var seg = panel.querySelector('#arcade-clock-seg');
+        if (seg) {
+            seg.addEventListener('click', function (e) {
+                var btn = e.target.closest('button[data-arcade-clock-mode]');
+                if (!btn || !seg.contains(btn)) return;
+                bftClockMode = btn.dataset.arcadeClockMode === 'local' ? 'local' : 'bft';
+                saveClockSetting(CLOCK_MODE_KEY, bftClockMode);
+                syncClockControls();
+                applyClockSettingChange();
+            });
+        }
+        var secondsToggle = panel.querySelector('#arcade-clock-seconds');
+        if (secondsToggle) {
+            secondsToggle.addEventListener('change', function () {
+                bftClockSeconds = !!secondsToggle.checked;
+                saveClockSetting(CLOCK_SECONDS_KEY, bftClockSeconds ? 'true' : 'false');
+                applyClockSettingChange();
+            });
+        }
     }
 
     function renderStylePresets(panel) {
@@ -1102,31 +1393,8 @@
         });
     }
 
-    function loadMyPresets() {
-        return new Promise(function (resolve) {
-            try {
-                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
-                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
-                        try {
-                            var entry = response && response.settings && response.settings[MY_PRESETS_KEY];
-                            var raw = entry && typeof entry.textparam1 === 'string' ? entry.textparam1 : '';
-                            var parsed = raw ? JSON.parse(raw) : [];
-                            myStylePresets = Array.isArray(parsed) ? parsed : [];
-                        } catch (e) {
-                            console.error('[arcade-shell] my-presets load parse failed:', e);
-                            myStylePresets = [];
-                        }
-                        renderMyPresetPills();
-                        resolve();
-                    });
-                    return;
-                }
-            } catch (e) { console.error('[arcade-shell] my-presets load failed:', e); }
-            renderMyPresetPills();
-            resolve();
-        });
-    }
-
+    // My Presets are loaded as part of the single consolidated
+    // loadStyleSettings() getSettings read (v2 — see ensureStylePanelLive()).
     // Same fire-and-honestly-confirm shape as v1's saveStyleBlob (gate fix
     // #2): onDone only fires once the bridge actually answers; an unanswered
     // save says so rather than claiming success.
@@ -1290,47 +1558,152 @@
         el.classList.toggle('is-error', !!isError);
     }
 
-    // Lazy boot on first Style-tab visit: read the saved blob (the popup's
-    // cssb64/textparam1), restore control state if it's ours, preserve any
-    // foreign CSS into the advanced box, then first preview.
+    // Lazy boot on first Style-tab visit: ONE getSettings read for both
+    // profiles' saved blobs + My Presets, load the ACTIVE profile
+    // (STREAM WIDGET by default) into the controls, then first preview.
     function ensureStylePanelLive() {
         if (stylePanelLive) { queueStylePreviewRefresh(); return; }
         stylePanelLive = true;
-        Promise.all([loadSavedStyleBlob(), loadMyPresets()]).then(function () { refreshStylePreview(); });
+        loadStyleSettings().then(function () { initStylePreviewFrame(); });
     }
 
-    function loadSavedStyleBlob() {
+    function loadStyleSettings() {
         return new Promise(function (resolve) {
             try {
                 if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
                     window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
                         try {
-                            var entry = response && response.settings && response.settings.cssb64;
-                            var raw = entry && typeof entry.textparam1 === 'string' ? entry.textparam1 : '';
-                            var parsed = parseStyleBlob(raw);
-                            styleState = parsed.state || {};
-                            styleUserCss = parsed.userCss || '';
-                            var ta = document.getElementById('arcade-style-usercss');
-                            if (ta) ta.value = styleUserCss;
-                            syncStyleControlsFromState();
-                        } catch (e) { console.error('[arcade-shell] style load parse failed:', e); }
+                            var settings = (response && response.settings) || {};
+                            STYLE_PROFILES.forEach(function (profile) {
+                                var entry = settings[STYLE_PROFILE_SAVE_KEY[profile]];
+                                styleProfileSavedRaw[profile] = (entry && typeof entry.textparam1 === 'string') ? entry.textparam1 : '';
+                            });
+                            var presetsEntry = settings[MY_PRESETS_KEY];
+                            var presetsRaw = (presetsEntry && typeof presetsEntry.textparam1 === 'string') ? presetsEntry.textparam1 : '';
+                            var parsedPresets = presetsRaw ? JSON.parse(presetsRaw) : [];
+                            myStylePresets = Array.isArray(parsedPresets) ? parsedPresets : [];
+                        } catch (e) { console.error('[arcade-shell] style settings load parse failed:', e); }
+                        loadActiveProfileIntoControls();
+                        renderMyPresetPills();
                         resolve();
                     });
                     return;
                 }
-            } catch (e) { console.error('[arcade-shell] style load failed:', e); }
+            } catch (e) { console.error('[arcade-shell] style settings load failed:', e); }
             setStyleStatus('settings bridge unavailable — styles will not load or save', true);
+            loadActiveProfileIntoControls();
+            renderMyPresetPills();
             resolve();
         });
     }
 
+    // Loads the ACTIVE profile's last-saved blob (styleProfileSavedRaw,
+    // populated by loadStyleSettings()/saveStyleBlob()) into styleState/
+    // styleUserCss and the visible controls. Used at first boot AND on
+    // every profile switch (switching always re-reads the SAVED blob, never
+    // an in-memory scratch copy — see the profile-switch comment above).
+    function loadActiveProfileIntoControls() {
+        var raw = styleProfileSavedRaw[activeStyleProfile] || '';
+        var parsed = parseStyleBlob(raw);
+        styleState = parsed.state || {};
+        styleUserCss = parsed.userCss || '';
+        var ta = document.getElementById('arcade-style-usercss');
+        if (ta) ta.value = styleUserCss;
+        syncStyleControlsFromState();
+    }
+
+    // True when the CURRENT in-progress edit (styleState/styleUserCss) no
+    // longer matches the active profile's last-saved blob — the dirty-check
+    // that arms the profile-switch confirm.
+    function isActiveProfileDirty() {
+        var isEmpty = Object.keys(styleState).length === 0 && !styleUserCss;
+        var current = isEmpty ? '' : buildStyleCss();
+        return current !== (styleProfileSavedRaw[activeStyleProfile] || '');
+    }
+
+    function resetPendingProfileSwitch() {
+        if (pendingProfileSwitchBtn) pendingProfileSwitchBtn.classList.remove('is-confirm');
+        pendingProfileSwitchTo = null;
+        pendingProfileSwitchBtn = null;
+        clearTimeout(pendingProfileSwitchTimer);
+    }
+
+    function switchStyleProfile(profile, btn) {
+        if (!STYLE_PROFILE_LABEL[profile] || profile === activeStyleProfile) return;
+        if (pendingProfileSwitchTo === profile) {
+            resetPendingProfileSwitch();
+            doSwitchStyleProfile(profile);
+            return;
+        }
+        resetPendingProfileSwitch();
+        resetPendingDelete();
+        resetPendingApply();
+        if (!isActiveProfileDirty()) { doSwitchStyleProfile(profile); return; }
+        // Same warning-amber confirm-on-second-click shape as v1.1's My
+        // Presets Custom-CSS conflict — this arm isn't destructive to
+        // anything saved on disk, only a heads-up that unsaved edits in the
+        // profile you're leaving won't be shown until you switch back
+        // WITHOUT having saved (switching always reloads from the saved
+        // blob, never an in-memory copy).
+        pendingProfileSwitchTo = profile;
+        pendingProfileSwitchBtn = btn;
+        btn.classList.add('is-confirm');
+        btn.title = 'Click again to switch — unsaved ' + STYLE_PROFILE_LABEL[activeStyleProfile] + ' changes will not be kept';
+        clearTimeout(pendingProfileSwitchTimer);
+        pendingProfileSwitchTimer = setTimeout(resetPendingProfileSwitch, 2800);
+        setStyleStatus('Unsaved ' + STYLE_PROFILE_LABEL[activeStyleProfile] + ' changes — click ' + STYLE_PROFILE_LABEL[profile] + ' again to switch anyway', true);
+    }
+
+    function doSwitchStyleProfile(profile) {
+        activeStyleProfile = profile;
+        loadActiveProfileIntoControls();
+        renderStyleProfileSeg();
+        setStyleStatus('', false);
+        initStylePreviewFrame(); // fresh frame — the two profiles' real dockParams differ
+    }
+
+    function renderStyleProfileSeg() {
+        var seg = document.getElementById('arcade-style-profile-seg');
+        if (!seg) return;
+        seg.querySelectorAll('button').forEach(function (b) {
+            var on = b.dataset.arcadeStyleProfile === activeStyleProfile;
+            b.classList.toggle('is-on', on);
+            b.setAttribute('aria-pressed', String(on));
+        });
+        var label = document.getElementById('arcade-style-preview-profile');
+        if (label) label.textContent = 'Previewing: ' + STYLE_PROFILE_LABEL[activeStyleProfile];
+    }
+
+    function setStylePreviewHint(text) {
+        var el = document.getElementById('arcade-style-preview-hint');
+        if (el) el.textContent = text || '';
+    }
+
+    // Debounced control-change handler. While the preview frame is same-
+    // origin (local family), restyle it LIVE via the <style id="arcade-
+    // style-live"> tag — no reload. Any other origin falls back to v1's
+    // original behavior: rebuild frame.src with the new cssb64 (a full
+    // reload, which also naturally re-seeds via the native loadlast param).
     function queueStylePreviewRefresh() {
         if (!stylePanelLive) return;
         clearTimeout(stylePreviewTimer);
-        stylePreviewTimer = setTimeout(refreshStylePreview, 400);
+        stylePreviewTimer = setTimeout(function () {
+            if (!applyLiveStylePreview()) refreshStylePreviewViaReload();
+        }, 400);
     }
 
-    function refreshStylePreview() {
+    function buildStylePreviewParams(sessionId) {
+        var baseParams = activeStyleProfile === 'dock' ? ARCADE_DOCK_APP_PREVIEW_PARAMS : ARCADE_WIDGET_PREVIEW_PARAMS;
+        return ['session=' + encodeURIComponent(sessionId), 'loadlast=30']
+            .concat(baseParams)
+            .concat(['cssb64=' + encodeCssB64(buildStyleCss())]);
+    }
+
+    // First paint (boot / profile switch / "Reload preview") — sets
+    // frame.src ONCE with the current blob already riding as cssb64, so the
+    // very first render is already styled; every control change AFTER this
+    // goes through the live <style> tag instead (queueStylePreviewRefresh).
+    function initStylePreviewFrame() {
         var frame = document.getElementById('arcade-style-preview-frame');
         if (!frame) return;
         var resolver = window.resolveSocialStreamPage;
@@ -1339,35 +1712,180 @@
             setStyleStatus('preview unavailable (app helpers not found)', true);
             return;
         }
+        renderStyleProfileSeg();
+        var myToken = ++stylePreviewSeedToken;
+        setStylePreviewHint('Loading preview…');
         Promise.resolve(getSession()).then(function (sessionId) {
             if (!sessionId) { setStyleStatus('waiting for session…', false); return; }
-            // Mirror the house dock's look-defining params so the preview
-            // resembles the real embedded dock; the blob rides as cssb64.
-            var params = [
-                'session=' + encodeURIComponent(sessionId),
-                'groupuser', 'darkmode', 'bubble', 'twolines', 'largeavatar', 'emoji',
-                'cssb64=' + encodeCssB64(buildStyleCss())
-            ];
-            return resolver('dock.html', { extraParams: params }).then(function (resolved) {
+            return resolver('dock.html', { extraParams: buildStylePreviewParams(sessionId) }).then(function (resolved) {
+                if (myToken !== stylePreviewSeedToken) return; // superseded by a newer reload
                 if (resolved && resolved.url) {
+                    frame.dataset.ssappOrigin = resolved.origin || '';
+                    frame.onload = function () {
+                        if (myToken !== stylePreviewSeedToken) return;
+                        ensureLiveStyleTag(frame);
+                        seedStylePreview(frame, myToken);
+                    };
                     frame.src = resolved.url;
                     setStyleStatus('', false);
                 }
             });
         }).catch(function (e) {
-            console.error('[arcade-shell] style preview failed:', e);
+            console.error('[arcade-shell] style preview init failed:', e);
             setStyleStatus('preview failed — see console', true);
         });
     }
 
-    function sendStyleTestMessage() {
+    // Non-local-origin fallback (v1's original behavior): rebuild frame.src
+    // with the current blob. A full reload also re-runs the native
+    // loadlast=30 request for free; there's no same-origin seeding to retry
+    // here (that path is gated on the local family — see seedStylePreview).
+    function refreshStylePreviewViaReload() {
+        var frame = document.getElementById('arcade-style-preview-frame');
+        if (!frame) return;
+        var resolver = window.resolveSocialStreamPage;
+        var getSession = window.getChatDockSessionId;
+        if (typeof resolver !== 'function' || typeof getSession !== 'function') return;
+        var myToken = ++stylePreviewSeedToken;
+        Promise.resolve(getSession()).then(function (sessionId) {
+            if (!sessionId) return;
+            return resolver('dock.html', { extraParams: buildStylePreviewParams(sessionId) }).then(function (resolved) {
+                if (myToken !== stylePreviewSeedToken) return;
+                if (resolved && resolved.url) {
+                    frame.dataset.ssappOrigin = resolved.origin || '';
+                    frame.onload = function () {
+                        if (myToken !== stylePreviewSeedToken) return;
+                        ensureLiveStyleTag(frame);
+                        seedStylePreview(frame, myToken);
+                    };
+                    frame.src = resolved.url;
+                }
+            });
+        }).catch(function (e) { console.error('[arcade-shell] style preview reload failed:', e); });
+    }
+
+    // Live restyle: get-or-create the ONE managed <style> tag in the preview
+    // frame's contentDocument. Returns null (feature-detected, never throws)
+    // on any cross-frame access failure.
+    function ensureLiveStyleTag(frame) {
         try {
-            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
-                window.ninjafy.sendMessage(null, { cmd: 'fakemsg' }, function () { /* response unused */ });
+            var doc = frame.contentDocument;
+            if (!doc || !doc.head) return null;
+            var tag = doc.getElementById('arcade-style-live');
+            if (!tag) {
+                tag = doc.createElement('style');
+                tag.id = 'arcade-style-live';
+                doc.head.appendChild(tag);
+            }
+            return tag;
+        } catch (e) { return null; }
+    }
+
+    // Returns true if it successfully live-restyled (local-family origin +
+    // reachable contentDocument); false means the caller should fall back to
+    // a full src reload instead.
+    function applyLiveStylePreview() {
+        var frame = document.getElementById('arcade-style-preview-frame');
+        if (!frame) return false;
+        var origin = frame.dataset.ssappOrigin || '';
+        if (!LOCAL_ORIGIN_FAMILY[origin]) return false;
+        var tag = ensureLiveStyleTag(frame);
+        if (!tag) return false;
+        // vars are already !important — beats the dock's own inline setProperty.
+        tag.textContent = buildStyleCss();
+        return true;
+    }
+
+    // Preview seeding — priority order (style-builder-v2-spec.md §A.2,
+    // amended): (1) dock.html's own native loadlast=30 history request over
+    // the real P2P transport (already riding on the preview URL, zero extra
+    // plumbing here — just wait and see if it rendered anything); (2) same-
+    // origin fallback via frame2's getLastMessagesDB(30) → this preview
+    // frame's own processInput({recentHistory}); (3) last resort, obviously-
+    // fake canned sample messages via the same processInput shape.
+    function seedStylePreview(frame, token) {
+        var origin = frame.dataset.ssappOrigin || '';
+        if (!LOCAL_ORIGIN_FAMILY[origin]) {
+            // loadlast=30 is already on the URL for every origin; there's no
+            // same-origin fallback available for a non-local frame.
+            setStylePreviewHint('Seeded via the dock\'s own history request (loadlast) — no same-origin fallback available for this frame.');
+            return;
+        }
+        // Give the native loadlast request's P2P transport handshake a real
+        // window to land before assuming it failed (it can race or fail
+        // offline — this is a preview iframe, not the live session).
+        setTimeout(function () {
+            if (token !== stylePreviewSeedToken) return;
+            var rendered = false;
+            try {
+                rendered = !!(frame.contentDocument && frame.contentDocument.querySelector('#output > div'));
+            } catch (e) { /* leave false — fall through to the same-origin fallback */ }
+            if (rendered) {
+                setStylePreviewHint('Live chat history (via the dock\'s own loadlast request)');
                 return;
             }
-        } catch (e) { /* fall through to the honest error */ }
-        setStyleStatus('test-message bridge unavailable', true);
+            seedStylePreviewFromBridge(frame, token);
+        }, 6000);
+    }
+
+    function seedStylePreviewFromBridge(frame, token) {
+        try {
+            var bg = getBackgroundWindow();
+            if (!bg || typeof bg.getLastMessagesDB !== 'function') {
+                seedStylePreviewWithSamples(frame, token);
+                return;
+            }
+            bg.getLastMessagesDB(30).then(function (rows) {
+                if (token !== stylePreviewSeedToken) return;
+                rows = Array.isArray(rows) ? rows : [];
+                if (!rows.length) { seedStylePreviewWithSamples(frame, token); return; }
+                try {
+                    if (frame.contentWindow && typeof frame.contentWindow.processInput === 'function') {
+                        frame.contentWindow.processInput({ recentHistory: rows });
+                        setStylePreviewHint('Real chat history (' + rows.length + ' recent messages)');
+                    } else {
+                        seedStylePreviewWithSamples(frame, token);
+                    }
+                } catch (e) {
+                    console.error('[arcade-shell] preview seed (real history) failed:', e);
+                    seedStylePreviewWithSamples(frame, token);
+                }
+            }).catch(function (e) {
+                console.error('[arcade-shell] getLastMessagesDB failed:', e);
+                seedStylePreviewWithSamples(frame, token);
+            });
+        } catch (e) {
+            console.error('[arcade-shell] preview seed bridge failed:', e);
+            seedStylePreviewWithSamples(frame, token);
+        }
+    }
+
+    // Obviously-fake personas (SampleFren etc.) — plain / donation / member /
+    // firsttime / vip, so every style control has something real to show
+    // against. Same "row" shape getLastMessagesDB() returns (a stored
+    // chatmessage object + id/timestamp — see db.js addMessage), fed through
+    // the SAME dock.html:7809 recentHistory branch as real history.
+    function buildStyleSampleMessages() {
+        var now = Date.now();
+        return [
+            { id: 'arcade-sample-1', chatname: 'SampleFren', type: 'twitch', chatmessage: 'hey chat, loving the new layout! 👋', timestamp: now - 70000 },
+            { id: 'arcade-sample-2', chatname: 'SampleDono', type: 'youtube', hasDonation: '5.00', chatmessage: 'take my bits, keep it up!', timestamp: now - 60000 },
+            { id: 'arcade-sample-3', chatname: 'SampleMember', type: 'twitch', membership: 'Tier 2', chatmessage: 'member gang 🔥', timestamp: now - 50000 },
+            { id: 'arcade-sample-4', chatname: 'SampleFirstTimer', type: 'kick', firsttime: true, chatmessage: 'first time here, this is awesome!', timestamp: now - 40000 },
+            { id: 'arcade-sample-5', chatname: 'SampleVIP', type: 'discord', vip: true, chatmessage: 'vip check-in ✅', timestamp: now - 30000 },
+            { id: 'arcade-sample-6', chatname: 'SampleFren2', type: 'youtube', chatmessage: 'lol nice, gg', timestamp: now - 20000 },
+            { id: 'arcade-sample-7', chatname: 'SampleDono2', type: 'twitch', hasDonation: '2500 bits', chatmessage: 'poggers 🎉', timestamp: now - 10000 }
+        ];
+    }
+
+    function seedStylePreviewWithSamples(frame, token) {
+        if (token !== stylePreviewSeedToken) return;
+        try {
+            if (frame.contentWindow && typeof frame.contentWindow.processInput === 'function') {
+                frame.contentWindow.processInput({ recentHistory: buildStyleSampleMessages() });
+            }
+        } catch (e) { console.error('[arcade-shell] sample seed failed:', e); }
+        setStylePreviewHint('no chat history yet — showing sample messages');
     }
 
     function saveStyleBlob() {
@@ -1377,6 +1895,8 @@
         // URL forever (gate fix #3).
         var isEmpty = Object.keys(styleState).length === 0 && !styleUserCss;
         var raw = isEmpty ? '' : buildStyleCss();
+        var profile = activeStyleProfile;
+        var saveKey = STYLE_PROFILE_SAVE_KEY[profile];
         try {
             if (!(window.ninjafy && typeof window.ninjafy.sendMessage === 'function')) {
                 setStyleStatus('settings bridge unavailable — could not save', true);
@@ -1384,11 +1904,20 @@
             }
             setStyleStatus('Saving…', false);
             var confirmed = false;
-            window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: 'cssb64', value: raw }, function () {
+            window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: saveKey, value: raw }, function () {
                 confirmed = true;
-                // Honest claim: a URL already pasted into OBS reads cssb64
-                // from its params only — it doesn't live-sync (gate fix #2).
-                setStyleStatus('Saved ✓ — embedded dock updated; re-copy the dock URL for OBS', false);
+                styleProfileSavedRaw[profile] = raw; // keep the dirty-check baseline accurate post-save
+                // Honest, profile-specific claim: DOCK (APP) governs the
+                // embedded app dock (getSavedDockCustomCss reads arcadeDockCss
+                // FIRST), so saving it visibly updates that view; STREAM
+                // WIDGET only ever reaches OBS once its dock URL is re-copied
+                // — it doesn't live-sync into an already-pasted URL, and it
+                // may not even be what the embedded app dock is showing if a
+                // DOCK (APP) override already exists.
+                var msg = profile === 'dock'
+                    ? 'Saved ✓ — embedded app dock updated'
+                    : 'Saved ✓ — the OBS-copied dock URL will use this once re-copied';
+                setStyleStatus(msg, false);
                 try {
                     if (typeof window.ensureChatDockLoaded === 'function') window.ensureChatDockLoaded(true);
                 } catch (e) { /* noop */ }
@@ -2007,6 +2536,14 @@
         waitForStateManagerThenBind();
         startArcadeAnalyticsBridge();
         navigateArcadeTab(restored);
+
+        // CLOCK settings — read at boot, applied live (buildTopbar() above has
+        // already started the clock at its BFT/no-seconds defaults; this only
+        // adjusts the two hooks if the user previously chose otherwise).
+        loadClockSettings().then(function () {
+            syncClockControls();
+            applyClockSettingChange();
+        });
     }
 
     if (document.readyState === 'loading') {
