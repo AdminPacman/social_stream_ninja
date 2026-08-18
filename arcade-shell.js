@@ -142,9 +142,14 @@
     }
 
     // --------------------------------------------------------------------
-    // BFT clock chip — honest dash-faces until the beacon answers, ~ on
-    // estimates (fleet law). Port of variation-console/bft.js, scoped to
-    // this chip only.
+    // BFT clock chip — honest dash-faces until a REAL beacon answers, ~
+    // only on a genuine estimate (fleet law). Two live sources tried in
+    // order every tick: the arcade's own beacon (time.pacsarcade.org, a
+    // shim over the fleet's bitcoind) first, mempool.space as fallback.
+    // The synthetic local estimate is a LAST resort — only when both
+    // network reads fail — and always wears the ~ when used. Dash-faces
+    // (set in the topbar markup) are never overwritten with an estimate
+    // before the first real network answer lands.
     // --------------------------------------------------------------------
     function startBftClock(bftEl) {
         var BPD = 144, BPM = 4032, BPY = 52416;
@@ -171,18 +176,39 @@
             return Math.max(0, Math.round(ANCHOR.height + (Date.now() - ANCHOR.ms) / 600000));
         }
 
-        function tick() {
-            fetch('https://mempool.space/api/blocks/tip/height', { cache: 'no-store' })
+        function fetchArcadeBeacon() {
+            return fetch('https://time.pacsarcade.org/height', { cache: 'no-store' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var h = data && parseInt(data.height, 10);
+                    if (isFinite(h) && h > 0) return h;
+                    throw new Error('arcade beacon: bad height payload');
+                });
+        }
+
+        function fetchMempoolFallback() {
+            return fetch('https://mempool.space/api/blocks/tip/height', { cache: 'no-store' })
                 .then(function (r) { return r.text(); })
                 .then(function (s) {
                     var h = parseInt(s.trim(), 10);
-                    if (isFinite(h) && h > 0) render(h, false); else render(estimate(), true);
-                })
-                .catch(function () { render(estimate(), true); });
+                    if (isFinite(h) && h > 0) return h;
+                    throw new Error('mempool fallback: bad height payload');
+                });
         }
 
-        // dash-faces (set in markup) stay until this first render call.
-        render(estimate(), true);
+        function tick() {
+            fetchArcadeBeacon()
+                .then(function (h) { render(h, false); })
+                .catch(function () {
+                    fetchMempoolFallback()
+                        .then(function (h) { render(h, false); })
+                        .catch(function () { render(estimate(), true); });
+                });
+        }
+
+        // No synchronous render here — the chip keeps its markup dash-faces
+        // (----.--.--  --:--  ---,---) until this first tick actually
+        // resolves, honest-time law's "dash-face on first paint".
         tick();
         setInterval(tick, 60000);
     }
