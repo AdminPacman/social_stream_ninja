@@ -130,6 +130,7 @@
     var bftRenderDisplay = null;            // set inside startBftClock(); immediate redraw, no fetch
     var bftRescheduleTick = null;           // set inside startBftClock(); re-picks the 30s/60s height-poll cadence
     var bftRescheduleSecondsTimer = null;   // set inside startBftClock(); starts/stops the 1s display-only ticker
+    var bftMaybeFetchTimestamp = null;      // set inside startBftClock(); cold-start timestamp-anchor fetch (0018.05.26 b)
 
     // --------------------------------------------------------------------
     // Topbar
@@ -174,16 +175,97 @@
             header.appendChild(betaChip);
         }
 
-        var bft = document.createElement('span');
+        var clockWrap = buildClockControl();
+        header.appendChild(clockWrap);
+
+        document.body.appendChild(header);
+        startBftClock(clockWrap.querySelector('.arcade-bft'));
+    }
+
+    // --------------------------------------------------------------------
+    // Clock button + settings popover (0018.05.26 b — out of the Style tab).
+    // Same anchored-popover pattern as buildMoreMenu() above (wrap/is-open,
+    // click-outside via a document click listener, aria-expanded on the
+    // trigger) — the clock chip itself becomes the keyboard-accessible
+    // trigger (button, aria-haspopup) instead of an inert span. Popover
+    // holds exactly what the old Style-panel CLOCK group held — MODE
+    // segmented [BFT|LOCAL] + SECONDS toggle, same settings keys/canonical
+    // saveSetting path, applied live via the existing bft* hooks — no other
+    // chrome. The popover stays open across mode/seconds clicks (stopped
+    // propagation) so both can be toggled in one visit; it closes on
+    // click-outside, Escape, or re-clicking the trigger.
+    // --------------------------------------------------------------------
+    function clockBridgeAvailable() {
+        try {
+            return !!(window.ninjafy && typeof window.ninjafy.sendMessage === 'function');
+        } catch (e) { return false; }
+    }
+
+    function syncClockBridgeHint() {
+        var hint = document.getElementById('arcade-clock-pop-hint');
+        if (hint) hint.hidden = clockBridgeAvailable();
+    }
+
+    function buildClockControl() {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-clockbtn';
+
+        var bft = document.createElement('button');
+        bft.type = 'button';
         bft.className = 'arcade-bft';
+        bft.setAttribute('aria-haspopup', 'true');
+        bft.setAttribute('aria-expanded', 'false');
+        bft.setAttribute('aria-label', 'Clock settings');
         bft.innerHTML =
             '<span class="date">----.--.--</span><span class="ab">a₿</span>' +
             '<span class="time">--:--</span>' +
             '<span class="height"><span class="arcade-starbox">★</span><span class="h">---,---</span></span>';
-        header.appendChild(bft);
+        wrap.appendChild(bft);
 
-        document.body.appendChild(header);
-        startBftClock(bft);
+        var pop = document.createElement('div');
+        pop.className = 'arcade-clock-pop';
+        pop.setAttribute('role', 'menu');
+        pop.setAttribute('aria-label', 'Clock settings');
+        pop.innerHTML =
+            '<div class="arcade-clock">' +
+            '<div class="arcade-seg" role="group" aria-label="Clock mode" id="arcade-clock-seg">' +
+            '<button type="button" class="is-on" data-arcade-clock-mode="bft" aria-pressed="true">BFT</button>' +
+            '<button type="button" data-arcade-clock-mode="local" aria-pressed="false">LOCAL</button>' +
+            '</div>' +
+            '<label class="arcade-clock-seconds"><input type="checkbox" id="arcade-clock-seconds"><span>seconds</span></label>' +
+            '</div>' +
+            '<span class="arcade-field__hint arcade-clock-pop-hint" id="arcade-clock-pop-hint" hidden>won’t persist — settings bridge unavailable</span>';
+        wrap.appendChild(pop);
+
+        function closePopover() {
+            wrap.classList.remove('is-open');
+            bft.setAttribute('aria-expanded', 'false');
+        }
+        function openPopover() {
+            syncClockBridgeHint(); // bridge availability can't change mid-session, but cheap to recheck honestly
+            wrap.classList.add('is-open');
+            bft.setAttribute('aria-expanded', 'true');
+        }
+
+        bft.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (wrap.classList.contains('is-open')) closePopover(); else openPopover();
+        });
+        // Toggling MODE/SECONDS inside the popover must NOT bubble to the
+        // document click-outside listener below (that would close the
+        // popover on every toggle, defeating "toggle both in one visit").
+        pop.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', closePopover);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && wrap.classList.contains('is-open')) {
+                closePopover();
+                bft.focus();
+            }
+        });
+
+        initClockPopoverControls(pop);
+
+        return wrap;
     }
 
     function buildMoreMenu() {
@@ -272,6 +354,14 @@
 
         var lastRealHeight = null;   // ONLY ever a real network answer — never an estimate.
         var blockObservedAt = null;  // wall-clock ms when lastRealHeight last genuinely CHANGED
+        // Cold-start phase anchor (0018.05.26 b — real block-timestamp phase):
+        // the tip block's ACTUAL header timestamp (ms), fetched only when seconds
+        // are on and no OBSERVED transition exists yet for lastRealHeight. This is
+        // measured chain data, not synthesis — honest-time-ruling compliant. An
+        // OBSERVED height change (blockObservedAt) is always the freshest anchor
+        // and REPLACES this the instant one lands; see renderBft()'s precedence.
+        var blockTimestampMs = null;
+        var timestampFetchInFlight = false;
 
         function renderHeight() {
             var hEl = bftEl.querySelector('.h');
@@ -314,14 +404,28 @@
                 tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin, 2);
                 return;
             }
-            if (blockObservedAt == null) {
-                // Real height known, but no observed transition yet this boot —
-                // phase inside the block is genuinely unknown; dash the sub-block
-                // digits rather than pretend to know where in the block we are.
+            // Precedence (0018.05.26 b): an OBSERVED height change is the freshest
+            // anchor — real wall-clock moment WE saw the block land. The timestamp
+            // anchor is the cold-start fallback so seconds don't sit dashed for up
+            // to a full block after toggling on; it's replaced the instant an
+            // OBSERVED change arrives (see observeHeight()/maybeFetchBlockTimestamp()).
+            var anchorMs = blockObservedAt != null ? blockObservedAt : blockTimestampMs;
+            if (anchorMs == null) {
+                // Real height known, but no anchor yet (no observed transition AND
+                // no timestamp fetched/available) — phase inside the block is
+                // genuinely unknown; dash the sub-block digits rather than pretend
+                // to know where in the block we are.
                 tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin, 2) + ':--';
                 return;
             }
-            var elapsed = Math.min(Date.now() - blockObservedAt, 9 * 60000 + 59000); // hard cap :M9:59
+            // Header timestamps are miner-set and can skew minutes off wall-clock
+            // (either direction) — clamp honestly into the single 10-BFT-minute
+            // block window rather than ever showing negative or overflowing
+            // sub-block digits. This is the same hard cap v2 already applied to
+            // the OBSERVED-anchor path; here it also floors negative skew at 0
+            // (a miner's clock reading "in the future" relative to us doesn't mean
+            // less than zero seconds have elapsed in the block).
+            var elapsed = Math.max(0, Math.min(Date.now() - anchorMs, 9 * 60000 + 59000)); // clamp to [0, :M9:59]
             var minOffset = Math.floor(elapsed / 60000);
             var ss = Math.floor(elapsed / 1000) % 60;
             tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin + minOffset, 2) + ':' + pad(ss, 2);
@@ -339,8 +443,10 @@
                 // number = a genuine block change: anchor the interpolation clock.
                 blockObservedAt = (lastRealHeight === null) ? null : Date.now();
                 lastRealHeight = h;
+                blockTimestampMs = null; // new height invalidates any prior timestamp anchor
             }
             renderDisplay();
+            maybeFetchBlockTimestamp(); // no-op unless seconds-on + no anchor yet — see below
         }
 
         function fetchArcadeBeacon() {
@@ -363,6 +469,81 @@
                 });
         }
 
+        // --------------------------------------------------------------
+        // Real block-timestamp phase (0018.05.26 b) — cold-start anchor so
+        // seconds mode starts ticking within one fetch of toggling on,
+        // instead of waiting up to a full ~10min block for an OBSERVED
+        // height change. Source order per the honest-time ruling: (a) the
+        // arcade beacon IF it ever grows a timestamp field alongside
+        // /height (verified 0018.08.18: it does NOT today — height-only
+        // payload, `{"height":N}` — so this rung is feature-detected and
+        // currently always falls through; noted as a fleet follow-up); (b)
+        // mempool.space `/api/v1/blocks`, first entry, ONLY if its height
+        // matches the height we already trust (targetHeight) — a mismatch
+        // means the tip moved between our height-fetch and this call, and
+        // we honestly reject rather than anchor to the wrong block.
+        // --------------------------------------------------------------
+        function fetchArcadeBeaconTimestamp(targetHeight) {
+            return fetch('https://time.pacsarcade.org/height', { cache: 'no-store' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var h = data && parseInt(data.height, 10);
+                    var tsRaw = data && (data.timestamp || data.time || data.blockTime);
+                    var ts = parseInt(tsRaw, 10);
+                    if (!isFinite(h) || h !== targetHeight) throw new Error('arcade beacon: height mismatch for timestamp');
+                    if (!isFinite(ts) || ts <= 0) throw new Error('arcade beacon: no timestamp field on /height (fleet follow-up — beacon is height-only today)');
+                    return ts;
+                });
+        }
+
+        function fetchMempoolBlockTimestamp(targetHeight) {
+            return fetch('https://mempool.space/api/v1/blocks', { cache: 'no-store' })
+                .then(function (r) { return r.json(); })
+                .then(function (list) {
+                    var entry = Array.isArray(list) && list[0];
+                    var h = entry && parseInt(entry.height, 10);
+                    var ts = entry && parseInt(entry.timestamp, 10);
+                    // Honest-time law: verify the entry's height MATCHES our known
+                    // tip height before trusting its timestamp — mismatch → ignore,
+                    // stay dashed (never anchor to a block we didn't ask about).
+                    if (!isFinite(h) || h !== targetHeight) throw new Error('mempool: tip height mismatch, refusing to anchor');
+                    if (!isFinite(ts) || ts <= 0) throw new Error('mempool: bad timestamp payload');
+                    return ts;
+                });
+        }
+
+        function fetchTipBlockTimestamp(targetHeight) {
+            return fetchArcadeBeaconTimestamp(targetHeight).catch(function () {
+                return fetchMempoolBlockTimestamp(targetHeight);
+            });
+        }
+
+        function maybeFetchBlockTimestamp() {
+            if (!bftClockSeconds) return;          // only needed to anchor sub-block seconds
+            if (lastRealHeight == null) return;     // no real height to anchor against
+            if (blockObservedAt != null) return;    // OBSERVED anchor already covers phase — freshest, no fetch needed
+            if (blockTimestampMs != null) return;   // already timestamp-anchored for this height
+            if (timestampFetchInFlight) return;
+            var targetHeight = lastRealHeight;
+            timestampFetchInFlight = true;
+            fetchTipBlockTimestamp(targetHeight)
+                .then(function (ts) {
+                    timestampFetchInFlight = false;
+                    if (lastRealHeight !== targetHeight) return; // height moved on mid-fetch — stale, drop
+                    if (blockObservedAt != null) return;         // an OBSERVED change won the race — it wins, ignore
+                    blockTimestampMs = ts * 1000;
+                    renderDisplay();
+                })
+                .catch(function () {
+                    timestampFetchInFlight = false;
+                    // Failure/degradation: stays exactly v2's behavior — coarse
+                    // HH:M0:-- until an OBSERVED change lands. Never synthesize.
+                    // A later tick (still seconds-on, still no anchor) naturally
+                    // retries via observeHeight() → maybeFetchBlockTimestamp().
+                });
+        }
+        bftMaybeFetchTimestamp = maybeFetchBlockTimestamp;
+
         function tick() {
             fetchArcadeBeacon()
                 .then(observeHeight)
@@ -376,6 +557,7 @@
                             // possibly-stale height/time on screen.
                             lastRealHeight = null;
                             blockObservedAt = null;
+                            blockTimestampMs = null;
                             renderDisplay();
                         });
                 });
@@ -443,6 +625,10 @@
         if (typeof bftRenderDisplay === 'function') bftRenderDisplay();
         if (typeof bftRescheduleTick === 'function') bftRescheduleTick();
         if (typeof bftRescheduleSecondsTimer === 'function') bftRescheduleSecondsTimer();
+        // Toggling seconds ON with a real height already known and no anchor
+        // yet: kick the cold-start timestamp fetch immediately so seconds
+        // start ticking within one fetch, per the popover's live-apply law.
+        if (typeof bftMaybeFetchTimestamp === 'function') bftMaybeFetchTimestamp();
     }
 
     function syncClockControls() {
@@ -1122,14 +1308,6 @@
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mypreset-save">Save</button>' +
             '</div>' +
             '</div>' +
-            '<div class="arcade-clock" id="arcade-clock">' +
-            '<span class="arcade-k">CLOCK</span>' +
-            '<div class="arcade-seg" role="group" aria-label="Clock mode" id="arcade-clock-seg">' +
-            '<button type="button" class="is-on" data-arcade-clock-mode="bft" aria-pressed="true">BFT</button>' +
-            '<button type="button" data-arcade-clock-mode="local" aria-pressed="false">LOCAL</button>' +
-            '</div>' +
-            '<label class="arcade-clock-seconds"><input type="checkbox" id="arcade-clock-seconds"><span>seconds</span></label>' +
-            '</div>' +
             '<div class="arcade-style-cols">' +
             '<div class="arcade-style-controls" id="arcade-style-controls"></div>' +
             '<div class="arcade-style-preview">' +
@@ -1161,8 +1339,6 @@
         renderMyPresetsSection(panel);
         renderThemePagesSection(panel);
         initStyleProfileSeg(panel);
-        initClockControls(panel);
-        syncClockControls(); // no-op until loadClockSettings() resolves, but safe if it already has
         panel.querySelector('#arcade-style-save').addEventListener('click', saveStyleBlob);
         panel.querySelector('#arcade-style-reload').addEventListener('click', function () { initStylePreviewFrame(); });
         panel.querySelector('#arcade-style-usercss').addEventListener('input', function (e) {
@@ -1181,8 +1357,8 @@
         });
     }
 
-    function initClockControls(panel) {
-        var seg = panel.querySelector('#arcade-clock-seg');
+    function initClockPopoverControls(pop) {
+        var seg = pop.querySelector('#arcade-clock-seg');
         if (seg) {
             seg.addEventListener('click', function (e) {
                 var btn = e.target.closest('button[data-arcade-clock-mode]');
@@ -1193,7 +1369,7 @@
                 applyClockSettingChange();
             });
         }
-        var secondsToggle = panel.querySelector('#arcade-clock-seconds');
+        var secondsToggle = pop.querySelector('#arcade-clock-seconds');
         if (secondsToggle) {
             secondsToggle.addEventListener('change', function () {
                 bftClockSeconds = !!secondsToggle.checked;

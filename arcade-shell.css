@@ -156,9 +156,45 @@ body.arcade-shell .arcade-bft {
   white-space: nowrap;
   flex: 0 0 auto;
 }
+/* The clock chip is a <button> now (0018.05.26 b — popover trigger, out of
+   the Style tab) — reset the default button chrome it inherits. */
+body.arcade-shell button.arcade-bft {
+  border: 0;
+  background: transparent;
+  padding: 3px 6px;
+  margin: 0;
+  border-radius: var(--arc-r);
+  cursor: pointer;
+  font-family: var(--arc-font-mono);
+}
+body.arcade-shell button.arcade-bft:hover { background: var(--arc-panel-2); }
 body.arcade-shell .arcade-bft .date { color: var(--arc-ink); }
 body.arcade-shell .arcade-bft .ab { color: var(--arc-guide); }
 body.arcade-shell .arcade-bft .height { color: var(--arc-ink); display: inline-flex; align-items: center; gap: 5px; }
+
+/* Clock settings popover (0018.05.26 b) — same anchored-popover pattern as
+   the "More" menu just below (wrap position:relative, pop absolute+is-open,
+   z-index/shadow/edge match arcade-more-pop exactly). MODE + SECONDS live
+   here now; the Style panel's old CLOCK group is gone (see buildStylePanel
+   in arcade-shell.js). */
+body.arcade-shell .arcade-clockbtn { position: relative; flex: 0 0 auto; }
+body.arcade-shell .arcade-clock-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 2010;
+  min-width: 180px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--arc-panel-3);
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+body.arcade-shell .arcade-clockbtn.is-open .arcade-clock-pop { display: flex; }
+body.arcade-shell .arcade-clock-pop-hint { color: var(--arc-warning); }
 body.arcade-shell .arcade-starbox {
   display: inline-flex;
   align-items: center;
@@ -666,12 +702,11 @@ body.arcade-shell .arcade-style-profile-row .arcade-seg button.is-confirm {
   color: var(--arc-warning); text-decoration: underline dotted;
 }
 
-/* v2 — CLOCK control group (mode segmented + seconds toggle), small, sits
-   just below the presets rows. */
+/* CLOCK control group (mode segmented + seconds toggle) — moved off the
+   Style panel into the clock's own popover (0018.05.26 b; see
+   .arcade-clock-pop above). Rule kept generic/unscoped-to-panel since it now
+   lives in the topbar popover instead. */
 body.arcade-shell .arcade-clock { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-body.arcade-shell .arcade-clock .arcade-k {
-  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
-}
 body.arcade-shell .arcade-clock-seconds {
   display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   font: 500 11px/1 var(--arc-font-ui); color: var(--arc-muted);
