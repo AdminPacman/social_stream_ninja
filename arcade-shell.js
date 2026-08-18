@@ -383,13 +383,102 @@
 
         var side = document.createElement('section');
         side.className = 'arcade-side';
-        side.setAttribute('aria-label', 'Analytics and games (coming soon)');
-        side.innerHTML =
-            '<div class="arcade-panel-head"><span class="arcade-panel-title">DOCK</span></div>' +
-            '<div class="arcade-panel-body">' +
-            '<div class="arcade-coming"><b>COMING</b>analytics · games preview</div>' +
-            '</div>';
+        side.setAttribute('aria-label', 'Analytics');
+        side.innerHTML = buildAnalyticsPaneMarkup();
         document.body.appendChild(side);
+        initAnalyticsPeriodSelector(side);
+    }
+
+    // --------------------------------------------------------------------
+    // Right rail: ANALYTICS dock (default tab — round-4 decision). Bound to
+    // real data where index.html's exposed surfaces actually carry it;
+    // everywhere else an honest "—", never a fabricated number. As of this
+    // pass, StateManager (state.js) tracks source CONNECTION state only —
+    // no viewer counts, watch time, first-timer flags, raid events,
+    // follower deltas, or a notification feed reach this renderer (those
+    // live downstream, in background.js / the dock overlay's own process,
+    // with no IPC bridge exposing them here yet). The two exceptions are
+    // genuinely real: the live-source COUNT (from stateManager, same count
+    // the sources rail's "N LIVE" pill already shows) and the follower-row
+    // PLATFORM LIST (the real configured sources) — both wired below; the
+    // totals/deltas next to them stay "—" until that data path exists.
+    // --------------------------------------------------------------------
+    function buildAnalyticsPaneMarkup() {
+        return (
+            '<div class="arcade-panel-head"><span class="arcade-panel-title">ANALYTICS</span></div>' +
+            '<div class="arcade-panel-body">' +
+            '<div class="arcade-period-row">' +
+            '<span class="arcade-k">PERIOD</span>' +
+            '<div class="arcade-seg" role="group" aria-label="Analytics period" id="arcade-period-seg">' +
+            '<button type="button" class="is-on" data-arcade-period="today" aria-pressed="true">Today</button>' +
+            '<button type="button" data-arcade-period="7d" aria-pressed="false">7d</button>' +
+            '<button type="button" data-arcade-period="30d" aria-pressed="false">30d</button>' +
+            '</div></div>' +
+            '<div class="arcade-statgrid">' +
+            '<div class="arcade-stat"><span class="arcade-stat__label">WATCH TIME</span>' +
+            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">not tracked yet</span></div>' +
+            '<div class="arcade-stat"><span class="arcade-stat__label">PEAK VIEWERS</span>' +
+            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub" id="arcade-stat-live-sub">now — · 0 live</span></div>' +
+            '<div class="arcade-stat"><span class="arcade-stat__label">FIRST-TIME CHATTERS</span>' +
+            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">not tracked yet</span></div>' +
+            '<div class="arcade-stat"><span class="arcade-stat__label">RAIDS RECEIVED</span>' +
+            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">last: —</span></div>' +
+            '</div>' +
+            '<div class="arcade-field"><label>FOLLOWER DELTA</label></div>' +
+            '<ul class="arcade-frow-list" id="arcade-follower-rows"></ul>' +
+            '<div class="arcade-field"><label>RECENT NOTIFICATIONS</label></div>' +
+            '<div class="arcade-nrow-empty">No notification feed reaches this view yet — raids, follows, and ' +
+            'donations are handled downstream (dock overlay / background.js), not exposed to this window. ' +
+            'Honest gap, not hidden: this panel will fill in once that bridge exists.</div>' +
+            '</div>'
+        );
+    }
+
+    function initAnalyticsPeriodSelector(side) {
+        var seg = side.querySelector('#arcade-period-seg');
+        if (!seg) return;
+        seg.addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-arcade-period]');
+            if (!btn || !seg.contains(btn)) return;
+            seg.querySelectorAll('button').forEach(function (b) {
+                var on = b === btn;
+                b.classList.toggle('is-on', on);
+                b.setAttribute('aria-pressed', String(on));
+            });
+            // Every stat tile above is an honest "—" regardless of period —
+            // there's no per-period aggregate data source yet, so this is
+            // UI-only for now (see buildAnalyticsPaneMarkup's comment).
+        });
+    }
+
+    function platformBadge(target) {
+        var t = String(target || '').trim();
+        return t ? t.slice(0, 2).toUpperCase() : '--';
+    }
+
+    function renderAnalyticsFollowerRows() {
+        var list = document.getElementById('arcade-follower-rows');
+        if (!list || !window.stateManager || typeof window.stateManager.getSources !== 'function') return;
+        var sources = window.stateManager.getSources() || [];
+        list.innerHTML = '';
+        if (!sources.length) {
+            var empty = document.createElement('li');
+            empty.className = 'arcade-src-empty';
+            empty.textContent = 'No sources configured yet.';
+            list.appendChild(empty);
+            return;
+        }
+        sources.forEach(function (source) {
+            var li = document.createElement('li');
+            li.className = 'arcade-frow';
+            li.innerHTML =
+                '<span class="arcade-pill arcade-pill--mono">' + platformBadge(source.target) + '</span>' +
+                '<span class="arcade-frow__label"></span>' +
+                '<span class="arcade-frow__total">—</span>' +
+                '<span class="arcade-frow__delta">—</span>';
+            li.querySelector('.arcade-frow__label').textContent = sourceDisplayName(source);
+            list.appendChild(li);
+        });
     }
 
     // --------------------------------------------------------------------
@@ -471,6 +560,14 @@
             var span = countPill.querySelector('span:last-child');
             if (span) span.textContent = liveCount + ' LIVE';
         }
+
+        // The analytics dock's "PEAK VIEWERS" sub-label borrows this same
+        // real live-source count (viewer numbers themselves aren't tracked
+        // anywhere reachable from this window — see buildAnalyticsPaneMarkup).
+        var liveSub = document.getElementById('arcade-stat-live-sub');
+        if (liveSub) liveSub.textContent = 'now — · ' + liveCount + ' live';
+
+        renderAnalyticsFollowerRows();
     }
 
     function buildSourceRow(source) {

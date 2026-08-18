@@ -140,6 +140,7 @@ body.arcade-shell .arcade-pill {
 }
 body.arcade-shell .arcade-pill--flair { color: var(--arc-flair); border-color: rgba(255, 92, 203, 0.35); background: rgba(255, 92, 203, 0.07); }
 body.arcade-shell .arcade-pill--live { color: var(--arc-live); border-color: rgba(57, 255, 20, 0.35); background: rgba(57, 255, 20, 0.07); }
+body.arcade-shell .arcade-pill--mono { font-family: var(--arc-font-mono); letter-spacing: 0.04em; font-weight: 400; }
 body.arcade-shell .arcade-pill .arcade-dot { width: 6px; height: 6px; border-radius: 50%; }
 
 body.arcade-shell .arcade-bft {
@@ -397,20 +398,86 @@ body.arcade-shell.arcade-rail-collapsed .arcade-src[data-arcade-source-status="i
 }
 body.arcade-shell.arcade-rail-collapsed .arcade-src-foot { display: none; }
 
-/* right placeholder — honest "coming later" panel */
+/* right dock: analytics panel */
 body.arcade-shell .arcade-side .arcade-panel-body {
   padding: 14px 14px; overflow-y: auto; flex: 1; min-height: 0;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 12px;
 }
-body.arcade-shell .arcade-coming {
-  border: 1px dashed var(--arc-edge);
-  border-radius: var(--arc-r-lg);
-  padding: 14px;
-  color: var(--arc-faint);
-  font-size: 11px;
-  line-height: 1.6;
+
+/* --------------------------------------------------------------------------
+   Analytics dock (right rail, default tab) — watch time / first-timers /
+   raids / follower deltas / recent notifications / period selector. Ported
+   from variation-console/screen-main.html's stat-tile + frow/nrow pattern.
+   Real data where stateManager exposes it (live source list, live count);
+   an honest "—" everywhere the app doesn't track the metric yet — see
+   arcade-shell.js buildAnalyticsPaneMarkup() for exactly which fields are which.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-field { display: flex; flex-direction: column; gap: 6px; }
+body.arcade-shell .arcade-field > label {
+  font: 700 10px/1 var(--arc-font-ui);
+  letter-spacing: 0.12em;
+  color: var(--arc-muted);
 }
-body.arcade-shell .arcade-coming b { color: var(--arc-muted); display: block; margin-bottom: 4px; font-size: 10px; letter-spacing: 0.1em; }
+
+body.arcade-shell .arcade-period-row { display: flex; align-items: center; gap: 10px; }
+body.arcade-shell .arcade-period-row .arcade-k {
+  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
+}
+body.arcade-shell .arcade-seg {
+  display: inline-flex; border: 1px solid var(--arc-edge); border-radius: var(--arc-r); overflow: hidden;
+}
+body.arcade-shell .arcade-seg button {
+  height: 26px; padding: 0 10px; border: 0; background: transparent;
+  color: var(--arc-muted); font: 600 11px/1 var(--arc-font-ui); cursor: pointer;
+  display: inline-flex; align-items: center;
+}
+body.arcade-shell .arcade-seg button + button { border-left: 1px solid var(--arc-edge); }
+body.arcade-shell .arcade-seg button:hover { color: var(--arc-ink); background: var(--arc-panel-2); }
+body.arcade-shell .arcade-seg button.is-on { background: rgba(53, 208, 255, 0.12); color: var(--arc-info); }
+
+body.arcade-shell .arcade-statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+body.arcade-shell .arcade-stat {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px; min-width: 0;
+  background: var(--arc-panel-2); border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+}
+body.arcade-shell .arcade-stat__label {
+  font: 700 9px/1.3 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
+}
+body.arcade-shell .arcade-stat__value {
+  font: 600 16px/1.2 var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-ink);
+}
+/* an un-tracked metric's value stays visually honest — dimmer than a real number */
+body.arcade-shell .arcade-stat__value.is-dash { color: var(--arc-faint); }
+body.arcade-shell .arcade-stat__sub {
+  font: 400 10px/1.4 var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* follower-delta rows — badge · label left · total · delta right */
+body.arcade-shell .arcade-frow-list { list-style: none; margin: 0; padding: 0; }
+body.arcade-shell .arcade-frow {
+  display: grid; grid-template-columns: 34px minmax(0,1fr) auto 48px;
+  align-items: center; gap: 10px; padding: 7px 4px;
+  border-bottom: 1px solid var(--arc-edge-soft); font-size: 12px; color: var(--arc-ink);
+}
+body.arcade-shell .arcade-frow:last-child { border-bottom: 0; }
+body.arcade-shell .arcade-frow .arcade-pill { height: 18px; min-width: 34px; padding: 0 6px; }
+body.arcade-shell .arcade-frow .arcade-frow__label {
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.arcade-shell .arcade-frow .arcade-frow__total {
+  font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint);
+}
+body.arcade-shell .arcade-frow .arcade-frow__delta {
+  font: 600 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint); text-align: right;
+}
+
+/* recent-notifications feed — honest empty state (no event bus reaches this
+   window yet; see arcade-shell.js for the exact gap) */
+body.arcade-shell .arcade-nrow-empty {
+  padding: 10px; border: 1px dashed var(--arc-edge); border-radius: var(--arc-r);
+  color: var(--arc-faint); font-size: 11px; line-height: 1.5;
+}
 
 /* --------------------------------------------------------------------------
    Empty-state banner restyle (existing P1 "no sources capturing" hint) —
