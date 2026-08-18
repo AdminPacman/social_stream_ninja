@@ -36,6 +36,26 @@
         { page: 'sessions', label: 'Sessions' }
     ];
 
+    // --------------------------------------------------------------------
+    // Analytics IPC bridge state (pacsarcade design-briefs/ssn-ui-overhaul/
+    // analytics-ipc-bridge-spec.md). See the big comment above
+    // buildAnalyticsPaneMarkup() for what's real vs honest-dash and why.
+    // --------------------------------------------------------------------
+    var ANALYTICS_MESSAGE_LIMIT = 5000; // same order of magnitude points.js already pulls for its own leaderboards
+    var ANALYTICS_POLL_MS = 20000;
+    var analyticsPollTimer = null;
+    var arcadeAnalytics = {
+        period: 'today',
+        messages: null,       // raw getLastMessagesDB() rows, newest-first, once the bridge answers
+        messagesReady: false,
+        viewerCounts: {},     // { twitch: 42, kick: 5, ... } from buildViewerCountsFromMetaStore()
+        viewersReady: false,
+        peakViewers: 0,       // running max of the summed viewerCounts, since THIS shell boot only
+        followerCounts: {},   // { twitch: 1234, kick: 88, ... } from buildFollowerCountsFromMetaStore()
+        followerBaseline: {}, // first reading per platform this boot — delta is measured against this
+        followersReady: false
+    };
+
     function isBetaChannel() {
         try {
             return typeof process !== 'undefined' && process.env && process.env.SSN_CHANNEL === 'beta';
@@ -390,18 +410,49 @@
     }
 
     // --------------------------------------------------------------------
-    // Right rail: ANALYTICS dock (default tab — round-4 decision). Bound to
-    // real data where index.html's exposed surfaces actually carry it;
-    // everywhere else an honest "—", never a fabricated number. As of this
-    // pass, StateManager (state.js) tracks source CONNECTION state only —
-    // no viewer counts, watch time, first-timer flags, raid events,
-    // follower deltas, or a notification feed reach this renderer (those
-    // live downstream, in background.js / the dock overlay's own process,
-    // with no IPC bridge exposing them here yet). The two exceptions are
-    // genuinely real: the live-source COUNT (from stateManager, same count
-    // the sources rail's "N LIVE" pill already shows) and the follower-row
-    // PLATFORM LIST (the real configured sources) — both wired below; the
-    // totals/deltas next to them stay "—" until that data path exists.
+    // Right rail: ANALYTICS dock (default tab — round-4 decision).
+    //
+    // The analytics IPC bridge (pacsarcade design-briefs/ssn-ui-overhaul/
+    // analytics-ipc-bridge-spec.md): index.html already embeds background.js
+    // same-origin in the #frame2 iframe and reads plain globals off its
+    // contentWindow (frame2.contentWindow.streamID — see getChatDockSessionId
+    // above in index.html). background.js/db.js load as classic <script>
+    // tags, so their top-level `function` declarations are real window
+    // globals on that frame too. Four of them carry genuinely real analytics
+    // data with zero app-repo-only workaround available:
+    //   - getLastMessagesDB(limit)  → db.js — the same IndexedDB chat-history
+    //     store points.js already queries for its own leaderboards. Every
+    //     stored row already carries real .timestamp / .event / .chatname /
+    //     .firsttime fields set by background.js's existing pipeline —
+    //     nothing new is computed, only read. firsttime chatters + raids
+    //     (event === "raid", carries the real raider's chatname on every
+    //     platform that sends raids) + the recent-notifications feed are
+    //     all derived from this one call.
+    //   - buildViewerCountsFromMetaStore() → background.js — already-real,
+    //     already-live (feeds stock hypemode when it's on) per-platform
+    //     viewer totals from metaDataStore. "Peak viewers" is genuinely
+    //     derived (running max since THIS shell boot, never fabricated).
+    //   - buildFollowerCountsFromMetaStore() → background.js, ONE new
+    //     additive function this task adds (mirrors buildViewerCounts...'s
+    //     shape/gating exactly) — metaDataStore already held real per-
+    //     platform follower TOTALS (Twitch Helix poll, Kick follow-event
+    //     summary) in a `const` that just wasn't reachable from outside the
+    //     frame; this is the one line of "expose it" the spec asks for.
+    //   - getSettingFlag(key) → background.js — used to tell "genuinely
+    //     zero" apart from "tracking is off", so a 0 is never shown where
+    //     the honest label is "not tracked".
+    //
+    // WATCH TIME has no source anywhere in the pipeline (grepped background.js
+    // /db.js/points.js/pointsactions.js — no duration/session-length tracking
+    // exists at all) — stays an honest "—", not fabricated, not derived.
+    //
+    // FOLLOWER DELTA and PEAK VIEWERS are real numbers but NOT period-windowed
+    // (metaDataStore only ever holds the latest snapshot, no history before
+    // this shell booted) — their subs say "since boot"/"this session" rather
+    // than pretending to honor Today/7d/30d. FIRST-TIME CHATTERS and RAIDS
+    // RECEIVED genuinely DO honor the period selector (every stored message
+    // carries a real timestamp; the DB itself only retains 30 days, so "30d"
+    // is the natural ceiling).
     // --------------------------------------------------------------------
     function buildAnalyticsPaneMarkup() {
         return (
@@ -418,18 +469,18 @@
             '<div class="arcade-stat"><span class="arcade-stat__label">WATCH TIME</span>' +
             '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">not tracked yet</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">PEAK VIEWERS</span>' +
-            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub" id="arcade-stat-live-sub">now — · 0 live</span></div>' +
+            '<span class="arcade-stat__value is-dash" id="arcade-stat-peak-value">—</span><span class="arcade-stat__sub" id="arcade-stat-live-sub">now — · 0 live</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">FIRST-TIME CHATTERS</span>' +
-            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">not tracked yet</span></div>' +
+            '<span class="arcade-stat__value is-dash" id="arcade-stat-firsttime-value">—</span><span class="arcade-stat__sub" id="arcade-stat-firsttime-sub">connecting…</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">RAIDS RECEIVED</span>' +
-            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">last: —</span></div>' +
+            '<span class="arcade-stat__value is-dash" id="arcade-stat-raids-value">—</span><span class="arcade-stat__sub" id="arcade-stat-raids-sub">last: —</span></div>' +
             '</div>' +
-            '<div class="arcade-field"><label>FOLLOWER DELTA</label></div>' +
+            '<div class="arcade-field"><label>FOLLOWER DELTA</label><span class="arcade-field__hint">Δ since this session started — no historical archive yet</span></div>' +
             '<ul class="arcade-frow-list" id="arcade-follower-rows"></ul>' +
-            '<div class="arcade-field"><label>RECENT NOTIFICATIONS</label></div>' +
-            '<div class="arcade-nrow-empty">No notification feed reaches this view yet — raids, follows, and ' +
-            'donations are handled downstream (dock overlay / background.js), not exposed to this window. ' +
-            'Honest gap, not hidden: this panel will fill in once that bridge exists.</div>' +
+            '<div class="arcade-field"><label>RECENT NOTIFICATIONS</label><span class="arcade-field__hint">latest from chat history, any period</span></div>' +
+            '<div id="arcade-notifications"><div class="arcade-nrow-empty" id="arcade-nrow-empty">Waiting on the background bridge — raids, follows, and ' +
+            'donations live in the chat-history store (background.js/db.js); this reads it via frame2, not a fabricated feed.</div>' +
+            '<ul class="arcade-nrow-list" id="arcade-nrow-list" hidden></ul></div>' +
             '</div>'
         );
     }
@@ -445,9 +496,12 @@
                 b.classList.toggle('is-on', on);
                 b.setAttribute('aria-pressed', String(on));
             });
-            // Every stat tile above is an honest "—" regardless of period —
-            // there's no per-period aggregate data source yet, so this is
-            // UI-only for now (see buildAnalyticsPaneMarkup's comment).
+            arcadeAnalytics.period = btn.dataset.arcadePeriod || 'today';
+            // Only FIRST-TIME CHATTERS / RAIDS RECEIVED / last-raider actually
+            // re-derive from the period — see the big comment above
+            // buildAnalyticsPaneMarkup() for which tiles honor this and why
+            // the rest (peak viewers, follower delta) intentionally don't.
+            renderArcadeAnalytics();
         });
     }
 
@@ -471,6 +525,7 @@
         sources.forEach(function (source) {
             var li = document.createElement('li');
             li.className = 'arcade-frow';
+            li.dataset.arcadeFollowerTarget = source.target || '';
             li.innerHTML =
                 '<span class="arcade-pill arcade-pill--mono">' + platformBadge(source.target) + '</span>' +
                 '<span class="arcade-frow__label"></span>' +
@@ -479,6 +534,254 @@
             li.querySelector('.arcade-frow__label').textContent = sourceDisplayName(source);
             list.appendChild(li);
         });
+        renderFollowerTotals(); // fill in whatever the bridge already has (no-op if nothing yet)
+    }
+
+    // --------------------------------------------------------------------
+    // Analytics bridge: read-only globals off background.js's own window
+    // (via the #frame2 iframe already embedded by index.html), same-origin
+    // access pattern index.html itself already uses for frame2.contentWindow
+    // .streamID. Never posts/writes anything into that frame — pure reads.
+    // --------------------------------------------------------------------
+    function getBackgroundWindow() {
+        try {
+            var frame = document.getElementById('frame2');
+            return (frame && frame.contentWindow) || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function periodCutoffMs(period) {
+        var now = Date.now();
+        if (period === '7d') return now - 7 * 24 * 60 * 60 * 1000;
+        if (period === '30d') return now - 30 * 24 * 60 * 60 * 1000;
+        var startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        return startOfToday.getTime();
+    }
+
+    var NOTABLE_EVENTS = { raid: 'RAID', new_follower: 'FOLLOW', follow: 'FOLLOW', new_subscriber: 'SUB', resub: 'SUB', member: 'SUB', host: 'HOST', hosting: 'HOST' };
+
+    function notificationKind(message) {
+        if (message.hasDonation) return 'DONO';
+        var ev = typeof message.event === 'string' ? message.event.toLowerCase() : '';
+        return NOTABLE_EVENTS[ev] || null;
+    }
+
+    function relativeTime(ts) {
+        var deltaSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+        if (deltaSec < 60) return deltaSec + 's ago';
+        if (deltaSec < 3600) return Math.round(deltaSec / 60) + 'm ago';
+        if (deltaSec < 86400) return Math.round(deltaSec / 3600) + 'h ago';
+        return Math.round(deltaSec / 86400) + 'd ago';
+    }
+
+    function renderArcadeAnalytics() {
+        renderAnalyticsMessagesDerived();
+        renderAnalyticsPeakViewers();
+        renderFollowerTotals();
+    }
+
+    function renderAnalyticsMessagesDerived() {
+        var firstValueEl = document.getElementById('arcade-stat-firsttime-value');
+        var firstSubEl = document.getElementById('arcade-stat-firsttime-sub');
+        var raidsValueEl = document.getElementById('arcade-stat-raids-value');
+        var raidsSubEl = document.getElementById('arcade-stat-raids-sub');
+        var emptyEl = document.getElementById('arcade-nrow-empty');
+        var listEl = document.getElementById('arcade-nrow-list');
+        if (!firstValueEl || !raidsValueEl || !listEl || !emptyEl) return;
+
+        if (!arcadeAnalytics.messagesReady) return; // leave the honest "connecting…" / dash state up
+
+        var bg = getBackgroundWindow();
+        var firsttimersOn = false, dbOn = true;
+        try {
+            if (bg && typeof bg.getSettingFlag === 'function') {
+                firsttimersOn = !!bg.getSettingFlag('firsttimers');
+                dbOn = !bg.getSettingFlag('disableDB');
+            }
+        } catch (e) { /* leave defaults */ }
+
+        var periodLabel = arcadeAnalytics.period === '7d' ? '7d' : (arcadeAnalytics.period === '30d' ? '30d' : 'today');
+        var cutoff = periodCutoffMs(arcadeAnalytics.period);
+        var messages = arcadeAnalytics.messages || [];
+
+        if (!dbOn) {
+            firstValueEl.textContent = '—';
+            firstValueEl.classList.add('is-dash');
+            firstSubEl.textContent = 'chat-history store is off';
+        } else if (!firsttimersOn) {
+            firstValueEl.textContent = '—';
+            firstValueEl.classList.add('is-dash');
+            firstSubEl.textContent = 'first-timers setting is off';
+        } else {
+            var firstCount = 0;
+            for (var i = 0; i < messages.length; i++) {
+                if (messages[i].firsttime === true && messages[i].timestamp >= cutoff) firstCount++;
+            }
+            firstValueEl.textContent = String(firstCount);
+            firstValueEl.classList.remove('is-dash');
+            firstSubEl.textContent = periodLabel + ' · from chat history';
+        }
+
+        var raids = [];
+        if (dbOn) {
+            for (var j = 0; j < messages.length; j++) {
+                if (messages[j].event === 'raid' && messages[j].timestamp >= cutoff) raids.push(messages[j]);
+            }
+        }
+        raidsValueEl.textContent = dbOn ? String(raids.length) : '—';
+        raidsValueEl.classList.toggle('is-dash', !dbOn);
+        var lastRaider = raids.length ? (raids[0].chatname || raids[0].displayName || 'unknown') : null;
+        raidsSubEl.textContent = dbOn ? ('last: ' + (lastRaider || '—')) : 'chat-history store is off';
+
+        var notable = [];
+        if (dbOn) {
+            for (var k = 0; k < messages.length && notable.length < 8; k++) {
+                var kind = notificationKind(messages[k]);
+                if (kind) notable.push({ kind: kind, msg: messages[k] });
+            }
+        }
+        if (!notable.length) {
+            emptyEl.hidden = false;
+            emptyEl.textContent = dbOn
+                ? 'No raids, follows, subs, or donations in the stored chat history yet.'
+                : 'Chat-history store is off (disableDB) — no notification feed to read from.';
+            listEl.hidden = true;
+            listEl.innerHTML = '';
+        } else {
+            emptyEl.hidden = true;
+            listEl.hidden = false;
+            listEl.innerHTML = '';
+            notable.forEach(function (entry) {
+                var li = document.createElement('li');
+                li.className = 'arcade-nrow arcade-nrow--' + entry.kind.toLowerCase();
+                var who = entry.msg.chatname || entry.msg.displayName || 'someone';
+                var detail = entry.kind === 'DONO' ? (entry.msg.hasDonation || '') : '';
+                li.innerHTML =
+                    '<span class="arcade-pill arcade-nrow__kind">' + entry.kind + '</span>' +
+                    '<span class="arcade-nrow__who"></span>' +
+                    '<span class="arcade-nrow__detail"></span>' +
+                    '<span class="arcade-nrow__time"></span>';
+                li.querySelector('.arcade-nrow__who').textContent = who;
+                li.querySelector('.arcade-nrow__detail').textContent = detail;
+                li.querySelector('.arcade-nrow__time').textContent = relativeTime(entry.msg.timestamp || Date.now());
+                listEl.appendChild(li);
+            });
+        }
+    }
+
+    function renderAnalyticsPeakViewers() {
+        var peakEl = document.getElementById('arcade-stat-peak-value');
+        var subEl = document.getElementById('arcade-stat-live-sub');
+        if (!subEl) return;
+        var liveCount = 0;
+        try {
+            var sources = window.stateManager && window.stateManager.getSources ? (window.stateManager.getSources() || []) : [];
+            liveCount = sources.filter(function (s) { return s.status === 'active'; }).length;
+        } catch (e) { /* leave 0 */ }
+
+        if (!arcadeAnalytics.viewersReady) {
+            subEl.textContent = 'now — · ' + liveCount + ' live';
+            return;
+        }
+        var total = 0;
+        Object.keys(arcadeAnalytics.viewerCounts).forEach(function (k) {
+            total += parseInt(arcadeAnalytics.viewerCounts[k], 10) || 0;
+        });
+        if (peakEl) {
+            peakEl.textContent = String(arcadeAnalytics.peakViewers);
+            peakEl.classList.remove('is-dash');
+        }
+        subEl.textContent = 'now ' + total + ' · ' + liveCount + ' live · since boot';
+    }
+
+    function renderFollowerTotals() {
+        var rows = document.querySelectorAll('#arcade-follower-rows .arcade-frow');
+        if (!rows.length) return;
+        rows.forEach(function (row) {
+            var target = row.dataset.arcadeFollowerTarget || '';
+            var totalEl = row.querySelector('.arcade-frow__total');
+            var deltaEl = row.querySelector('.arcade-frow__delta');
+            if (!totalEl || !deltaEl) return;
+            if (!arcadeAnalytics.followersReady || !(target in arcadeAnalytics.followerCounts)) {
+                totalEl.textContent = '—';
+                deltaEl.textContent = '—';
+                return;
+            }
+            var total = arcadeAnalytics.followerCounts[target];
+            var baseline = arcadeAnalytics.followerBaseline[target];
+            var delta = (typeof baseline === 'number') ? (total - baseline) : 0;
+            totalEl.textContent = String(total);
+            deltaEl.textContent = (delta > 0 ? '+' : '') + String(delta);
+            deltaEl.classList.toggle('arcade-frow__delta--up', delta > 0);
+            deltaEl.classList.toggle('arcade-frow__delta--down', delta < 0);
+        });
+    }
+
+    function pollArcadeAnalytics() {
+        var bg = getBackgroundWindow();
+        if (!bg) return;
+
+        try {
+            if (typeof bg.getLastMessagesDB === 'function') {
+                bg.getLastMessagesDB(ANALYTICS_MESSAGE_LIMIT).then(function (messages) {
+                    arcadeAnalytics.messages = Array.isArray(messages) ? messages : [];
+                    arcadeAnalytics.messagesReady = true;
+                    renderArcadeAnalytics();
+                }).catch(function (e) { console.error('[arcade-shell] getLastMessagesDB failed:', e); });
+            }
+        } catch (e) { console.error('[arcade-shell] analytics message bridge failed:', e); }
+
+        try {
+            if (typeof bg.buildViewerCountsFromMetaStore === 'function') {
+                var vc = bg.buildViewerCountsFromMetaStore() || {};
+                arcadeAnalytics.viewerCounts = vc;
+                arcadeAnalytics.viewersReady = true;
+                var total = 0;
+                Object.keys(vc).forEach(function (k) { total += parseInt(vc[k], 10) || 0; });
+                if (total > arcadeAnalytics.peakViewers) arcadeAnalytics.peakViewers = total;
+                renderAnalyticsPeakViewers();
+            }
+        } catch (e) { console.error('[arcade-shell] viewer-count bridge failed:', e); }
+
+        try {
+            if (typeof bg.buildFollowerCountsFromMetaStore === 'function') {
+                var fc = bg.buildFollowerCountsFromMetaStore() || {};
+                arcadeAnalytics.followersReady = true;
+                Object.keys(fc).forEach(function (platformType) {
+                    var val = parseInt(fc[platformType], 10) || 0;
+                    if (!(platformType in arcadeAnalytics.followerBaseline)) {
+                        arcadeAnalytics.followerBaseline[platformType] = val; // first reading this boot = the baseline
+                    }
+                    arcadeAnalytics.followerCounts[platformType] = val;
+                });
+                renderFollowerTotals();
+            }
+        } catch (e) { console.error('[arcade-shell] follower-count bridge failed:', e); }
+    }
+
+    function startArcadeAnalyticsBridge() {
+        pollArcadeAnalytics(); // first attempt right away; frame2 may still be loading, harmless no-op if so
+        clearInterval(analyticsPollTimer);
+        analyticsPollTimer = setInterval(pollArcadeAnalytics, ANALYTICS_POLL_MS);
+
+        // frame2 (background.html) loads asynchronously and can take a few
+        // seconds; a short fast warm-up loop gets real numbers on screen
+        // quickly instead of making the first boot wait out the full
+        // ANALYTICS_POLL_MS before anything but "connecting…" shows.
+        var warmupTries = 0;
+        var warmupTimer = setInterval(function () {
+            warmupTries++;
+            var bg = getBackgroundWindow();
+            var ready = bg && typeof bg.getLastMessagesDB === 'function';
+            if (ready || warmupTries > 20) { // ~20s cap
+                clearInterval(warmupTimer);
+                if (ready) pollArcadeAnalytics();
+                return;
+            }
+        }, 1000);
     }
 
     // --------------------------------------------------------------------
@@ -561,11 +864,10 @@
             if (span) span.textContent = liveCount + ' LIVE';
         }
 
-        // The analytics dock's "PEAK VIEWERS" sub-label borrows this same
-        // real live-source count (viewer numbers themselves aren't tracked
-        // anywhere reachable from this window — see buildAnalyticsPaneMarkup).
-        var liveSub = document.getElementById('arcade-stat-live-sub');
-        if (liveSub) liveSub.textContent = 'now — · ' + liveCount + ' live';
+        // The analytics dock's "PEAK VIEWERS" sub-label folds in this same
+        // real live-source count alongside the real viewer/peak numbers from
+        // the analytics bridge (see renderAnalyticsPeakViewers()).
+        renderAnalyticsPeakViewers();
 
         renderAnalyticsFollowerRows();
     }
@@ -654,6 +956,7 @@
         // other restore writes something different.
         bootGraceUntil = Date.now() + 20000;
         waitForStateManagerThenBind();
+        startArcadeAnalyticsBridge();
         navigateArcadeTab(restored);
     }
 

@@ -412,11 +412,17 @@ body.arcade-shell .arcade-side .arcade-panel-body {
    an honest "—" everywhere the app doesn't track the metric yet — see
    arcade-shell.js buildAnalyticsPaneMarkup() for exactly which fields are which.
    -------------------------------------------------------------------------- */
-body.arcade-shell .arcade-field { display: flex; flex-direction: column; gap: 6px; }
+body.arcade-shell .arcade-field { display: flex; flex-direction: column; gap: 4px; }
 body.arcade-shell .arcade-field > label {
   font: 700 10px/1 var(--arc-font-ui);
   letter-spacing: 0.12em;
   color: var(--arc-muted);
+}
+/* honesty caption for stats that DON'T honor the period selector (peak
+   viewers, follower delta) — see arcade-shell.js buildAnalyticsPaneMarkup()
+   comment for exactly which tiles do vs don't and why. */
+body.arcade-shell .arcade-field__hint {
+  font: 400 10px/1.3 var(--arc-font-ui); color: var(--arc-faint);
 }
 
 body.arcade-shell .arcade-period-row { display: flex; align-items: center; gap: 10px; }
@@ -450,7 +456,7 @@ body.arcade-shell .arcade-stat__value {
 body.arcade-shell .arcade-stat__value.is-dash { color: var(--arc-faint); }
 body.arcade-shell .arcade-stat__sub {
   font: 400 10px/1.4 var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: normal; overflow-wrap: break-word;
 }
 
 /* follower-delta rows — badge · label left · total · delta right */
@@ -471,12 +477,47 @@ body.arcade-shell .arcade-frow .arcade-frow__total {
 body.arcade-shell .arcade-frow .arcade-frow__delta {
   font: 600 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint); text-align: right;
 }
+/* real, signed delta since this shell booted — see arcade-shell.js's
+   buildFollowerCountsFromMetaStore bridge comment. Not money; live/danger
+   tokens read fine here as plain up/down semantics. */
+body.arcade-shell .arcade-frow .arcade-frow__delta--up { color: var(--arc-live); }
+body.arcade-shell .arcade-frow .arcade-frow__delta--down { color: var(--arc-danger); }
 
-/* recent-notifications feed — honest empty state (no event bus reaches this
-   window yet; see arcade-shell.js for the exact gap) */
+/* recent-notifications feed — honest empty state until the analytics bridge
+   (frame2.contentWindow.getLastMessagesDB) answers, or genuinely stays real-
+   empty if the stored chat history has no raid/follow/sub/donation rows yet;
+   see arcade-shell.js for exactly which of those two states is showing. */
 body.arcade-shell .arcade-nrow-empty {
   padding: 10px; border: 1px dashed var(--arc-edge); border-radius: var(--arc-r);
   color: var(--arc-faint); font-size: 11px; line-height: 1.5;
+}
+body.arcade-shell .arcade-nrow-list { list-style: none; margin: 0; padding: 0; }
+body.arcade-shell .arcade-nrow {
+  display: grid; grid-template-columns: 44px minmax(0,1fr) auto;
+  grid-template-areas: "kind who time" "kind detail time";
+  align-items: center; column-gap: 10px; row-gap: 1px; padding: 7px 4px;
+  border-bottom: 1px solid var(--arc-edge-soft); font-size: 12px; color: var(--arc-ink);
+}
+body.arcade-shell .arcade-nrow:last-child { border-bottom: 0; }
+body.arcade-shell .arcade-nrow__kind {
+  grid-area: kind; height: 18px; min-width: 40px; padding: 0 6px; align-self: start;
+  font: 700 9px/18px var(--arc-font-ui); letter-spacing: 0.06em; justify-content: center;
+  color: var(--arc-muted); background: var(--arc-panel-3); border: 1px solid var(--arc-edge);
+}
+body.arcade-shell .arcade-nrow--raid .arcade-nrow__kind { color: var(--arc-info); border-color: rgba(53, 208, 255, 0.35); }
+/* donations are the one real money-adjacent event here — gold stays reserved
+   for that (semantic lock honored, not broken: this genuinely is money). */
+body.arcade-shell .arcade-nrow--dono .arcade-nrow__kind { color: var(--arc-money); border-color: rgba(247, 201, 72, 0.35); }
+body.arcade-shell .arcade-nrow__who {
+  grid-area: who; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600;
+}
+body.arcade-shell .arcade-nrow__detail {
+  grid-area: detail; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--arc-muted); font-size: 11px;
+}
+body.arcade-shell .arcade-nrow__detail:empty { display: none; }
+body.arcade-shell .arcade-nrow__time {
+  grid-area: time; font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint); white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------
