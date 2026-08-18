@@ -30,6 +30,10 @@ body.arcade-shell {
   --arc-danger: #e5686b;
   --arc-flair: #ff5ccb;
   --arc-guide: #f7931a;
+  /* amber/neutral WARNING token — deliberately off the money-gold hue
+     (semantic lock: gold=money only). Used for empty-state/error hints,
+     never for anything sats-denominated. */
+  --arc-warning: #f59e0b;
 
   --arc-r: 6px;
   --arc-r-lg: 10px;
@@ -363,12 +367,14 @@ body.arcade-shell .arcade-coming b { color: var(--arc-muted); display: block; ma
 
 /* --------------------------------------------------------------------------
    Empty-state banner restyle (existing P1 "no sources capturing" hint) —
-   only re-skinned while the arcade Main view is showing it.
+   only re-skinned while the arcade Main view is showing it. Uses the
+   amber WARNING token, not the money-gold family (fix from Shell Alpha
+   verification nit #2 — gold=money only, this is a warning, not sats).
    -------------------------------------------------------------------------- */
 body.arcade-shell[data-arcade-tab="main"] #chat-empty-hint {
-  background: rgba(247, 201, 72, 0.08) !important;
-  border-bottom: 1px solid rgba(247, 201, 72, 0.3) !important;
-  color: #f0d38a !important;
+  background: rgba(245, 158, 11, 0.08) !important;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3) !important;
+  color: #f0b45c !important;
   font-family: var(--arc-font-ui);
 }
 

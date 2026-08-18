@@ -224,26 +224,61 @@
         try { localStorage.setItem('arcadeTab', tabId || 'main'); } catch (e) { /* noop */ }
     }
 
-    function focusPopupSection(hash) {
+    // Games and Settings are two different tabs but the SAME underlying
+    // page (#frame1's popup.html, "streams-page") — so by default they'd
+    // share one scroll position: leave Settings scrolled halfway down and
+    // Games opens halfway down too (Shell Alpha verification nit #3).
+    // Each tab gets its own remembered scrollY in this map, saved right
+    // before navigating away and restored right after navigating in;
+    // first visit to a tab falls back to an honest per-tab default
+    // (Games -> the #games section, Settings -> the top of the popup).
+    var POPUP_SCROLL_TABS = { games: true, settings: true };
+    var popupScrollMemory = {};
+
+    function getReadyFrame1() {
+        var frame1 = document.getElementById('frame1');
+        if (!frame1) return null;
+        try {
+            if (frame1.contentWindow && frame1.contentDocument && frame1.contentDocument.readyState !== 'loading') {
+                return frame1;
+            }
+        } catch (e) {
+            // Cross-origin fallback frame (hosted socialstream.ninja) — scroll
+            // read/write isn't reachable from here; not treated as an error.
+        }
+        return null;
+    }
+
+    function savePopupScroll(tabId) {
+        if (!POPUP_SCROLL_TABS[tabId]) return;
+        var frame1 = getReadyFrame1();
+        if (!frame1) return;
+        try {
+            popupScrollMemory[tabId] = frame1.contentWindow.scrollY || 0;
+        } catch (e) { /* noop */ }
+    }
+
+    function restorePopupScroll(tabId) {
+        if (!POPUP_SCROLL_TABS[tabId]) return;
         var frame1 = document.getElementById('frame1');
         if (!frame1) return;
         var tries = 0;
         var timer = setInterval(function () {
             tries++;
+            var ready = getReadyFrame1();
+            if (ready === null && tries <= 20) return; // not loaded yet, keep waiting
+            clearInterval(timer);
+            if (!ready) return; // cross-origin — nothing we can safely touch
             try {
-                if (frame1.contentWindow && frame1.contentWindow.location && frame1.contentDocument &&
-                    frame1.contentDocument.readyState !== 'loading') {
-                    frame1.contentWindow.location.hash = hash;
-                    clearInterval(timer);
-                    return;
+                var remembered = popupScrollMemory[tabId];
+                if (typeof remembered === 'number') {
+                    ready.contentWindow.scrollTo(0, remembered);
+                } else if (tabId === 'games') {
+                    ready.contentWindow.location.hash = 'games';
+                } else {
+                    ready.contentWindow.scrollTo(0, 0);
                 }
-            } catch (e) {
-                // Cross-origin fallback frame (hosted socialstream.ninja) — hash-jump isn't
-                // reachable from here; the Settings/Games destination page still loads fine.
-                clearInterval(timer);
-                return;
-            }
-            if (tries > 20) clearInterval(timer);
+            } catch (e) { /* noop */ }
         }, 250);
     }
 
@@ -276,8 +311,9 @@
     function navigateArcadeTab(tabId) {
         var pageId = ARCADE_TAB_PAGE[tabId];
         if (!pageId) return;
+        savePopupScroll(document.body.dataset.arcadeTab); // capture the tab we're LEAVING
         clickStockNav(pageId);
-        if (tabId === 'games') focusPopupSection('games');
+        restorePopupScroll(tabId); // no-op for tabs other than games/settings
         setArcadeTab(tabId);
     }
     window.arcadeNavigateTab = navigateArcadeTab; // exposed for debugging/CDP verification
