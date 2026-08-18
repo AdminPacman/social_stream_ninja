@@ -26,6 +26,7 @@
         { id: 'main', label: 'Main' },
         { id: 'games', label: 'Games' },
         { id: 'elements', label: 'Elements' },
+        { id: 'style', label: 'Style' },
         { id: 'vdo', label: 'VDO' },
         { id: 'eventflow', label: 'Event Flow' },
         { id: 'settings', label: 'Settings' }
@@ -364,7 +365,7 @@
     // the panel + hides #content-pane while data-arcade-tab matches. The boot
     // guard is naturally a no-op for them (expected = ARCADE_TAB_PAGE[custom]
     // is undefined, so it never fights). See buildElementsPanel().
-    var CUSTOM_TABS = { elements: true };
+    var CUSTOM_TABS = { elements: true, style: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -379,6 +380,7 @@
             // reveals the panel and covers #content-pane. No clickStockNav.
             savePopupScroll(document.body.dataset.arcadeTab);
             setArcadeTab(tabId);
+            if (tabId === 'style') ensureStylePanelLive(); // lazy: load saved blob + first preview on first visit
             return;
         }
         var pageId = ARCADE_TAB_PAGE[tabId];
@@ -628,6 +630,410 @@
             console.error('[arcade-shell] copy overlay url failed:', e);
             flashButton(btn, 'Open from Settings', 2200);
         });
+    }
+
+    // --------------------------------------------------------------------
+    // Style Builder v1 (custom "Style" tab) — visual chat-dock styling.
+    // Emits a CSS-variable override blob through SSN's EXISTING cssb64
+    // plumbing: the blob is saved as RAW css to the popup's own Custom CSS
+    // (dock) setting (cssb64 / textparam1), so the OBS-copied dock URL
+    // inherits the style with zero extra plumbing, and ensureChatDockLoaded's
+    // dockParams pick it up for the embedded Chat view (see index.html).
+    // Live preview = dock.html iframe (current blob as &cssb64) + the app's
+    // fakemsg test personas (exercise dono/member/VIP/avatar paths).
+    // Control targets are the REAL dock.html custom properties (its :root
+    // block) — !important on every var because the dock runtime also sets
+    // some vars inline (setProperty beats stylesheets). Presets follow the
+    // sanctioned themes/sample.css shape (a plain :root var blob).
+    // Spec: pacsarcade design-briefs/ssn-ui-overhaul/style-builder-v1-spec.md.
+    // --------------------------------------------------------------------
+    var STYLE_MARKER = '/* pacs-arcade style-builder v1';
+    var STYLE_USER_MARK = '/* user custom css below (preserved) */';
+    var styleState = {};      // controlId -> value; only touched controls are present
+    var styleUserCss = '';    // foreign/advanced CSS — preserved VERBATIM, never clobbered
+    var stylePreviewTimer = null;
+    var stylePanelLive = false;
+
+    var STYLE_CONTROLS = [
+        { group: 'COLORS' },
+        { id: 'transparent', label: 'Transparent background', kind: 'toggle' },
+        { id: 'bg', label: 'Dock background', kind: 'color', vars: ['--background-color'] },
+        { id: 'text', label: 'Message text', kind: 'color', vars: ['--font-color'] },
+        { id: 'name', label: 'Username', kind: 'color', vars: ['--font-color-name'] },
+        { id: 'link', label: 'Links', kind: 'color', vars: ['--link-color'] },
+        { id: 'bubble', label: 'Bubble', kind: 'color', vars: ['--bgcolor-bubble'] },
+        { id: 'bubbleOdd', label: 'Bubble (alt rows)', kind: 'color', vars: ['--bgcolor-bubble-odd'] },
+        { id: 'rowBg', label: 'Row background', kind: 'color', vars: ['--highlight-base', '--highlight-base2', '--highlight-compact', '--highlight-compact2'] },
+        { id: 'dono', label: 'Donation rows', kind: 'color', vars: ['--donation-bgcolor', '--donation-bgcolor-odd', '--donation-bgcolor-bubble', '--donation-bgcolor-bubble-odd'] },
+        { id: 'donoGlow', label: 'Donation amount glow', kind: 'color', vars: ['--donation-amount'] },
+        { id: 'member', label: 'Member rows', kind: 'color', vars: ['--member-bgcolor', '--member-bgcolor-bubble'] },
+        { group: 'TYPE' },
+        { id: 'fontFamily', label: 'Font family', kind: 'text', vars: ['--font-family'], placeholder: 'e.g. "Sora", sans-serif' },
+        { id: 'msgSize', label: 'Message size', kind: 'range', vars: ['--comment-font-size'], unit: 'px', min: 10, max: 40, step: 1 },
+        { id: 'nameSize', label: 'Name size', kind: 'range', vars: ['--author-font-size'], unit: 'px', min: 10, max: 40, step: 1 },
+        { id: 'msgWeight', label: 'Message weight', kind: 'range', vars: ['--message-font-weight'], min: 300, max: 800, step: 100 },
+        { id: 'lineHeight', label: 'Line height', kind: 'range', vars: ['--message-line-height'], min: 1, max: 2, step: 0.05 },
+        { group: 'LAYOUT' },
+        { id: 'rowPad', label: 'Row padding', kind: 'range', vars: ['--padding-rows'], unit: 'px', min: 0, max: 30, step: 1 },
+        { id: 'zoom', label: 'Zoom', kind: 'range', vars: ['--scale-output'], min: 0.5, max: 2, step: 0.05 },
+        { id: 'avatar', label: 'Avatar size', kind: 'range', unit: 'px', min: 16, max: 64, step: 1 }, // no var exists — selector override on .hl-profile-pic
+        { group: 'EFFECTS' },
+        { id: 'strokeW', label: 'Text outline width', kind: 'range', vars: ['--text-stroke-width'], unit: 'px', min: 0, max: 4, step: 0.5 },
+        { id: 'strokeC', label: 'Text outline color', kind: 'color', vars: ['--text-stroke-color'] },
+        { id: 'glow', label: 'Text glow', kind: 'color' } // emits --text-glow: 0 0 8px <color>
+    ];
+
+    // Preset chat palettes are USER-BRAND territory (the shell's semantic
+    // lock governs the shell chrome, not the user's chat-style output).
+    var STYLE_PRESETS = [
+        { id: 'stock', name: 'Stock', state: {} },
+        {
+            id: 'arcade-night', name: 'Arcade Night', state: {
+                bg: '#0a0b0d', text: '#f2f0ea', name: '#35d0ff', bubble: '#14161b', bubbleOdd: '#191c22',
+                dono: '#3a2a06', donoGlow: '#f7c948', member: '#1a2a3a', glow: '#35d0ff', rowPad: 8
+            }
+        },
+        {
+            id: 'clean-light', name: 'Clean Light', state: {
+                bg: '#f5f5f2', text: '#22242a', name: '#4a5568', bubble: '#ffffff', bubbleOdd: '#eef0f4',
+                dono: '#fff3d6', member: '#e8f0fe', lineHeight: 1.4
+            }
+        },
+        {
+            id: 'big-screen', name: 'Big Screen', state: {
+                msgSize: 26, nameSize: 22, zoom: 1.4, rowPad: 12, avatar: 48, strokeW: 1, strokeC: '#000000'
+            }
+        }
+    ];
+
+    function styleControlById(id) {
+        for (var i = 0; i < STYLE_CONTROLS.length; i++) {
+            if (STYLE_CONTROLS[i].id === id) return STYLE_CONTROLS[i];
+        }
+        return null;
+    }
+
+    // A literal "*/" typed into a free-text value would close the marker
+    // comment early, and CSS error-recovery could then eat the generated
+    // :root block in the dock (gate fix #4). Stripped from emitted CSS
+    // values; in the state JSON it's escaped as *\/ — JSON.parse reads \/
+    // as /, so the state round-trips back to the exact original.
+    function stripCommentClose(value) {
+        return String(value).replace(/\*\//g, '');
+    }
+
+    // Managed blob: marker + control-state JSON (for round-trip restore) +
+    // generated :root vars + selector overrides + the user's own CSS verbatim.
+    function buildStyleCss() {
+        var lines = [];
+        Object.keys(styleState).forEach(function (id) {
+            var value = styleState[id];
+            if (value === '' || value == null || value === false) return;
+            if (id === 'transparent' || id === 'avatar') return; // handled below
+            var ctl = styleControlById(id);
+            if (!ctl) return;
+            if (typeof value === 'string') value = stripCommentClose(value);
+            if (id === 'glow') { lines.push('  --text-glow: 0 0 8px ' + value + ' !important;'); return; }
+            if (!ctl.vars) return;
+            var unit = ctl.unit || '';
+            ctl.vars.forEach(function (v) { lines.push('  ' + v + ': ' + value + unit + ' !important;'); });
+        });
+        if (styleState.transparent) lines.push('  --background-color: #0000 !important;'); // last → wins over bg
+        var css = '';
+        if (lines.length) css += ':root {\n' + lines.join('\n') + '\n}\n';
+        if (styleState.avatar) {
+            css += '.hl-profile-pic { width: ' + styleState.avatar + 'px !important; height: ' + styleState.avatar + 'px !important; }\n';
+        }
+        var stateJson = JSON.stringify(styleState).replace(/\*\//g, '*\\/');
+        var out = STYLE_MARKER + '\nstate:' + stateJson + '\n*/\n' + css;
+        if (styleUserCss) out += STYLE_USER_MARK + '\n' + styleUserCss;
+        return out;
+    }
+
+    function parseStyleBlob(raw) {
+        var result = { state: {}, userCss: '' };
+        if (!raw) return result;
+        if (raw.indexOf(STYLE_MARKER) !== 0) { result.userCss = raw; return result; } // foreign CSS — preserve whole
+        var m = raw.match(/^\/\* pacs-arcade style-builder v1\nstate:(.*)\n\*\//);
+        if (m) { try { result.state = JSON.parse(m[1]) || {}; } catch (e) { /* corrupted state — keep css-only */ } }
+        var idx = raw.indexOf(STYLE_USER_MARK);
+        if (idx !== -1) result.userCss = raw.slice(idx + STYLE_USER_MARK.length).replace(/^\n/, '');
+        return result;
+    }
+
+    // The popup's exact encode order (popup.js URL builder): inner
+    // encodeURIComponent for UTF-8 safety, btoa, outer encodeURIComponent
+    // for URL safety. dock.html decodes atob-then-decodeURIComponent.
+    function encodeCssB64(cssText) {
+        return encodeURIComponent(btoa(encodeURIComponent(cssText)));
+    }
+
+    function buildStylePanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-style';
+        panel.setAttribute('aria-label', 'Style builder');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">STYLE — CHAT DOCK</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-style-status" id="arcade-style-status"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-style-save">Save style</button>' +
+            '</div>' +
+            '<div class="arcade-style-body">' +
+            '<div class="arcade-style-presets" id="arcade-style-presets"><span class="arcade-k">PRESETS</span></div>' +
+            '<div class="arcade-style-cols">' +
+            '<div class="arcade-style-controls" id="arcade-style-controls"></div>' +
+            '<div class="arcade-style-preview">' +
+            '<div class="arcade-style-preview-bar">' +
+            '<span class="arcade-style-hint">Preview connects to your session — send a test message to see styles on real bubbles.</span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-testmsg">Send test message</button>' +
+            '</div>' +
+            '<iframe id="arcade-style-preview-frame" title="Chat dock style preview"></iframe>' +
+            '</div>' +
+            '</div>' +
+            '<div class="arcade-field"><label for="arcade-style-usercss">CUSTOM CSS (advanced)</label>' +
+            '<span class="arcade-field__hint">appended verbatim after the generated style — yours is never overwritten</span></div>' +
+            '<textarea id="arcade-style-usercss" spellcheck="false" rows="4"></textarea>' +
+            '</div>';
+        document.body.appendChild(panel);
+        renderStylePresets(panel);
+        renderStyleControls(panel);
+        panel.querySelector('#arcade-style-save').addEventListener('click', saveStyleBlob);
+        panel.querySelector('#arcade-style-testmsg').addEventListener('click', sendStyleTestMessage);
+        panel.querySelector('#arcade-style-usercss').addEventListener('input', function (e) {
+            styleUserCss = e.target.value;
+            queueStylePreviewRefresh();
+        });
+    }
+
+    function renderStylePresets(panel) {
+        var host = panel.querySelector('#arcade-style-presets');
+        STYLE_PRESETS.forEach(function (preset) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm';
+            btn.textContent = preset.name;
+            btn.addEventListener('click', function () {
+                styleState = JSON.parse(JSON.stringify(preset.state)); // presets fill the CONTROLS, not opaque css
+                syncStyleControlsFromState();
+                queueStylePreviewRefresh();
+            });
+            host.appendChild(btn);
+        });
+    }
+
+    function renderStyleControls(panel) {
+        var host = panel.querySelector('#arcade-style-controls');
+        host.innerHTML = '';
+        STYLE_CONTROLS.forEach(function (ctl) {
+            if (ctl.group) {
+                var h = document.createElement('div');
+                h.className = 'arcade-style-group';
+                h.textContent = ctl.group;
+                host.appendChild(h);
+                return;
+            }
+            host.appendChild(buildStyleControlRow(ctl));
+        });
+        syncStyleControlsFromState();
+    }
+
+    function buildStyleControlRow(ctl) {
+        var row = document.createElement('div');
+        row.className = 'arcade-style-row';
+        row.dataset.styleControl = ctl.id;
+        var label = document.createElement('label');
+        label.textContent = ctl.label;
+        label.setAttribute('for', 'arcade-style-ctl-' + ctl.id);
+        row.appendChild(label);
+        var input;
+        if (ctl.kind === 'toggle') {
+            input = document.createElement('input');
+            input.type = 'checkbox';
+            input.addEventListener('change', function () { setStyleValue(ctl.id, input.checked ? true : ''); syncStyleControlsFromState(); });
+        } else if (ctl.kind === 'color') {
+            input = document.createElement('input');
+            input.type = 'color';
+            input.addEventListener('input', function () { setStyleValue(ctl.id, input.value); row.classList.add('is-set'); });
+        } else if (ctl.kind === 'range') {
+            input = document.createElement('input');
+            input.type = 'range';
+            input.min = ctl.min; input.max = ctl.max; input.step = ctl.step || 1;
+            input.addEventListener('input', function () {
+                setStyleValue(ctl.id, parseFloat(input.value));
+                row.classList.add('is-set');
+                var out = row.querySelector('.arcade-style-val');
+                if (out) out.textContent = input.value + (ctl.unit || '');
+            });
+        } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            if (ctl.placeholder) input.placeholder = ctl.placeholder;
+            input.addEventListener('input', function () { setStyleValue(ctl.id, input.value.trim()); row.classList.toggle('is-set', !!input.value.trim()); });
+        }
+        input.id = 'arcade-style-ctl-' + ctl.id;
+        row.appendChild(input);
+        if (ctl.kind === 'range') {
+            var val = document.createElement('span');
+            val.className = 'arcade-style-val';
+            val.textContent = '—';
+            row.appendChild(val);
+        }
+        var clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-clear';
+        clear.title = 'Clear (use dock default)';
+        clear.setAttribute('aria-label', 'Clear ' + ctl.label);
+        clear.textContent = '×';
+        clear.addEventListener('click', function () { setStyleValue(ctl.id, ''); syncStyleControlsFromState(); });
+        row.appendChild(clear);
+        return row;
+    }
+
+    function setStyleValue(id, value) {
+        if (value === '' || value == null || value === false) delete styleState[id];
+        else styleState[id] = value;
+        queueStylePreviewRefresh();
+    }
+
+    function syncStyleControlsFromState() {
+        STYLE_CONTROLS.forEach(function (ctl) {
+            if (ctl.group) return;
+            var input = document.getElementById('arcade-style-ctl-' + ctl.id);
+            if (!input) return;
+            var row = input.closest('.arcade-style-row');
+            var has = Object.prototype.hasOwnProperty.call(styleState, ctl.id);
+            if (row) row.classList.toggle('is-set', has);
+            if (ctl.kind === 'toggle') input.checked = !!styleState[ctl.id];
+            else if (ctl.kind === 'range') {
+                input.value = has ? styleState[ctl.id] : (ctl.min + (ctl.max - ctl.min) / 2);
+                var val = row && row.querySelector('.arcade-style-val');
+                if (val) val.textContent = has ? styleState[ctl.id] + (ctl.unit || '') : '—';
+            } else if (ctl.kind === 'color') input.value = has ? styleState[ctl.id] : '#888888';
+            else input.value = has ? styleState[ctl.id] : '';
+        });
+    }
+
+    function setStyleStatus(text, isError) {
+        var el = document.getElementById('arcade-style-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    // Lazy boot on first Style-tab visit: read the saved blob (the popup's
+    // cssb64/textparam1), restore control state if it's ours, preserve any
+    // foreign CSS into the advanced box, then first preview.
+    function ensureStylePanelLive() {
+        if (stylePanelLive) { queueStylePreviewRefresh(); return; }
+        stylePanelLive = true;
+        loadSavedStyleBlob().then(function () { refreshStylePreview(); });
+    }
+
+    function loadSavedStyleBlob() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var entry = response && response.settings && response.settings.cssb64;
+                            var raw = entry && typeof entry.textparam1 === 'string' ? entry.textparam1 : '';
+                            var parsed = parseStyleBlob(raw);
+                            styleState = parsed.state || {};
+                            styleUserCss = parsed.userCss || '';
+                            var ta = document.getElementById('arcade-style-usercss');
+                            if (ta) ta.value = styleUserCss;
+                            syncStyleControlsFromState();
+                        } catch (e) { console.error('[arcade-shell] style load parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] style load failed:', e); }
+            setStyleStatus('settings bridge unavailable — styles will not load or save', true);
+            resolve();
+        });
+    }
+
+    function queueStylePreviewRefresh() {
+        if (!stylePanelLive) return;
+        clearTimeout(stylePreviewTimer);
+        stylePreviewTimer = setTimeout(refreshStylePreview, 400);
+    }
+
+    function refreshStylePreview() {
+        var frame = document.getElementById('arcade-style-preview-frame');
+        if (!frame) return;
+        var resolver = window.resolveSocialStreamPage;
+        var getSession = window.getChatDockSessionId;
+        if (typeof resolver !== 'function' || typeof getSession !== 'function') {
+            setStyleStatus('preview unavailable (app helpers not found)', true);
+            return;
+        }
+        Promise.resolve(getSession()).then(function (sessionId) {
+            if (!sessionId) { setStyleStatus('waiting for session…', false); return; }
+            // Mirror the house dock's look-defining params so the preview
+            // resembles the real embedded dock; the blob rides as cssb64.
+            var params = [
+                'session=' + encodeURIComponent(sessionId),
+                'groupuser', 'darkmode', 'bubble', 'twolines', 'largeavatar', 'emoji',
+                'cssb64=' + encodeCssB64(buildStyleCss())
+            ];
+            return resolver('dock.html', { extraParams: params }).then(function (resolved) {
+                if (resolved && resolved.url) {
+                    frame.src = resolved.url;
+                    setStyleStatus('', false);
+                }
+            });
+        }).catch(function (e) {
+            console.error('[arcade-shell] style preview failed:', e);
+            setStyleStatus('preview failed — see console', true);
+        });
+    }
+
+    function sendStyleTestMessage() {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                window.ninjafy.sendMessage(null, { cmd: 'fakemsg' }, function () { /* response unused */ });
+                return;
+            }
+        } catch (e) { /* fall through to the honest error */ }
+        setStyleStatus('test-message bridge unavailable', true);
+    }
+
+    function saveStyleBlob() {
+        // Nothing set + no user CSS ⇒ save a true '' so the setting fully
+        // clears — "Stock → Save" genuinely returns to stock instead of
+        // leaving a machine comment in the popup textarea and every dock
+        // URL forever (gate fix #3).
+        var isEmpty = Object.keys(styleState).length === 0 && !styleUserCss;
+        var raw = isEmpty ? '' : buildStyleCss();
+        try {
+            if (!(window.ninjafy && typeof window.ninjafy.sendMessage === 'function')) {
+                setStyleStatus('settings bridge unavailable — could not save', true);
+                return;
+            }
+            setStyleStatus('Saving…', false);
+            var confirmed = false;
+            window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: 'cssb64', value: raw }, function () {
+                confirmed = true;
+                // Honest claim: a URL already pasted into OBS reads cssb64
+                // from its params only — it doesn't live-sync (gate fix #2).
+                setStyleStatus('Saved ✓ — embedded dock updated; re-copy the dock URL for OBS', false);
+                try {
+                    if (typeof window.ensureChatDockLoaded === 'function') window.ensureChatDockLoaded(true);
+                } catch (e) { /* noop */ }
+                setTimeout(function () { setStyleStatus('', false); }, 4000);
+            });
+            // Honest fallback: if the save path never answers, say so rather
+            // than claiming success.
+            setTimeout(function () {
+                if (!confirmed) setStyleStatus('Save sent — confirm under Global settings → Custom CSS', false);
+            }, 3000);
+        } catch (e) {
+            console.error('[arcade-shell] style save failed:', e);
+            setStyleStatus('Save failed — see console', true);
+        }
     }
 
     // --------------------------------------------------------------------
@@ -1217,6 +1623,7 @@
         buildTopbar();
         buildRailAndSide();
         buildElementsPanel();
+        buildStylePanel();
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }
