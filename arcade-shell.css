@@ -42,8 +42,11 @@ body.arcade-shell {
 
   --arc-topbar-h: 52px;
   --arc-rail-w: 264px;
+  --arc-rail-w-collapsed: 56px;
   --arc-side-w: 320px;
 }
+
+body.arcade-shell.arcade-rail-collapsed { --arc-rail-w: var(--arc-rail-w-collapsed); }
 
 /* --------------------------------------------------------------------------
    Frame: hide stock nav, push content-pane below our topbar
@@ -349,6 +352,50 @@ body.arcade-shell .arcade-src-foot {
   flex: 0 0 auto;
 }
 body.arcade-shell .arcade-src-foot .arcade-btn { flex: 1; }
+
+/* --------------------------------------------------------------------------
+   Sources rail — collapse-to-icon-rail toggle (chevron -> 56px icon +
+   status-dot rail). Collapsing narrows --arc-rail-w itself (set on
+   body.arcade-shell.arcade-rail-collapsed above), so the content-pane
+   padding-left that already tracks --arc-rail-w follows automatically —
+   no separate width rule needed for the content reflow.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-rail-toggle {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-panel-head { padding: 0 8px; justify-content: center; }
+body.arcade-shell.arcade-rail-collapsed .arcade-rail-hide { display: none !important; }
+body.arcade-shell.arcade-rail-collapsed .arcade-add-source { padding: 8px; }
+body.arcade-shell.arcade-rail-collapsed .arcade-add-source .arcade-btn { width: 36px; padding: 0; margin: 0 auto; }
+body.arcade-shell.arcade-rail-collapsed .arcade-src {
+  grid-template-columns: 26px;
+  justify-content: center;
+  padding: 8px 0;
+  position: relative;
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-src__name,
+body.arcade-shell.arcade-rail-collapsed .arcade-src > button { display: none; }
+/* icon + status-dot only: the dot rides the logo's corner */
+body.arcade-shell.arcade-rail-collapsed .arcade-src::after {
+  content: "";
+  position: absolute;
+  width: 7px; height: 7px; border-radius: 50%;
+  left: 50%; margin-left: 8px; bottom: 5px;
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-src[data-arcade-source-status="active"]::after {
+  background: var(--arc-live); box-shadow: 0 0 5px rgba(57, 255, 20, 0.6);
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-src[data-arcade-source-status="activating"]::after {
+  background: var(--arc-info); box-shadow: 0 0 5px rgba(53, 208, 255, 0.5);
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-src[data-arcade-source-status="error"]::after {
+  background: var(--arc-danger);
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-src[data-arcade-source-status="inactive"]::after {
+  background: transparent; border: 1.5px solid var(--arc-faint);
+}
+body.arcade-shell.arcade-rail-collapsed .arcade-src-foot { display: none; }
 
 /* right placeholder — honest "coming later" panel */
 body.arcade-shell .arcade-side .arcade-panel-body {

@@ -352,13 +352,15 @@
         rail.setAttribute('aria-label', 'Sources');
         rail.innerHTML =
             '<div class="arcade-panel-head">' +
-            '<span class="arcade-panel-title">SOURCES</span>' +
-            '<span class="arcade-spacer"></span>' +
-            '<span class="arcade-pill arcade-pill--live" id="arcade-live-count" hidden>' +
+            '<span class="arcade-panel-title arcade-rail-hide">SOURCES</span>' +
+            '<span class="arcade-spacer arcade-rail-hide"></span>' +
+            '<span class="arcade-pill arcade-pill--live arcade-rail-hide" id="arcade-live-count" hidden>' +
             '<span class="arcade-dot arcade-dot--live"></span><span></span></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon arcade-rail-toggle" id="arcade-rail-toggle" ' +
+            'aria-expanded="true" aria-label="Collapse sources to icon rail" title="Collapse to icon rail">«</button>' +
             '</div>' +
             '<div class="arcade-add-source">' +
-            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-add-source">+ Add source</button>' +
+            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-add-source">+<span class="arcade-rail-hide">&nbsp;Add source</span></button>' +
             '</div>' +
             '<ul class="arcade-src-list" id="arcade-src-list"></ul>' +
             '<div class="arcade-src-foot">' +
@@ -377,6 +379,7 @@
             if (!window.confirm('Stop ALL active sources?')) return;
             callBridge({ action: 'stopAllSources', value: { confirm: true } });
         });
+        initRailCollapseToggle(rail.querySelector('#arcade-rail-toggle'));
 
         var side = document.createElement('section');
         side.className = 'arcade-side';
@@ -387,6 +390,32 @@
             '<div class="arcade-coming"><b>COMING</b>analytics · games preview</div>' +
             '</div>';
         document.body.appendChild(side);
+    }
+
+    // --------------------------------------------------------------------
+    // Sources rail collapse-to-icon-rail toggle. Collapsing overrides
+    // --arc-rail-w on <body> (see arcade-shell.css), which both narrows
+    // the rail itself and the #content-pane's padding-left that already
+    // tracks that same variable — one class flip drives both.
+    // --------------------------------------------------------------------
+    function initRailCollapseToggle(btn) {
+        if (!btn) return;
+        var collapsed = false;
+        try { collapsed = localStorage.getItem('arcadeRailCollapsed') === 'true'; } catch (e) { /* noop */ }
+        applyRailCollapsed(collapsed, btn);
+        btn.addEventListener('click', function () {
+            var next = !document.body.classList.contains('arcade-rail-collapsed');
+            applyRailCollapsed(next, btn);
+            try { localStorage.setItem('arcadeRailCollapsed', next ? 'true' : 'false'); } catch (e) { /* noop */ }
+        });
+    }
+
+    function applyRailCollapsed(collapsed, btn) {
+        document.body.classList.toggle('arcade-rail-collapsed', collapsed);
+        btn.textContent = collapsed ? '»' : '«';
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('aria-label', collapsed ? 'Expand sources' : 'Collapse sources to icon rail');
+        btn.title = collapsed ? 'Expand sources' : 'Collapse to icon rail';
     }
 
     function callBridge(request) {
@@ -403,13 +432,13 @@
     function sourceStatusMeta(source) {
         switch (source.status) {
             case 'active':
-                return { dotClass: 'arcade-dot--live', label: 'Live', stateClass: '' };
+                return { key: 'active', dotClass: 'arcade-dot--live', label: 'Live', stateClass: '' };
             case 'activating':
-                return { dotClass: 'arcade-dot--connecting', label: 'Connecting…', stateClass: '' };
+                return { key: 'activating', dotClass: 'arcade-dot--connecting', label: 'Connecting…', stateClass: '' };
             case 'error':
-                return { dotClass: 'arcade-dot--danger', label: source.error || 'Error', stateClass: 'arcade-src__state--danger' };
+                return { key: 'error', dotClass: 'arcade-dot--danger', label: source.error || 'Error', stateClass: 'arcade-src__state--danger' };
             default:
-                return { dotClass: 'arcade-dot--off', label: 'Stopped', stateClass: '' };
+                return { key: 'inactive', dotClass: 'arcade-dot--off', label: 'Stopped', stateClass: '' };
         }
     }
 
@@ -449,6 +478,7 @@
         var li = document.createElement('li');
         li.className = 'arcade-src' + (source.status === 'error' ? ' arcade-src--error' : '');
         li.dataset.arcadeSourceId = source.id;
+        li.dataset.arcadeSourceStatus = meta.key;
 
         var logo = document.createElement('span');
         logo.className = 'arcade-src__logo';
