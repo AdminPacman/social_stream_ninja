@@ -450,16 +450,51 @@ class PointsSystem {
                     // Merge mode: keep higher point values
                     const existing = await this.getUserPoints(user.username, user.type || 'default');
 
+                    // Additive watch-time + Botrix reference-field merge. Computed up
+                    // front so it applies on EVERY matched-existing user, including the
+                    // "existing wins" / skip branch below — a points-preference decision
+                    // must never discard richer watchtime/botrix data an import (e.g. the
+                    // Botrix-to-SSN-backup converter output) is carrying.
+                    const mergedWatchtimeMinutes = Math.max(existing.watchtimeMinutes || 0, user.watchtimeMinutes || 0);
+                    const watchtimeWillChange = mergedWatchtimeMinutes !== (existing.watchtimeMinutes || 0);
+
+                    // Botrix points/xp/level are reference-only snapshot fields (never
+                    // mixed into SSN's own `points`). Imported wins ONLY when existing
+                    // lacks the field — an already-recorded reference value is never
+                    // clobbered by a fresh import.
+                    const botrixRefFields = ['botrixPoints', 'botrixXp', 'botrixLevel'];
+                    const mergedBotrixFields = {};
+                    let botrixFieldsWillChange = false;
+                    for (const field of botrixRefFields) {
+                        if (existing[field] !== undefined) {
+                            mergedBotrixFields[field] = existing[field];
+                        } else if (user[field] !== undefined) {
+                            mergedBotrixFields[field] = user[field];
+                            botrixFieldsWillChange = true;
+                        }
+                    }
+
+                    let recordToSave;
+
                     if (user.points > existing.points) {
                         // Import has more points, use imported data
-                        await this.saveUserPoints(user);
+                        recordToSave = user;
                         imported++;
                     } else if (user.points === existing.points && user.pointsSpent < existing.pointsSpent) {
                         // Same points but less spent (more available), use imported
-                        await this.saveUserPoints(user);
+                        recordToSave = user;
                         imported++;
                     } else {
                         skipped++;
+                        // Existing points win, but still persist the merged watchtime/
+                        // botrix enrichment if it actually changes anything.
+                        recordToSave = (watchtimeWillChange || botrixFieldsWillChange) ? existing : null;
+                    }
+
+                    if (recordToSave) {
+                        recordToSave.watchtimeMinutes = mergedWatchtimeMinutes;
+                        Object.assign(recordToSave, mergedBotrixFields);
+                        await this.saveUserPoints(recordToSave);
                     }
                 }
             } catch (e) {
