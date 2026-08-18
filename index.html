@@ -13152,17 +13152,25 @@
             });
         }
 
-        // The user's saved Custom CSS (dock) — the popup's cssb64/textparam1
-        // setting (also written by the arcade shell's Style Builder). Read so
-        // the EMBEDDED dock matches the OBS-copied dock URL, which already
-        // honors this same setting via popup.js's URL builder.
+        // The user's saved Custom CSS (dock) — Style Builder v2 splits this
+        // into two independent profiles: arcadeDockCss/textparam1 (DOCK (APP)
+        // profile, styles ONLY this embedded app dock) takes priority; falling
+        // back to cssb64/textparam1 (STREAM WIDGET profile — also what the
+        // popup's OBS-copied dock URL inherits via popup.js's URL builder) so
+        // an app dock nobody has customized yet still matches the stream style
+        // instead of going stock-blank (honest continuity, style-builder-v2-spec.md §B).
         function getSavedDockCustomCss() {
             return new Promise(resolve => {
                 const finish = response => {
                     let css = '';
                     try {
-                        const entry = response && response.settings && response.settings.cssb64;
-                        if (entry && typeof entry.textparam1 === 'string') css = entry.textparam1;
+                        const dockEntry = response && response.settings && response.settings.arcadeDockCss;
+                        if (dockEntry && typeof dockEntry.textparam1 === 'string' && dockEntry.textparam1) {
+                            css = dockEntry.textparam1;
+                        } else {
+                            const entry = response && response.settings && response.settings.cssb64;
+                            if (entry && typeof entry.textparam1 === 'string') css = entry.textparam1;
+                        }
                     } catch (_) { }
                     resolve(css);
                 };
@@ -13197,6 +13205,7 @@
                 // params (the app already speaks), plus groupuser message grouping.
                 const dockParams = [
                     `session=${encodeURIComponent(sessionId)}`,
+                    'loadlast=30', // seed with recent history on boot instead of starting empty (dock.html's own native history request)
                     'groupuser',
                     'scale=1.45',
                     'opacity=0.65',
