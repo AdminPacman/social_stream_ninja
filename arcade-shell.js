@@ -710,6 +710,15 @@
         return null;
     }
 
+    // A literal "*/" typed into a free-text value would close the marker
+    // comment early, and CSS error-recovery could then eat the generated
+    // :root block in the dock (gate fix #4). Stripped from emitted CSS
+    // values; in the state JSON it's escaped as *\/ — JSON.parse reads \/
+    // as /, so the state round-trips back to the exact original.
+    function stripCommentClose(value) {
+        return String(value).replace(/\*\//g, '');
+    }
+
     // Managed blob: marker + control-state JSON (for round-trip restore) +
     // generated :root vars + selector overrides + the user's own CSS verbatim.
     function buildStyleCss() {
@@ -720,6 +729,7 @@
             if (id === 'transparent' || id === 'avatar') return; // handled below
             var ctl = styleControlById(id);
             if (!ctl) return;
+            if (typeof value === 'string') value = stripCommentClose(value);
             if (id === 'glow') { lines.push('  --text-glow: 0 0 8px ' + value + ' !important;'); return; }
             if (!ctl.vars) return;
             var unit = ctl.unit || '';
@@ -731,7 +741,8 @@
         if (styleState.avatar) {
             css += '.hl-profile-pic { width: ' + styleState.avatar + 'px !important; height: ' + styleState.avatar + 'px !important; }\n';
         }
-        var out = STYLE_MARKER + '\nstate:' + JSON.stringify(styleState) + '\n*/\n' + css;
+        var stateJson = JSON.stringify(styleState).replace(/\*\//g, '*\\/');
+        var out = STYLE_MARKER + '\nstate:' + stateJson + '\n*/\n' + css;
         if (styleUserCss) out += STYLE_USER_MARK + '\n' + styleUserCss;
         return out;
     }
@@ -988,7 +999,12 @@
     }
 
     function saveStyleBlob() {
-        var raw = buildStyleCss();
+        // Nothing set + no user CSS ⇒ save a true '' so the setting fully
+        // clears — "Stock → Save" genuinely returns to stock instead of
+        // leaving a machine comment in the popup textarea and every dock
+        // URL forever (gate fix #3).
+        var isEmpty = Object.keys(styleState).length === 0 && !styleUserCss;
+        var raw = isEmpty ? '' : buildStyleCss();
         try {
             if (!(window.ninjafy && typeof window.ninjafy.sendMessage === 'function')) {
                 setStyleStatus('settings bridge unavailable — could not save', true);
@@ -998,7 +1014,9 @@
             var confirmed = false;
             window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: 'cssb64', value: raw }, function () {
                 confirmed = true;
-                setStyleStatus('Saved ✓ — dock + OBS URL updated', false);
+                // Honest claim: a URL already pasted into OBS reads cssb64
+                // from its params only — it doesn't live-sync (gate fix #2).
+                setStyleStatus('Saved ✓ — embedded dock updated; re-copy the dock URL for OBS', false);
                 try {
                     if (typeof window.ensureChatDockLoaded === 'function') window.ensureChatDockLoaded(true);
                 } catch (e) { /* noop */ }

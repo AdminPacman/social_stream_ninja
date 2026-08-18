@@ -312,6 +312,9 @@ body.arcade-shell .arcade-panel-title {
   letter-spacing: 0.14em;
   color: var(--arc-muted);
 }
+/* the spacer only had flex under .arcade-topbar scope — panel heads (Style,
+   Elements) need it too so trailing actions right-align (gate fix #1) */
+body.arcade-shell .arcade-panel-head .arcade-spacer { flex: 1; }
 
 body.arcade-shell .arcade-add-source { padding: 10px 12px; border-bottom: 1px solid var(--arc-edge-soft); flex: 0 0 auto; }
 body.arcade-shell .arcade-add-source .arcade-btn { width: 100%; }
