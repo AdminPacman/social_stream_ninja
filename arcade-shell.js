@@ -43,10 +43,10 @@
     // here (plus its overlay page, when built). See pacsarcade design-briefs/
     // ssn-ui-overhaul/element-registry-spec.md. status 'ready' = the overlay
     // page ships and the card is live (Copy overlay URL); 'planned' = an
-    // honest SOON stub with no actions. Music and Hype Train ship ready
-    // (watchtime-loyalty-elements-spec.md item 3 — hype.html is stock SSN,
-    // verified as a standalone session overlay, no new page built). Fren Map
-    // stays planned — no geo data source exists.
+    // honest SOON stub with no actions. Music, Tip Jar (two variants — stock
+    // + house tipjar-mini), and Hype Train ship ready
+    // (watchtime-loyalty-elements-spec.md items 1-3). Fren Map stays
+    // planned — no geo data source exists.
     // --------------------------------------------------------------------
     var ELEMENTS = [
         {
@@ -56,8 +56,23 @@
             blurb: 'Spotify now-playing overlay — transparent, Tuna-grade.'
         },
         {
-            id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'planned',
-            blurb: 'Lightning / zap tip jar with a configurable goal.'
+            id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'ready',
+            overlayPage: 'tipjar.html',
+            // Stock SSN overlay (unmodified upstream) — themes/sound/confetti/
+            // leaderboard/CSV export. theme accepts default|neon|gold (read from
+            // its own source, resources/social_stream_fallback/main/tipjar.html
+            // ~line 764: `const theme = urlParams.get('theme') || 'default';
+            // // default, neon, gold`) — gold picked to match the house
+            // money-gold palette lock; everything else left at its own sensible
+            // stock default rather than guessed.
+            params: ['theme=gold'],
+            blurb: 'Full-featured stock tip jar — themes, sound, confetti, leaderboard. Display-only, no wallet.'
+        },
+        {
+            id: 'tipjar-mini', name: 'Tip Jar Mini', category: 'tips', status: 'ready',
+            overlayPage: 'tipjar-mini.html',
+            params: ['goal=100', 'label=Tip Jar', 'layout=full'],
+            blurb: 'Lean house variant — running total + goal bar, honest empty states, no wallet.'
         },
         {
             id: 'hype', name: 'Hype Train', category: 'hype', status: 'ready',

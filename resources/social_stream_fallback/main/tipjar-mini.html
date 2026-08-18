@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pac's Arcade — Tip Jar Mini</title>
+<!--
+  ============================================================================
+  PAC'S ARCADE — TIP JAR MINI (tipjar-mini.html)
+  The lean house variant, kept alongside SSN's stock tipjar.html (not a
+  replacement for it — Pac ruled KEEP BOTH as variants; ELEMENTS registry
+  offers "Tip Jar" = stock, "Tip Jar Mini" = this page).
+
+  OBS browser source. DISPLAY-ONLY: shows a running total, a configurable goal
+  bar, and a short "recent tips" feed built entirely from donation events that
+  already flow through the SSN session (data.hasDonation on chat messages).
+
+  THIS PAGE DOES NO WALLET / ON-CHAIN / PAYMENT OPERATIONS OF ANY KIND. It
+  never embeds a key, lnurl, invoice, or address, and it never talks to any
+  payment API. It is a read-only view of events SSN's own sources already
+  produce (Fourthwall/Ko-fi/Stripe webhooks, platform superchats/bits/subs,
+  whatever is already wired into the session) — same trust boundary as every
+  other overlay page. Wallet/on-chain setup is Pac-only, done elsewhere.
+
+  Transport: reuses the SAME house session-connection pattern as hype.html /
+  the stock tipjar.html — a hidden vdo.socialstream.ninja P2P bridge iframe
+  (session join) plus an optional websocket relay (&server=/&server2=/
+  &localserver), both delivering the identical message shape SSN's other
+  overlays consume. No new pipeline invented.
+
+  Currency handling: NAIVE, NOT a conversion engine. Each tip's numeric value
+  is the leading number found in that event's raw donation text (whatever
+  SSN already put in data.hasDonation / data.donation / data.donationAmount /
+  data.donoValue) — no FX math, no platform-specific unit table. The total is
+  a plain sum of those numbers, labeled with whatever &currency= you pass (the
+  operator's job to keep one stream on one unit, same assumption every other
+  SSN overlay makes). The recent-tips feed always shows the RAW text exactly
+  as the platform sent it — nothing is ever re-interpreted or reformatted
+  there, so a mixed-currency stream is still honestly readable per line even
+  if the summed total isn't unit-pure.
+
+  ── FULL URL PARAM LIST ──────────────────────────────────────────────────────
+  session / s / id   SSN session ID (REQUIRED for live mode — no default room
+                      is guessed; missing it renders an honest "no session"
+                      state rather than silently joining a shared room)
+  goal        numeric goal for the bar (default 100; non-positive -> 100)
+  label       text label above the total (default "Tip Jar")
+  layout      full (default: total + goal bar + recent tips list)
+              compact (total + thin bar only, no recent list)
+              baronly (just the fill bar, no text)
+  currency    unit suffix shown after the total/goal numbers, e.g. "USD",
+              "pts", "sats" (default "" — numbers shown bare). Does NOT
+              affect per-line recent-tip text, which is always the raw event
+              string as provided.
+  recentcount how many recent-tip rows to keep (default 5, max 20)
+  demo        1 — plays a short scripted sequence of CLEARLY fake demo tips,
+              no session join, no network at all (screenshots/styling only)
+  showqr      1 — reveals an empty, labeled placeholder slot for a static
+              QR/address image (see qrimage). Off by default. This page never
+              generates or embeds a real QR/address itself.
+  qrimage     URL or data-URI for the placeholder slot's image, ONLY shown
+              when showqr=1. Pac fills this in; nothing here invents one.
+  bg          CSS color OR "transparent" (default transparent — OBS-safe)
+  width       px max-width of the widget (default 340; compact 260)
+  pad         px inner padding (default 14; compact 10)
+  radius      px outer corner radius (default 14; compact 10)
+  fillcolor   CSS color for the goal-bar fill (default gold #f7c948 — money
+              is the one place gold is correct in the house palette)
+  css / b64css  house CSS-override params, same as every other overlay page
+  server / server2 / localserver   websocket relay, same as hype.html/dock
+  password    P2P bridge password, same convention as every SSN overlay
+  ─────────────────────────────────────────────────────────────────────────────
+  Honest states: "No tips yet this stream" until the first real tip lands;
+  "No session configured" if session/s/id is missing and demo isn't set.
+  prefers-reduced-motion: fill-bar width still updates, but the CSS
+  transition and the tip-row fade/slide animations are removed — updates
+  just appear, no motion.
+  ============================================================================
+-->
+<style>
+  :root {
+    --bg: transparent;
+    --line: #2a3040;
+    --text: #e8eaf0;
+    --text-dim: #9aa3b5;
+    --neon: #39ff6a;
+    --cyan: #33d6ff;
+    --gold: #f7c948;   /* --arc-money in the shell — gold = money only */
+    --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono-font: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--ui-font); }
+
+  #widget {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--bg);
+    border-radius: var(--radius, 14px);
+    padding: var(--pad, 14px);
+    max-width: var(--width, 340px);
+    color: var(--text);
+  }
+  #widget.compact { gap: 6px; }
+
+  #head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  #label {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #total {
+    font-family: var(--mono-font);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--gold);
+    white-space: nowrap;
+  }
+  #widget.baronly #head { display: none; }
+
+  #barTrack {
+    height: 14px;
+    border-radius: 7px;
+    background: var(--line);
+    overflow: hidden;
+    position: relative;
+  }
+  #widget.compact #barTrack { height: 6px; border-radius: 3px; }
+  #barFill {
+    height: 100%;
+    width: 0%;
+    border-radius: 7px;
+    background: var(--fillcolor, var(--gold));
+    transition: width 0.4s ease;
+  }
+  #widget.compact #barFill { border-radius: 3px; }
+  #widget.reduced-motion #barFill { transition: none; }
+
+  #recent {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  #widget.compact #recent, #widget.baronly #recent { display: none; }
+
+  .tip-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    line-height: 1.3;
+    animation: tipIn 0.3s ease;
+  }
+  #widget.reduced-motion .tip-row { animation: none; }
+  @keyframes tipIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tip-donator {
+    font-weight: 700;
+    color: var(--text);
+    flex: none;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tip-raw {
+    color: var(--gold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* honest empty / no-session states — info-colored, never a fake tip */
+  #emptyState {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+  #emptyState.hidden { display: none; }
+
+  /* QR/address placeholder — same labeled-slot pattern as the music widget's
+     Spotify-logo placeholder. Empty by design; Pac fills qrimage. */
+  #qrSlot {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 6px 8px;
+    border: 1px dashed var(--text-dim);
+    border-radius: 8px;
+    font-family: var(--mono-font);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  #qrSlot.shown { display: flex; }
+  #qrSlot img { width: 40px; height: 40px; border-radius: 4px; object-fit: contain; }
+
+  #demoTag {
+    display: none;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: var(--cyan);
+  }
+  #widget.demo #demoTag { display: block; }
+</style>
+</head>
+<body>
+<div id="widget" role="status" aria-live="polite" aria-label="Tip jar">
+  <div id="head">
+    <span id="label">Tip Jar</span>
+    <span id="total">0</span>
+  </div>
+  <div id="barTrack"><div id="barFill"></div></div>
+  <div id="recent"></div>
+  <div id="emptyState">No tips yet this stream</div>
+  <div id="qrSlot">
+    <img id="qrSlotImg" alt="" aria-hidden="true">
+    <span>[ QR / address — optional, add via ?qrimage= ]</span>
+  </div>
+  <span id="demoTag">DEMO — fake data, no session connected</span>
+</div>
+
+<script>
+"use strict";
+/* ---- params ------------------------------------------------------------ */
+var P = new URLSearchParams(location.search);
+function param(name, dflt) { var v = P.get(name); return (v === null || v === "") ? dflt : v; }
+function onoff(name, dflt) {
+  var v = P.get(name);
+  if (v === null) return dflt;
+  return !(v === "0" || v === "off" || v === "false" || v === "no");
+}
+var cfg = {
+  goal: Math.max(0, parseFloat(param("goal", "100")) || 0) || 100,
+  label: param("label", "Tip Jar"),
+  layout: param("layout", "full"),
+  currency: param("currency", ""),
+  recentcount: Math.min(20, Math.max(1, parseInt(param("recentcount", "5"), 10) || 5)),
+  demo: onoff("demo", false),
+  showqr: onoff("showqr", false),
+  qrimage: param("qrimage", ""),
+  bg: param("bg", "transparent"),
+  width: param("width", ""),
+  pad: param("pad", ""),
+  radius: param("radius", ""),
+  fillcolor: param("fillcolor", ""),
+  password: param("password", "false")
+};
+var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---- house CSS-override params (&css= / &b64css=), same as every overlay */
+if (P.has("css")) {
+  var cssLink = document.createElement("link");
+  cssLink.rel = "stylesheet"; cssLink.type = "text/css"; cssLink.media = "screen";
+  cssLink.href = decodeURI(P.get("css"));
+  document.head.appendChild(cssLink);
+}
+(function () {
+  var b64 = P.get("b64css") || P.get("base64css") || P.get("cssbase64") || P.get("cssb64");
+  if (!b64) return;
+  try {
+    var css = decodeURIComponent(atob(b64));
+    var style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+  } catch (e) { console.error(e); }
+})();
+
+/* ---- apply styling ------------------------------------------------------ */
+var w = document.getElementById("widget");
+var root = document.documentElement.style;
+var layoutClass = (cfg.layout === "compact" || cfg.layout === "baronly") ? cfg.layout : "";
+if (layoutClass) w.classList.add(layoutClass);
+if (reducedMotion) w.classList.add("reduced-motion");
+if (cfg.demo) w.classList.add("demo");
+root.setProperty("--width", (cfg.width || (cfg.layout === "compact" ? "260" : "340")) + "px");
+root.setProperty("--pad", (cfg.pad || (cfg.layout === "compact" ? "10" : "14")) + "px");
+root.setProperty("--radius", (cfg.radius || (cfg.layout === "compact" ? "10" : "14")) + "px");
+root.setProperty("--bg", cfg.bg === "transparent" ? "transparent" : cfg.bg);
+if (cfg.fillcolor) root.setProperty("--fillcolor", cfg.fillcolor);
+
+var labelEl = document.getElementById("label");
+var totalEl = document.getElementById("total");
+var barFillEl = document.getElementById("barFill");
+var recentEl = document.getElementById("recent");
+var emptyStateEl = document.getElementById("emptyState");
+var qrSlotEl = document.getElementById("qrSlot");
+var qrSlotImgEl = document.getElementById("qrSlotImg");
+labelEl.textContent = cfg.label;
+
+if (cfg.showqr) {
+  qrSlotEl.classList.add("shown");
+  if (cfg.qrimage) qrSlotImgEl.src = cfg.qrimage;
+  else qrSlotImgEl.style.display = "none";
+}
+
+/* ---- state --------------------------------------------------------------- */
+var totalValue = 0;
+var recentTips = []; // [{donator, raw, type}], newest first
+
+function fmtNumber(n) {
+  var rounded = Math.round(n * 100) / 100;
+  return rounded.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+function fmtTotal(n) {
+  var s = fmtNumber(n);
+  return cfg.currency ? (s + " " + cfg.currency) : s;
+}
+
+function renderTotal() {
+  totalEl.textContent = fmtTotal(totalValue);
+  var pct = cfg.goal > 0 ? Math.max(0, Math.min(100, (totalValue / cfg.goal) * 100)) : 0;
+  barFillEl.style.width = pct + "%";
+}
+
+function renderRecent() {
+  if (recentTips.length === 0) {
+    emptyStateEl.classList.remove("hidden");
+    recentEl.innerHTML = "";
+    return;
+  }
+  emptyStateEl.classList.add("hidden");
+  recentEl.innerHTML = "";
+  recentTips.slice(0, cfg.recentcount).forEach(function (tip) {
+    var row = document.createElement("div");
+    row.className = "tip-row";
+    var donator = document.createElement("span");
+    donator.className = "tip-donator";
+    donator.textContent = tip.donator;
+    var raw = document.createElement("span");
+    raw.className = "tip-raw";
+    raw.textContent = tip.raw; // RAW event text, never reinterpreted
+    row.appendChild(donator);
+    row.appendChild(raw);
+    recentEl.appendChild(row);
+  });
+}
+
+function addTip(donator, rawText, numericValue) {
+  recentTips.unshift({ donator: donator, raw: rawText });
+  if (recentTips.length > 40) recentTips.length = 40; // keep memory bounded well past recentcount
+  if (numericValue > 0) totalValue += numericValue;
+  renderTotal();
+  renderRecent();
+}
+
+/* ---- donation extraction --------------------------------------------------
+   Field candidates match house convention (same fields stock tipjar.html
+   already reads): data.hasDonation is primary; the others are fallbacks for
+   sources that populate a different field. First LEADING number found in the
+   text is the numeric value credited to the total — no currency conversion,
+   see the file header. */
+function getDonationRaw(data) {
+  return data.hasDonation || data.donation || data.donationAmount || data.donoValue || "";
+}
+function extractLeadingNumber(text) {
+  var m = String(text || "").match(/[\d,]+(?:\.\d+)?/);
+  if (!m) return 0;
+  var n = parseFloat(m[0].replace(/,/g, ""));
+  return isNaN(n) || n <= 0 ? 0 : n;
+}
+
+/* ---- cross-transport dedupe (P2P + websocket relay can both be live) -----
+   Ported from hype.html's isDuplicateTransportDelivery — same TTL, same key
+   shape, reused rather than reinvented. Only matters when a server param is
+   actually set (P2P-only mode never double-delivers). */
+var CROSS_TRANSPORT_DEDUPE_TTL_MS = 12000;
+var recentTransportDeliveries = new Map();
+function isDuplicateTransportDelivery(data) {
+  if (!(P.has("server") || P.has("server2") || P.has("localserver"))) return false;
+  if (!data || typeof data !== "object") return false;
+  if (data.id === undefined || data.id === null) return false;
+  var key = String(data.id) + "|" + (data.type || "") + "|" + (data.chatname || "") + "|" + String(getDonationRaw(data)).slice(0, 100);
+  var now = Date.now();
+  recentTransportDeliveries.forEach(function (seenAt, seenKey) {
+    if (now - seenAt > CROSS_TRANSPORT_DEDUPE_TTL_MS) recentTransportDeliveries.delete(seenKey);
+  });
+  if (recentTransportDeliveries.has(key)) return true;
+  recentTransportDeliveries.set(key, now);
+  return false;
+}
+
+function processInput(data) {
+  if (!data || typeof data !== "object") return;
+  var raw = getDonationRaw(data);
+  if (!raw) return; // not a donation event — tip jar only cares about hasDonation-bearing messages
+  if (isDuplicateTransportDelivery(data)) return;
+  var donator = data.chatname || "Anonymous";
+  var value = extractLeadingNumber(raw);
+  addTip(donator, String(raw), value);
+}
+
+/* ---- demo mode: clearly-fake scripted tips, zero network ----------------- */
+if (cfg.demo) {
+  var demoScript = [
+    { donator: "TestFren", raw: "$5.00" },
+    { donator: "ArcadeRegular", raw: "$12.50" },
+    { donator: "NightOwl99", raw: "$2.00" }
+  ];
+  renderTotal();
+  renderRecent();
+  var demoIdx = 0;
+  setInterval(function () {
+    if (demoIdx >= demoScript.length) return;
+    var t = demoScript[demoIdx++];
+    addTip(t.donator, t.raw, extractLeadingNumber(t.raw));
+  }, 2500);
+} else {
+  /* ---- session resolution — REQUIRED, no default room is guessed --------- */
+  var roomID = P.get("session") || P.get("s") || P.get("id") || "";
+  if (!roomID) {
+    labelEl.textContent = cfg.label;
+    totalEl.textContent = "";
+    emptyStateEl.textContent = "No session configured";
+    emptyStateEl.classList.remove("hidden");
+    barFillEl.style.width = "0%";
+  } else {
+    renderTotal();
+    renderRecent();
+
+    /* P2P bridge — same vdo.socialstream.ninja pattern as hype.html/dock,
+       same iframe + message-listener shape, label distinguishes this feed. */
+    var iframe = document.createElement("iframe");
+    iframe.src = "https://vdo.socialstream.ninja/?ln&salt=vdo.ninja&password=" +
+      encodeURIComponent(cfg.password) + "&solo&view=" + roomID +
+      "&novideo&noaudio&label=tipjarmini&cleanoutput&room=" + roomID;
+    iframe.style.width = "0px";
+    iframe.style.height = "0px";
+    iframe.style.position = "fixed";
+    iframe.style.left = "-100px";
+    iframe.style.top = "-100px";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+    iframe.style.visibility = "hidden";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.setAttribute("tabindex", "-1");
+    document.body.appendChild(iframe);
+    window.addEventListener("message", function (e) {
+      if (e.source !== iframe.contentWindow) return;
+      if (e.data && typeof e.data === "object" && e.data.dataReceived && typeof e.data.dataReceived === "object") {
+        if ("overlayNinja" in e.data.dataReceived) {
+          processInput(e.data.dataReceived.overlayNinja);
+        }
+      }
+    });
+
+    /* Optional websocket relay — same channel pair (out:3/in:4) hype.html and
+       the stock tipjar.html both use by default; only joined if requested. */
+    if (P.has("server") || P.has("server2") || P.has("localserver")) {
+      var serverURL = P.has("localserver") ? "ws://127.0.0.1:3000" : (P.get("server") || P.get("server2") || "wss://io.socialstream.ninja");
+      var conCon = 1;
+      var socketserver = new WebSocket(serverURL);
+      function setupSocket() {
+        socketserver.onclose = function () {
+          setTimeout(function () {
+            conCon += 1;
+            socketserver = new WebSocket(serverURL);
+            setupSocket();
+          }, 100 * conCon);
+        };
+        socketserver.onopen = function () {
+          conCon = 1;
+          socketserver.send(JSON.stringify({ join: roomID, out: 3, in: 4 }));
+        };
+        socketserver.addEventListener("message", function (event) {
+          if (!event.data) return;
+          try {
+            var data = JSON.parse(event.data);
+            if (data.overlayNinja) processInput(data.overlayNinja);
+            else if (data.content) processInput(data.content);
+            else processInput(data);
+          } catch (e) { console.error("tipjar-mini.html: bad socket message", e); }
+        });
+      }
+      setupSocket();
+    }
+  }
+}
+</script>
+</body>
+</html>
