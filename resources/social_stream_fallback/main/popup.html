@@ -6260,6 +6260,72 @@ input:checked + .slider:before {
 									<input type="text" id="multialerthypeaccent" class="textInput instant" autocomplete="off" placeholder="#9146ff" data-textparam25="hypeaccent" />
 									<label for="multialerthypeaccent"><span>&gt; Hype train accent color</span></label>
 								</div>
+								<details style="width: 95%; margin-top: 4px;">
+									<summary style="cursor: pointer; font-size: 0.95em; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);">Per-type headline templates (replace the built-in wording)</summary>
+									<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in follow headline. Variables: {name} {source}. Unknown/blank variables become empty text. Leave blank for the default '{name} just followed'.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="{name} just followed!" data-textparam25="followtemplate" id="multi-alert-followtemplate" />
+											<label><span>&gt; 💖 Follow headline template</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in subscription headline. Variables: {name} {amount} {tier} {source}. {amount} only fills for gifted subs. {tier} is the membership/tier label when the platform sends one. Leave blank for the default wording.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="{name} just subscribed ({tier})" data-textparam25="subtemplate" id="multi-alert-subtemplate" />
+											<label><span>&gt; 💜 Subscription headline template</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in donation headline. Variables: {name} {amount} {recipient} {source}. {recipient} only fills on gift-style donation events. Leave blank for the default wording.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="{name} sent {amount}!" data-textparam25="donotemplate" id="multi-alert-donotemplate" />
+											<label><span>&gt; 💚 Donation headline template</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in bits/cheer headline. Variables: {name} {amount} {source}. Leave blank for the default wording.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="{name} cheered {amount}!" data-textparam25="bitstemplate" id="multi-alert-bitstemplate" />
+											<label><span>&gt; 💙 Bits/Cheer headline template</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in raid headline. Variables: {name} {viewers} {source}. {viewers} only fills when the platform reports a raider count. Leave blank for the default wording.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="{name} is raiding with {viewers} viewers!" data-textparam25="raidtemplate" id="multi-alert-raidtemplate" />
+											<label><span>&gt; 🧡 Raid headline template</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in auction-win headline. Variables: {name} {amount} {title} {bids} {source}. {title} is the auction item name, {bids} is the bid count, when the platform sends them. Leave blank for the default wording.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="{name} won {title} for {amount}!" data-textparam25="auctiontemplate" id="multi-alert-auctiontemplate" />
+											<label><span>&gt; 💛 Auction win headline template</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Replaces the built-in hype train headline. Variables: {level} {progress} {goal} {source}. Leave blank for the default wording.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Hype Train reached Level {level}!" data-textparam25="hypetemplate" id="multi-alert-hypetemplate" />
+											<label><span>&gt; ❤️ Hype train headline template</span></label>
+										</div>
+									</div>
+								</details>
+								<details style="width: 95%; margin-top: 4px;">
+									<summary style="cursor: pointer; font-size: 0.95em; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);">Per-type fonts (override the card font-family)</summary>
+									<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for follow alert cards only. Example: Georgia, 'Comic Sans MS', 'Press Start 2P'. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="followfont" id="multi-alert-followfont" />
+											<label><span>&gt; 💖 Follow font</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for subscription alert cards only. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="subfont" id="multi-alert-subfont" />
+											<label><span>&gt; 💜 Subscription font</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for donation alert cards only. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="donofont" id="multi-alert-donofont" />
+											<label><span>&gt; 💚 Donation font</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for bits/cheer alert cards only. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="bitsfont" id="multi-alert-bitsfont" />
+											<label><span>&gt; 💙 Bits/Cheer font</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for raid alert cards only. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="raidfont" id="multi-alert-raidfont" />
+											<label><span>&gt; 🧡 Raid font</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for auction-win alert cards only. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="auctionfont" id="multi-alert-auctionfont" />
+											<label><span>&gt; 💛 Auction win font</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Font-family for hype train alert cards only. Leave blank to keep the page's default font.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="Georgia, serif" data-textparam25="hypefont" id="multi-alert-hypefont" />
+											<label><span>&gt; ❤️ Hype train font</span></label>
+										</div>
+									</div>
+								</details>
 								<div class="textInputContainer" style="width: 95%;" title="Solid background color for the alert card. Pairs well with flat cards.">
 									<input type="text" id="multialertcardbg" class="textInput instant" autocomplete="off" placeholder="#18122b" data-textparam25="cardbg" />
 									<label for="multialertcardbg"><span>&gt; Card background color</span></label>
@@ -6391,6 +6457,39 @@ input:checked + .slider:before {
 									</label>
 									<span>Hide GIF / media attachments</span>
 								</div>
+								<details style="width: 95%; margin-top: 4px;">
+									<summary style="cursor: pointer; font-size: 0.95em; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);">Per-type fallback media (only shows when the incoming event has none)</summary>
+									<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for follow alerts when the incoming event has no media of its own. Ignored if the event already carries a contentimg.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/follow.gif" data-textparam25="followmedia" id="multi-alert-followmedia" />
+											<label><span>&gt; 💖 Follow fallback media</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for subscription alerts when the incoming event has no media of its own.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/sub.gif" data-textparam25="submedia" id="multi-alert-submedia" />
+											<label><span>&gt; 💜 Subscription fallback media</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for donation alerts when the incoming event has no media of its own.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/dono.gif" data-textparam25="donomedia" id="multi-alert-donomedia" />
+											<label><span>&gt; 💚 Donation fallback media</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for bits/cheer alerts when the incoming event has no media of its own.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/bits.gif" data-textparam25="bitsmedia" id="multi-alert-bitsmedia" />
+											<label><span>&gt; 💙 Bits/Cheer fallback media</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for raid alerts when the incoming event has no media of its own.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/raid.gif" data-textparam25="raidmedia" id="multi-alert-raidmedia" />
+											<label><span>&gt; 🧡 Raid fallback media</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for auction-win alerts when the incoming event has no media of its own.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/auction.gif" data-textparam25="auctionmedia" id="multi-alert-auctionmedia" />
+											<label><span>&gt; 💛 Auction win fallback media</span></label>
+										</div>
+										<div class="textInputContainer" style="width: 100%;" title="Fallback image/GIF/video for hype train alerts when the incoming event has no media of its own.">
+											<input type="text" class="textInput instant" autocomplete="off" placeholder="https://example.com/hype.gif" data-textparam25="hypemedia" id="multi-alert-hypemedia" />
+											<label><span>&gt; ❤️ Hype train fallback media</span></label>
+										</div>
+									</div>
+								</details>
 								<div>
 									<label class="switch">
 										<input type="checkbox" data-param25="hidesource" />

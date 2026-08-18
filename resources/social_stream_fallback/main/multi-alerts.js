@@ -262,6 +262,45 @@ const CATEGORY_ACCENT_PARAMS = {
   [ALERT_CATEGORIES.HYPE]: 'hypeaccent'
 };
 
+// Stage 2 / H3: per-event headline TEXT templates. When set, the built-in
+// buildHeadline() copy for that category is replaced by the user's string,
+// substituted through the same {key} convention as formatTranslation/
+// EventFlowSystem.replaceTemplateVars. Empty (default) = today's built-in copy.
+const CATEGORY_TEMPLATE_PARAMS = {
+  [ALERT_CATEGORIES.FOLLOW]: 'followtemplate',
+  [ALERT_CATEGORIES.SUBSCRIPTION]: 'subtemplate',
+  [ALERT_CATEGORIES.DONATION]: 'donotemplate',
+  [ALERT_CATEGORIES.BITS]: 'bitstemplate',
+  [ALERT_CATEGORIES.RAID]: 'raidtemplate',
+  [ALERT_CATEGORIES.AUCTION]: 'auctiontemplate',
+  [ALERT_CATEGORIES.HYPE]: 'hypetemplate'
+};
+
+// Stage 2 / H4: per-event FONT slot, mirrors CATEGORY_SOUND_PARAMS' shape.
+// Applied as --alert-font-family on the card (see renderAlert).
+const CATEGORY_FONT_PARAMS = {
+  [ALERT_CATEGORIES.FOLLOW]: 'followfont',
+  [ALERT_CATEGORIES.SUBSCRIPTION]: 'subfont',
+  [ALERT_CATEGORIES.DONATION]: 'donofont',
+  [ALERT_CATEGORIES.BITS]: 'bitsfont',
+  [ALERT_CATEGORIES.RAID]: 'raidfont',
+  [ALERT_CATEGORIES.AUCTION]: 'auctionfont',
+  [ALERT_CATEGORIES.HYPE]: 'hypefont'
+};
+
+// Stage 2 / H4: per-event MEDIA slot, mirrors CATEGORY_SOUND_PARAMS' shape.
+// Only used as a fallback when the inbound payload carries no contentimg/media
+// (see pickMediaUrl's extended fallback chain).
+const CATEGORY_MEDIA_PARAMS = {
+  [ALERT_CATEGORIES.FOLLOW]: 'followmedia',
+  [ALERT_CATEGORIES.SUBSCRIPTION]: 'submedia',
+  [ALERT_CATEGORIES.DONATION]: 'donomedia',
+  [ALERT_CATEGORIES.BITS]: 'bitsmedia',
+  [ALERT_CATEGORIES.RAID]: 'raidmedia',
+  [ALERT_CATEGORIES.AUCTION]: 'auctionmedia',
+  [ALERT_CATEGORIES.HYPE]: 'hypemedia'
+};
+
 const SOURCE_ICON_MAP = {
   amazon: './sources/images/amazon.png',
   facebook: './sources/images/facebook.png',
@@ -1034,7 +1073,7 @@ function pickViewerCount(payload = {}) {
   return null;
 }
 
-function pickMediaUrl(payload = {}) {
+function pickMediaUrl(payload = {}, category = '') {
   const candidates = [
     payload.contentimg,
     payload.contentImage,
@@ -1051,6 +1090,14 @@ function pickMediaUrl(payload = {}) {
     if (normalized) {
       return normalized;
     }
+  }
+
+  // Stage 2 / H4: extended fallback — when the inbound payload carries no
+  // media of its own, fall back to the per-event media slot (followmedia,
+  // submedia, donomedia, bitsmedia, raidmedia, auctionmedia, hypemedia).
+  const categoryFallback = category && settings.categoryMedia && settings.categoryMedia[category];
+  if (categoryFallback) {
+    return categoryFallback;
   }
 
   return '';
@@ -1220,7 +1267,63 @@ function inferCategory(payload = {}) {
   return null;
 }
 
+// Stage 2 / H3: value bag for per-event headline templates. Baseline
+// {name}{amount}{viewers}{level} per the spec, plus whatever the payload
+// genuinely carries per category (no invented variables) — read from the
+// same picker functions the built-in headline/subtitle/body copy already
+// uses above.
+function buildTemplateValueBag(category, eventKey, actor, amount, viewerCount, payload = {}) {
+  const bag = {
+    name: normalizeText(actor),
+    amount: normalizeText(amount),
+    viewers: viewerCount ? String(viewerCount) : '',
+    level: category === ALERT_CATEGORIES.HYPE ? normalizeText(pickHypeLevel(payload) || '') : '',
+    source: normalizeText(SOURCE_LABELS[pickSourceKey(payload)] || humanizeKey(pickSourceKey(payload)))
+  };
+  if (category === ALERT_CATEGORIES.SUBSCRIPTION) {
+    bag.tier = pickSubtitle(payload);
+  }
+  if (category === ALERT_CATEGORIES.DONATION && isGiftEventKey(eventKey)) {
+    bag.recipient = pickGiftRecipient(payload);
+  }
+  if (category === ALERT_CATEGORIES.AUCTION) {
+    bag.title = normalizeText(payload.meta?.title);
+    bag.bids = normalizeText(payload.meta?.bids);
+  }
+  if (category === ALERT_CATEGORIES.HYPE) {
+    bag.progress = normalizeText(payload.meta?.progress);
+    bag.goal = normalizeText(payload.meta?.goal);
+  }
+  return bag;
+}
+
+// Stage 2 / H3: renders a user-authored per-event template. Reuses
+// getTranslation() — the same lookup step formatTranslation (:396) itself
+// calls — keyed on a synthetic per-category key that will never exist in a
+// translations/*.json file, so the user's string always wins as the
+// fallback (a future translation override could still take priority, same
+// as every other formatTranslation call site). The value-substitution
+// contract intentionally mirrors EventFlowSystem.replaceTemplateVars' (the
+// actions.html templater): case-insensitive {key}, unknown/unset keys
+// resolve to '' — a different (stricter) contract than formatTranslation's
+// own loop, which only touches keys explicitly passed in `values` and
+// leaves anything else literal. The spec calls for the templater's
+// unknown-key-empty behavior here, so that substitution is done directly
+// rather than by reusing formatTranslation's loop.
+function renderCustomHeadlineTemplate(category, template, values) {
+  const text = getTranslation(`alert-custom-template-${category}`, template);
+  return text.replace(/\{([\w.]*)\}/g, (match, key) => {
+    const val = values[String(key).toLowerCase()];
+    return val === undefined || val === null || val === '' ? '' : String(val);
+  });
+}
+
 function buildHeadline(category, eventKey, actor, amount, viewerCount, payload = {}) {
+  const customTemplate = normalizeText(settings.categoryTemplates && settings.categoryTemplates[category]);
+  if (customTemplate) {
+    const values = buildTemplateValueBag(category, eventKey, actor, amount, viewerCount, payload);
+    return { lead: renderCustomHeadlineTemplate(category, customTemplate, values), tail: '' };
+  }
   switch (category) {
     case ALERT_CATEGORIES.AUCTION:
       return {
@@ -1391,7 +1494,7 @@ function buildAlertViewModel(payload = {}) {
   }
   const subtitle = buildAlertSubtitle(category, payload, eventKey, actor);
   const viewerCount = pickViewerCount(payload);
-  const mediaUrl = pickMediaUrl(payload);
+  const mediaUrl = pickMediaUrl(payload, category);
   const cashValue = pickCashValue(payload, amount, sourceKey);
   if (isValueAlertCategory(category) && settings.minDonationValue > 0 && cashValue < settings.minDonationValue) {
     log('value alert skipped below minimum', { amount, cashValue, minimum: settings.minDonationValue, payload });
@@ -1707,6 +1810,15 @@ function readSettings() {
     accent: normalizeColor(urlParams.get('accent')),
     categoryAccents: Object.fromEntries(
       Object.entries(CATEGORY_ACCENT_PARAMS).map(([cat, param]) => [cat, normalizeColor(urlParams.get(param))])
+    ),
+    categoryTemplates: Object.fromEntries(
+      Object.entries(CATEGORY_TEMPLATE_PARAMS).map(([cat, param]) => [cat, normalizeText(urlParams.get(param))])
+    ),
+    categoryFonts: Object.fromEntries(
+      Object.entries(CATEGORY_FONT_PARAMS).map(([cat, param]) => [cat, normalizeText(urlParams.get(param))])
+    ),
+    categoryMedia: Object.fromEntries(
+      Object.entries(CATEGORY_MEDIA_PARAMS).map(([cat, param]) => [cat, normalizeText(urlParams.get(param))])
     ),
     cardBg: normalizeColor(urlParams.get('cardbg')),
     textColor: normalizeColor(urlParams.get('textcolor')),
@@ -2154,6 +2266,14 @@ function renderAlert(model) {
   article.style.setProperty('--alert-accent', model.accent);
   article.style.setProperty('--alert-accent-rgb', accentRgb);
   article.style.setProperty('--progress-duration', `${settings.showTime}ms`);
+
+  // Stage 2 / H4: per-event font slot, applied on the card via
+  // --alert-font-family (multi-alerts.html :root default is "inherit", so
+  // an unset param never changes anything — stock look preserved).
+  const categoryFont = settings.categoryFonts && settings.categoryFonts[model.category];
+  if (categoryFont) {
+    article.style.setProperty('--alert-font-family', categoryFont);
+  }
 
   if (settings.compact) {
     article.classList.add('compact');
@@ -2647,6 +2767,9 @@ window.__multiAlertsOverlay = {
       cardRadius: settings.cardRadius,
       accent: settings.accent,
       categoryAccents: Object.assign({}, settings.categoryAccents),
+      categoryTemplates: Object.assign({}, settings.categoryTemplates),
+      categoryFonts: Object.assign({}, settings.categoryFonts),
+      categoryMedia: Object.assign({}, settings.categoryMedia),
       cardBg: settings.cardBg,
       textColor: settings.textColor,
       animation: settings.animation,
