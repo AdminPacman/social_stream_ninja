@@ -199,7 +199,11 @@ body, html {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 500px;
+    /* v4 wrap fix (style-tab-v4-scout.md §4): 500px hard-truncated long
+       messages down to ~40 characters before the honest ellipsis kicked in —
+       widened so a message gets real room to read before it's cut, same
+       single-line ellipsis mechanism, same fixed-height ticker card. */
+    max-width: 640px;
     color: #ffffff;
 }
 

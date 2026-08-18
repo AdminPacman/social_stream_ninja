@@ -66,6 +66,17 @@ body.arcade-shell .arcade-pop :focus-visible {
   border-radius: var(--arc-r);
 }
 
+/* Latent bug fix (found live during v4 harness verification): `.arcade-btn`
+   and the theme-chip classes set `display` unconditionally, which — per the
+   CSS cascade — beats the UA stylesheet's `[hidden] { display: none }` rule
+   regardless of selector specificity (author origin always wins over UA
+   origin for the same property). Any element toggled via `.hidden = true`
+   while ALSO carrying one of those classes (e.g. #arcade-style-preview-copy,
+   the stylable/custom/yours chips) rendered visible anyway. One general
+   override, scoped to the shell, fixes it everywhere at once rather than
+   per-element. */
+body.arcade-shell [hidden] { display: none !important; }
+
 /* --------------------------------------------------------------------------
    Topbar
    -------------------------------------------------------------------------- */
@@ -804,49 +815,58 @@ body.arcade-shell .arcade-clock-seconds {
 }
 body.arcade-shell .arcade-clock-seconds input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--arc-info); }
 
-body.arcade-shell .arcade-style-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-body.arcade-shell .arcade-style-presets .arcade-k {
-  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
-}
+/* v4 (style-builder-v4-spec.md §B, Plasmic density pass, scout §2): column
+   width reduced 340px → 280px — everything freed by removing the PRESETS/MY
+   PRESETS/theme-rail chrome (below) plus this narrower column both feed the
+   canvas, which is the point (spec: "canvas gets every pixel freed"). */
 body.arcade-shell .arcade-style-cols {
-  display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 14px;
+  display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 14px;
   flex: 1; min-height: 320px;
 }
 body.arcade-shell .arcade-style-controls {
   overflow-y: auto; min-height: 0; padding-right: 4px;
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 1px;
 }
+/* plain-text section headers, no boxed chrome (scout §2 item 2) — just a
+   tightened label + breathing room, unchanged in kind from v1-v3, padding
+   trimmed for the narrower column. */
 body.arcade-shell .arcade-style-group {
   font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.14em; color: var(--arc-muted);
-  padding: 10px 0 4px;
+  padding: 8px 0 3px;
 }
+/* strict two-column label-left/control-right row (scout §2 item 3) — label
+   ellipsizes at a single line (title attribute carries the full text) rather
+   than wrapping to a second line, so every row stays one compact line even
+   at 280px; control widths trimmed slightly (110→96 / 150→120) to give the
+   label column real room. */
 body.arcade-shell .arcade-style-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: center; gap: 8px; padding: 4px 6px;
+  align-items: center; gap: 6px; padding: 3px 6px;
   border-radius: var(--arc-r);
 }
 body.arcade-shell .arcade-style-row:hover { background: var(--arc-panel-2); }
 body.arcade-shell .arcade-style-row > label {
   font: 500 12px/1.3 var(--arc-font-ui); color: var(--arc-ink); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* untouched controls read muted — "using the dock default" is a real state */
 body.arcade-shell .arcade-style-row:not(.is-set) > label { color: var(--arc-muted); }
 body.arcade-shell .arcade-style-row input[type="color"] {
-  width: 34px; height: 26px; padding: 1px;
+  width: 30px; height: 24px; padding: 1px;
   border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
   background: var(--arc-panel-2); cursor: pointer;
 }
-body.arcade-shell .arcade-style-row input[type="range"] { width: 110px; accent-color: var(--arc-info); }
+body.arcade-shell .arcade-style-row input[type="range"] { width: 96px; accent-color: var(--arc-info); }
 body.arcade-shell .arcade-style-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--arc-info); }
 body.arcade-shell .arcade-style-row input[type="text"] {
-  width: 150px; height: 26px; padding: 0 8px;
+  width: 120px; height: 24px; padding: 0 6px;
   border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
   background: var(--arc-panel-2); color: var(--arc-ink);
   font: 400 11px/1 var(--arc-font-ui);
 }
 body.arcade-shell .arcade-style-val {
   font: 400 11px/1 var(--arc-font-mono); font-variant-numeric: tabular-nums;
-  color: var(--arc-faint); min-width: 44px; text-align: right;
+  color: var(--arc-faint); min-width: 38px; text-align: right;
 }
 body.arcade-shell .arcade-style-row .arcade-style-clear { visibility: hidden; }
 body.arcade-shell .arcade-style-row.is-set .arcade-style-clear,
@@ -859,53 +879,26 @@ body.arcade-shell .arcade-style-preview-bar { display: flex; align-items: center
 body.arcade-shell .arcade-style-hint {
   font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-faint); flex: 1; min-width: 0;
 }
-/* v2 — "Previewing: STREAM WIDGET" / "Previewing: DOCK (APP)" label next to
-   the Reload preview button, so it's always clear which profile's real
-   dockParams the preview iframe is mirroring. v3: same element also carries
-   "PREVIEWING: <theme name>" while the DOCK|THEMES seg (below) is on THEMES
-   — see syncCanvasModeUI(). */
+/* "Previewing: STREAM WIDGET" / "Previewing: DOCK (APP)" label next to the
+   Reload preview button, so it's always clear which profile's real
+   dockParams the preview iframe is mirroring; also carries
+   "PREVIEWING: <theme name>" while a theme is loaded (syncCanvasModeUI). */
 body.arcade-shell .arcade-style-preview-profile {
   font: 600 10px/1 var(--arc-font-mono); letter-spacing: 0.06em; color: var(--arc-muted); white-space: nowrap;
 }
-/* v3 — compact DOCK|THEMES canvas-mode seg living right in the preview bar
-   (Pac's live-testing amendment: theme browsing integrates into the preview
-   surface instead of a separate bottom strip). Smaller footprint than the
-   PROFILE seg above the presets rows. */
-body.arcade-shell .arcade-seg--sm button { padding: 3px 8px; font-size: 10px; }
+/* v4 — "← Back to dock" replaces the old DOCK|THEMES seg now that mode
+   switching happens via the Browse Looks modal; only visible while a theme
+   is actually loaded in the canvas (syncCanvasModeUI; the generic
+   `[hidden]` rule above is what actually hides it). */
 body.arcade-shell .arcade-style-preview iframe {
   flex: 1; min-height: 0; width: 100%;
   border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
   background: repeating-conic-gradient(var(--arc-panel-2) 0% 25%, var(--arc-panel) 0% 50%) 0 0 / 18px 18px;
 }
-/* v3 — theme rail: ONE slim horizontal-scroll row, only visible in THEMES
-   canvas mode, sitting between the preview bar and the iframe. Deliberately
-   flex-shrink:0 (never squeezed) but never grows either — the iframe below
-   it keeps all the real estate ("the preview/canvas is the hero"). */
-body.arcade-shell .arcade-style-theme-rail { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-body.arcade-shell .arcade-style-theme-filter {
-  height: 24px; width: 130px; flex-shrink: 0; padding: 0 8px;
-  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
-  background: var(--arc-panel-2); color: var(--arc-ink);
-  font: 400 11px/1 var(--arc-font-ui);
-}
-body.arcade-shell .arcade-style-theme-rail-pills {
-  display: flex; align-items: center; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding: 2px 0;
-}
-body.arcade-shell .arcade-style-rail-pill {
-  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-  height: 24px; padding: 0 10px; border-radius: 999px;
-  border: 1px solid var(--arc-edge); background: var(--arc-panel-2);
-  color: var(--arc-muted); font: 500 11px/1 var(--arc-font-ui);
-  cursor: pointer; white-space: nowrap;
-}
-body.arcade-shell .arcade-style-rail-pill:hover { color: var(--arc-ink); border-color: var(--arc-info); }
-body.arcade-shell .arcade-style-rail-pill.is-active {
-  color: var(--arc-ink); border-color: var(--arc-info); background: rgba(53, 208, 255, 0.12);
-}
-/* v3 — honest capability chips, shared by the rail pills AND the preview
-   bar's "stylable" chip for the theme currently in the canvas. Never shown
-   without the source-verified boolean on THEME_PAGES (see the support-map
-   comment above that array in arcade-shell.js). */
+/* Honest capability chips (v3), shared by the Browse Looks modal's cards AND
+   the preview bar's "stylable" chip for the theme currently in the canvas.
+   Never shown without the source-verified boolean on THEME_PAGES (see the
+   support-map comment above that array in arcade-shell.js). */
 body.arcade-shell .arcade-style-theme-chip {
   display: inline-flex; align-items: center; height: 15px; padding: 0 6px;
   border-radius: 999px; font: 700 9px/1 var(--arc-font-ui); letter-spacing: 0.05em;
@@ -913,27 +906,16 @@ body.arcade-shell .arcade-style-theme-chip {
 }
 body.arcade-shell .arcade-style-theme-chip--stylable { background: rgba(53, 208, 255, 0.16); color: var(--arc-info); }
 body.arcade-shell .arcade-style-theme-chip--custom { background: rgba(247, 201, 72, 0.16); color: var(--arc-warning); }
-/* My Library (theme-library-spec.md §B) — "yours" chip on a rail pill,
-   deliberately off both the stylable/info and custom/warning hues so a
-   forked library entry always reads as visually distinct from Steve's
-   originals at a glance. --arc-flair is the house's own personalization
-   token elsewhere in this file. */
+/* My Library (theme-library-spec.md §B) — "yours" chip, deliberately off
+   both the stylable/info and custom/warning hues so a forked library entry
+   always reads as visually distinct from Steve's originals at a glance.
+   --arc-flair is the house's own personalization token elsewhere in this
+   file. v4 adds --preset (the mechanism chip for CSS-preset/forked-theme
+   cards in the Mine tab, scout §5.1) and --target (the Chat/Overlays/
+   Special category chip every theme/library card carries, spec §A.3). */
 body.arcade-shell .arcade-style-theme-chip--yours { background: rgba(255, 92, 203, 0.16); color: var(--arc-flair); }
-body.arcade-shell .arcade-style-rail-pill--library { border-color: rgba(255, 92, 203, 0.35); }
-body.arcade-shell .arcade-style-rail-pill--library:hover { border-color: var(--arc-flair); }
-body.arcade-shell .arcade-style-rail-pill--library.is-active {
-  color: var(--arc-ink); border-color: var(--arc-flair); background: rgba(255, 92, 203, 0.12);
-}
-/* Library pill = a wrapper around TWO siblings (preview button + delete
-   button) — see buildLibraryRailPill; Steve's plain pills have no wrapper. */
-body.arcade-shell .arcade-style-rail-pill-wrap { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
-/* Inline group labels inside the SAME horizontal scroller — never a new
-   row, so "MY LIBRARY" costs zero vertical sprawl (canvas-first law). */
-body.arcade-shell .arcade-style-rail-group-label {
-  flex-shrink: 0; padding: 0 2px; font: 700 9px/1 var(--arc-font-ui);
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--arc-faint);
-  white-space: nowrap;
-}
+body.arcade-shell .arcade-style-theme-chip--preset { background: rgba(155, 161, 173, 0.18); color: var(--arc-muted); }
+body.arcade-shell .arcade-style-theme-chip--target { background: rgba(255, 255, 255, 0.06); color: var(--arc-faint); }
 /* v3 — controls column now wraps STYLE_CONTROLS + the honest "no editor
    here" note (mutually exclusive, see updateStyleEditorAvailability). */
 body.arcade-shell .arcade-style-controls-col { display: flex; flex-direction: column; min-height: 0; }
@@ -952,30 +934,96 @@ body.arcade-shell .arcade-style #arcade-style-usercss {
 }
 
 /* --------------------------------------------------------------------------
-   Style Builder v1.1 — My Presets (part A) + Theme Pages strip (part B).
-   Additive on top of v1 above, same vocabulary (arcade-btn, arcade-pill,
-   arcade-k). focus-visible is already inherited from the .arcade-style
-   :focus-visible rule near the top of this file. Spec: pacsarcade
-   design-briefs/ssn-ui-overhaul/style-builder-v1.1-spec.md
+   Style Builder v4 — Browse Looks modal (style-builder-v4-spec.md §A,
+   style-tab-v4-scout.md §5.1, IA Option A). REPLACES v1.1's PRESETS/MY
+   PRESETS rows and v3's DOCK|THEMES rail entirely — one preset destination,
+   reached via the panel head's "Browse looks…" button, never chrome sitting
+   above the canvas. Same overlay-pattern discipline as the shell's other
+   pops (backdrop, Escape, × all close it); focus-trapped while open.
+   Card-building classes reuse v1.1's .arcade-style-preset-apply/-del and
+   .arcade-style-mypreset-name (still styled below) so the confirm-arm tokens
+   (danger for delete, warning for the Custom-CSS-replace arm) stay
+   byte-identical to before, just hosted on a bigger card instead of a pill.
    -------------------------------------------------------------------------- */
-body.arcade-shell .arcade-style-mypresets { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-body.arcade-shell .arcade-style-mypresets .arcade-k {
-  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
+body.arcade-shell .arcade-browse-modal {
+  position: fixed; inset: 0; z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
 }
-body.arcade-shell .arcade-style-mypresets-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-body.arcade-shell .arcade-style-mypresets-empty { font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-faint); }
-
-body.arcade-shell .arcade-style-preset-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 4px 3px 10px;
-  border-radius: 999px; border: 1px solid var(--arc-edge);
+body.arcade-shell .arcade-browse-backdrop {
+  position: absolute; inset: 0; background: rgba(10, 11, 13, 0.72);
+}
+body.arcade-shell .arcade-browse-dialog {
+  position: relative; z-index: 1;
+  width: min(880px, 92vw); height: min(640px, 86vh);
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--arc-panel); border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 16px;
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-browse-head { display: flex; align-items: center; gap: 10px; }
+body.arcade-shell .arcade-browse-title {
+  font: 700 14px/1 var(--arc-font-ui); color: var(--arc-ink); flex-shrink: 0;
+}
+body.arcade-shell .arcade-browse-search {
+  flex: 1; min-width: 0; height: 28px; padding: 0 10px;
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  font: 400 12px/1 var(--arc-font-ui);
+}
+body.arcade-shell .arcade-browse-grid {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px;
+  align-content: start; padding-right: 2px;
+}
+body.arcade-shell .arcade-browse-group-label {
+  grid-column: 1 / -1; padding: 6px 2px 0;
+  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--arc-faint);
+}
+body.arcade-shell .arcade-browse-group-label:first-child { padding-top: 0; }
+body.arcade-shell .arcade-browse-empty { grid-column: 1 / -1; padding: 2px; }
+/* text/chip cards this pass — NO thumbnails (spec §A.3: a flagged follow-up,
+   don't fake them). Card = one hit-target (name + chip row) plus an optional
+   actions row (Copy URL / delete) that sits OUTSIDE the hit target so a
+   click there never also triggers preview/apply. */
+body.arcade-shell .arcade-browse-card,
+body.arcade-shell button.arcade-browse-card {
+  display: flex; flex-direction: column; gap: 6px; box-sizing: border-box;
+  padding: 10px; border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
   background: var(--arc-panel-2);
 }
-body.arcade-shell .arcade-style-preset-apply {
-  border: 0; background: none; padding: 0; margin: 0;
-  color: var(--arc-ink); font: 600 11px/1 var(--arc-font-ui); cursor: pointer;
-  white-space: nowrap;
+/* Stock preset cards ARE the button (buildBrowseStockPresetCard) — reset its
+   native button chrome (font/text-align/width) while keeping the box look
+   above. My Preset/theme/library cards wrap a separate `.arcade-browse-
+   card__hit` button alongside a sibling actions row instead, so a click on
+   Copy URL/delete never also triggers preview/apply — that inner button
+   gets the SAME reset, but no box of its own (the ancestor card supplies
+   it). */
+body.arcade-shell button.arcade-browse-card,
+body.arcade-shell .arcade-browse-card__hit {
+  font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%;
 }
+body.arcade-shell .arcade-browse-card__hit { border: 0; background: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+body.arcade-shell .arcade-browse-card.is-active,
+body.arcade-shell button.arcade-browse-card.is-active { border-color: var(--arc-info); background: rgba(53, 208, 255, 0.08); }
+body.arcade-shell .arcade-browse-card--library.is-active { border-color: var(--arc-flair); background: rgba(255, 92, 203, 0.08); }
+body.arcade-shell button.arcade-browse-card:hover,
+body.arcade-shell .arcade-browse-card:hover { border-color: var(--arc-info); }
+body.arcade-shell .arcade-browse-card__name {
+  font: 600 12px/1.3 var(--arc-font-ui); color: var(--arc-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.arcade-shell .arcade-browse-card__chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+body.arcade-shell .arcade-browse-card__actions { display: flex; align-items: center; gap: 6px; }
+body.arcade-shell .arcade-browse-card__actions .arcade-btn { flex: 1; }
+body.arcade-shell .arcade-browse-saverow {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding: 4px 2px 2px;
+}
+body.arcade-shell .arcade-browse-saverow .arcade-style-mypreset-name { flex: 1; min-width: 0; }
+
+body.arcade-shell .arcade-style-mypresets-empty { font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-faint); }
+/* Apply hit-target (stock/My Preset cards) and delete (My Preset/My Library
+   cards) — same tokens v1.1 used on the old pill's apply/delete pair. */
 body.arcade-shell .arcade-style-preset-apply:hover { color: var(--arc-info); }
 /* armed-for-delete (second click confirms) — danger token, matches
    .arcade-btn--danger's semantic use elsewhere in this file. v3's theme
@@ -992,29 +1040,9 @@ body.arcade-shell #arcade-style-preview-clear-override.is-confirm {
 body.arcade-shell .arcade-style-preset-apply.is-confirm {
   color: var(--arc-warning); text-decoration: underline dotted;
 }
-
-body.arcade-shell .arcade-style-mypresets-save { display: flex; align-items: center; gap: 6px; }
 body.arcade-shell .arcade-style-mypreset-name {
-  height: 26px; width: 180px; padding: 0 8px;
+  height: 26px; padding: 0 8px;
   border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
   background: var(--arc-panel-2); color: var(--arc-ink);
   font: 400 11px/1 var(--arc-font-ui);
 }
-
-/* theme-library-spec.md §B — My Library save row. Same row shape as
-   .arcade-style-mypresets above (reuses .arcade-style-mypresets-save /
-   .arcade-style-mypreset-name for the input+button pair); only shown while
-   previewing a stylable theme (syncCanvasModeUI), hidden the rest of the
-   time — hidden attribute wins over this flex display. */
-body.arcade-shell .arcade-style-mylibrary-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-body.arcade-shell .arcade-style-mylibrary-save[hidden] { display: none; }
-body.arcade-shell .arcade-style-mylibrary-save .arcade-k {
-  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
-}
-body.arcade-shell .arcade-style-mylibrary-save .arcade-style-hint { color: var(--arc-faint); }
-
-/* v3 (0018.05.26, Pac live-testing amendment): the v1.1 bottom collapsible
-   THEME PAGES strip (.arcade-style-themes*/.arcade-style-theme-pill*) is
-   REMOVED — theme browsing now integrates into the preview surface itself
-   (see .arcade-style-theme-rail / .arcade-style-rail-pill above, and the
-   DOCK|THEMES seg in .arcade-style-preview-bar). "Canvas is the hero." */

@@ -1690,6 +1690,14 @@
     // 0018.05.25 scout), NOT dock skins: browse+copy only, never applied by
     // the Style controls above.
     //
+    // v4 CORRECTION (style-tab-v4-scout.md §3, 2026-08-18): the disk actually
+    // has 42 theme .html files, not 41 — `find … -name "*.html" | wc -l` = 42,
+    // re-verified directly. The 41-count above (and everywhere else in this
+    // file's older comments) missed `events/index.html`, a moderator
+    // dashboard (filtered feed of donation/sub/event notices, not a chat/
+    // overlay look) folded into `target: 'special'` below. Every "41" left in
+    // surrounding comments is now stale prose, not live count — read 42.
+    //
     // v3 SUPPORT MAP (0018.05.26, style-builder-v3-theme-preview-spec.md
     // §A.3) — `cssb64`/`seedable` are SOURCE-VERIFIED booleans, not guesses.
     // Method: every one of the 41 files was grepped directly (case-
@@ -1707,7 +1715,8 @@
     // BUILT an outbound b64css param for the dock.html iframe it embeds
     // internally — pretty.html did not read a cssb64/b64css param from ITS
     // OWN url, so it did not qualify (an external override into pretty.html
-    // itself had nowhere to land).
+    // itself had nowhere to land). events/index.html (added v4) was grepped
+    // the same way — zero hits on both patterns, cssb64:false/seedable:false.
     //
     // CURATED-8 CSS UNLOCK (0018.05.28, theme-library-spec.md §A) — 8 of the
     // 41 pages above now carry a hand-inserted port of featured.html's own
@@ -1739,49 +1748,60 @@
     // so it does not count as seedable either). Booleans are read by the UI
     // to gate the "stylable" chip, the Preview-pane editor, and the honest
     // preview hint — never guessed, never claimed without this evidence.
+    //
+    // `target` (v4, style-tab-v4-scout.md §3) — 'chat' | 'overlay' | 'special',
+    // source-classified by reading each page's own ingest signature
+    // (addMessageToOverlay/processInput = chat-dock; processData+show/hide
+    // cycle = single-message OBS overlay; neither, a filtered notice-only
+    // feed = special). Powers the Browse Looks modal's category filter
+    // (part A) — one data source, no Style-tab-only shape, so a future
+    // elements+games unified grid (round-5 item #34) can reuse it unchanged.
     var THEME_PAGES = [
-        { name: 'Compact Classic', file: 'compact-classic.html', cssb64: false, seedable: false },
-        { name: 'Compact Clean', file: 'compact-clean.html', cssb64: true, seedable: false },
-        { name: 'Compact Glass', file: 'compact-glass.html', cssb64: true, seedable: false },
-        { name: 'Horizontal', file: 'horizontal.html', cssb64: true, seedable: false },
-        { name: 'No Timeout Messages', file: 'notimeoutmessages.html', cssb64: false, seedable: false },
-        { name: 'Bubbles', file: 'overlay-bubbles.html', cssb64: true, seedable: false },
-        { name: 'Cards', file: 'overlay-cards.html', cssb64: true, seedable: false },
-        { name: 'Comic Classic', file: 'overlay-comic-classic.html', cssb64: false, seedable: false },
-        { name: 'Comic Pop', file: 'overlay-comic-pop.html', cssb64: false, seedable: false },
-        { name: 'Credits', file: 'overlay-credits.html', cssb64: false, seedable: false },
-        { name: 'Danmaku', file: 'overlay-danmaku.html', cssb64: false, seedable: false },
-        { name: 'Neon Cyberpunk', file: 'overlay-neon-cyberpunk.html', cssb64: true, seedable: false },
-        { name: 'Particles', file: 'overlay-particles.html', cssb64: false, seedable: false },
-        { name: 'Ticker News', file: 'overlay-ticker-news.html', cssb64: false, seedable: false },
-        { name: 'Typewriter', file: 'overlay-typewriter.html', cssb64: false, seedable: false },
-        { name: 'X-acception', file: 'overlay-xacception.html', cssb64: false, seedable: false },
-        { name: 'Pretty', file: 'pretty.html', cssb64: true, seedable: false },
-        { name: 'Sample Overlay (Reverse)', file: 'sampleoverlay_reverse.html', cssb64: false, seedable: false },
-        { name: 'Spirit Overlay', file: 'spiritoverlay.html', cssb64: false, seedable: false },
-        { name: 'Featured — 3D', file: 'featured-styles/featured-3d.html', cssb64: false, seedable: false },
-        { name: 'Featured — Animated', file: 'featured-styles/featured-animated.html', cssb64: false, seedable: false },
-        { name: 'Featured — Cyberpunk', file: 'featured-styles/featured-cyberpunk.html', cssb64: false, seedable: false },
-        { name: 'Featured — Dynamic', file: 'featured-styles/featured-dynamic.html', cssb64: false, seedable: false },
-        { name: 'Featured — Elegant', file: 'featured-styles/featured-elegant.html', cssb64: false, seedable: false },
-        { name: 'Featured — Gaming', file: 'featured-styles/featured-gaming.html', cssb64: false, seedable: false },
-        { name: 'Featured — Glass', file: 'featured-styles/featured-glass.html', cssb64: false, seedable: false },
-        { name: 'Featured — Gradient', file: 'featured-styles/featured-gradient.html', cssb64: false, seedable: false },
-        { name: 'Featured — Modern', file: 'featured-styles/featured-modern.html', cssb64: false, seedable: false },
-        { name: 'Featured — Neon', file: 'featured-styles/featured-neon.html', cssb64: false, seedable: false },
-        { name: 'Featured — Particles', file: 'featured-styles/featured-particles.html', cssb64: false, seedable: false },
-        { name: 'Featured — Retro', file: 'featured-styles/featured-retro.html', cssb64: false, seedable: false },
-        { name: 'Featured — Slide', file: 'featured-styles/featured-slide.html', cssb64: false, seedable: false },
-        { name: 'Neutron — Chat Only', file: 'Neutron/chatOnly.html', cssb64: true, seedable: false },
-        { name: 'Neutron — Stream', file: 'Neutron/stream.html', cssb64: false, seedable: false },
-        { name: 'Deuks Overlay 1', file: 'deuks_overlay/overlay1.html', cssb64: false, seedable: false },
-        { name: 'Deuks Overlay 2', file: 'deuks_overlay/overlay2.html', cssb64: false, seedable: false },
-        { name: 'Huan-Kiara', file: 'huan-kiara/index.html', cssb64: false, seedable: false },
-        { name: 'LuckyLootTube', file: 'LuckyLootTube/luckyloottube.html', cssb64: false, seedable: false },
-        { name: 'Rainbow Puke', file: 'rainbowpuke/index.html', cssb64: false, seedable: false },
-        { name: 't3nk3y', file: 't3nk3y/index.html', cssb64: false, seedable: false },
-        { name: 'Windows 3.1', file: 'Windows3.1/index.html', cssb64: false, seedable: false }
+        { name: 'Compact Classic', file: 'compact-classic.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Compact Clean', file: 'compact-clean.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Compact Glass', file: 'compact-glass.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Horizontal', file: 'horizontal.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'No Timeout Messages', file: 'notimeoutmessages.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Bubbles', file: 'overlay-bubbles.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Cards', file: 'overlay-cards.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Comic Classic', file: 'overlay-comic-classic.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Comic Pop', file: 'overlay-comic-pop.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Credits', file: 'overlay-credits.html', cssb64: false, seedable: false, target: 'special' },
+        { name: 'Danmaku', file: 'overlay-danmaku.html', cssb64: false, seedable: false, target: 'special' },
+        { name: 'Neon Cyberpunk', file: 'overlay-neon-cyberpunk.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Particles', file: 'overlay-particles.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Ticker News', file: 'overlay-ticker-news.html', cssb64: false, seedable: false, target: 'special' },
+        { name: 'Typewriter', file: 'overlay-typewriter.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'X-acception', file: 'overlay-xacception.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Pretty', file: 'pretty.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Sample Overlay (Reverse)', file: 'sampleoverlay_reverse.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Spirit Overlay', file: 'spiritoverlay.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Featured — 3D', file: 'featured-styles/featured-3d.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Animated', file: 'featured-styles/featured-animated.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Cyberpunk', file: 'featured-styles/featured-cyberpunk.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Dynamic', file: 'featured-styles/featured-dynamic.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Elegant', file: 'featured-styles/featured-elegant.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Gaming', file: 'featured-styles/featured-gaming.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Glass', file: 'featured-styles/featured-glass.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Gradient', file: 'featured-styles/featured-gradient.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Modern', file: 'featured-styles/featured-modern.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Neon', file: 'featured-styles/featured-neon.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Particles', file: 'featured-styles/featured-particles.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Retro', file: 'featured-styles/featured-retro.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Featured — Slide', file: 'featured-styles/featured-slide.html', cssb64: false, seedable: false, target: 'overlay' },
+        { name: 'Neutron — Chat Only', file: 'Neutron/chatOnly.html', cssb64: true, seedable: false, target: 'chat' },
+        { name: 'Neutron — Stream', file: 'Neutron/stream.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Deuks Overlay 1', file: 'deuks_overlay/overlay1.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Deuks Overlay 2', file: 'deuks_overlay/overlay2.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Huan-Kiara', file: 'huan-kiara/index.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'LuckyLootTube', file: 'LuckyLootTube/luckyloottube.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Rainbow Puke', file: 'rainbowpuke/index.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 't3nk3y', file: 't3nk3y/index.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Windows 3.1', file: 'Windows3.1/index.html', cssb64: false, seedable: false, target: 'chat' },
+        { name: 'Events Dashboard', file: 'events/index.html', cssb64: false, seedable: false, target: 'special' }
     ];
+
+    var THEME_TARGET_LABEL = { chat: 'CHAT', overlay: 'OVERLAY', special: 'SPECIAL' };
 
     function styleControlById(id) {
         for (var i = 0; i < STYLE_CONTROLS.length; i++) {
@@ -1801,10 +1821,17 @@
 
     // Managed blob: marker + control-state JSON (for round-trip restore) +
     // generated :root vars + selector overrides + the user's own CSS verbatim.
-    function buildStyleCss() {
+    // v4: accepts an optional (state, userCss) pair so the Browse Looks
+    // modal's per-card Copy URL (buildBrowseLibraryCard) can compile a NON-
+    // active My Library entry's SAVED data without touching the live
+    // styleState/styleUserCss scratch — every existing call site calls this
+    // with no args and keeps reading the globals, unchanged.
+    function buildStyleCss(stateArg, userCssArg) {
+        var state = stateArg || styleState;
+        var userCss = userCssArg !== undefined ? userCssArg : styleUserCss;
         var lines = [];
-        Object.keys(styleState).forEach(function (id) {
-            var value = styleState[id];
+        Object.keys(state).forEach(function (id) {
+            var value = state[id];
             if (value === '' || value == null || value === false) return;
             if (id === 'transparent' || id === 'avatar') return; // handled below
             var ctl = styleControlById(id);
@@ -1815,15 +1842,15 @@
             var unit = ctl.unit || '';
             ctl.vars.forEach(function (v) { lines.push('  ' + v + ': ' + value + unit + ' !important;'); });
         });
-        if (styleState.transparent) lines.push('  --background-color: #0000 !important;'); // last → wins over bg
+        if (state.transparent) lines.push('  --background-color: #0000 !important;'); // last → wins over bg
         var css = '';
         if (lines.length) css += ':root {\n' + lines.join('\n') + '\n}\n';
-        if (styleState.avatar) {
-            css += '.hl-profile-pic { width: ' + styleState.avatar + 'px !important; height: ' + styleState.avatar + 'px !important; }\n';
+        if (state.avatar) {
+            css += '.hl-profile-pic { width: ' + state.avatar + 'px !important; height: ' + state.avatar + 'px !important; }\n';
         }
-        var stateJson = JSON.stringify(styleState).replace(/\*\//g, '*\\/');
+        var stateJson = JSON.stringify(state).replace(/\*\//g, '*\\/');
         var out = STYLE_MARKER + '\nstate:' + stateJson + '\n*/\n' + css;
-        if (styleUserCss) out += STYLE_USER_MARK + '\n' + styleUserCss;
+        if (userCss) out += STYLE_USER_MARK + '\n' + userCss;
         return out;
     }
 
@@ -1845,6 +1872,15 @@
         return encodeURIComponent(btoa(encodeURIComponent(cssText)));
     }
 
+    // --------------------------------------------------------------------
+    // Style v4 (style-builder-v4-spec.md) — Browse Looks consolidation +
+    // panel density. IA Option A (style-tab-v4-scout.md §5.1): the stock
+    // PRESETS row, MY PRESETS section, and the DOCK|THEMES rail + seg are
+    // REMOVED from the always-visible panel — their FUNCTIONALITY moves,
+    // nothing lost — into one modal opened by a single "Browse looks…"
+    // button in the panel head. The PROFILE seg stays put (a mode, not a
+    // preset — spec §B.2). Canvas gets every pixel that chrome used to cost.
+    // --------------------------------------------------------------------
     function buildStylePanel() {
         var panel = document.createElement('section');
         panel.className = 'arcade-style';
@@ -1854,6 +1890,7 @@
             '<span class="arcade-panel-title">STYLE — CHAT DOCK</span>' +
             '<span class="arcade-spacer"></span>' +
             '<span class="arcade-style-status" id="arcade-style-status"></span>' +
+            '<button type="button" class="arcade-btn" id="arcade-style-browse-btn">Browse looks…</button>' +
             '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-style-save">Save style</button>' +
             '</div>' +
             '<div class="arcade-style-body">' +
@@ -1864,23 +1901,6 @@
             '<button type="button" data-arcade-style-profile="dock" aria-pressed="false">DOCK (APP)</button>' +
             '</div>' +
             '<span class="arcade-style-hint">STREAM WIDGET = the OBS-copied dock URL · DOCK (APP) = this app\'s own embedded chat view — independent saved styles</span>' +
-            '</div>' +
-            '<div class="arcade-style-presets" id="arcade-style-presets"><span class="arcade-k">PRESETS</span></div>' +
-            '<div class="arcade-style-mypresets" id="arcade-style-mypresets">' +
-            '<span class="arcade-k">MY PRESETS</span>' +
-            '<div class="arcade-style-mypresets-pills" id="arcade-style-mypresets-pills"></div>' +
-            '<div class="arcade-style-mypresets-save">' +
-            '<input type="text" id="arcade-style-mypreset-name" class="arcade-style-mypreset-name" placeholder="Save current as…" maxlength="40">' +
-            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mypreset-save">Save</button>' +
-            '</div>' +
-            '</div>' +
-            '<div class="arcade-style-mylibrary-save" id="arcade-style-mylibrary-save" hidden>' +
-            '<span class="arcade-k">MY LIBRARY</span>' +
-            '<span class="arcade-style-hint">Steve\'s theme is a starting point — save your edits as your own, forkable copy (separate from this theme\'s default override).</span>' +
-            '<div class="arcade-style-mypresets-save">' +
-            '<input type="text" id="arcade-style-mylibrary-name" class="arcade-style-mypreset-name" placeholder="Save to My Library…" maxlength="40">' +
-            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mylibrary-save-btn">Save</button>' +
-            '</div>' +
             '</div>' +
             '<div class="arcade-style-cols">' +
             '<div class="arcade-style-controls-col">' +
@@ -1895,15 +1915,8 @@
             '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon" id="arcade-style-preview-clear-override" hidden title="Clear this theme\'s customization">×</button>' +
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-preview-copy" hidden>Copy URL</button>' +
             '<span class="arcade-style-preview-profile" id="arcade-style-preview-profile"></span>' +
-            '<div class="arcade-seg arcade-seg--sm" role="group" aria-label="Preview canvas" id="arcade-style-canvas-mode-seg">' +
-            '<button type="button" class="is-on" data-arcade-canvas-mode="dock" aria-pressed="true">DOCK</button>' +
-            '<button type="button" data-arcade-canvas-mode="theme" aria-pressed="false">THEMES</button>' +
-            '</div>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-back-dock" hidden>← Back to dock</button>' +
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-reload">Reload preview</button>' +
-            '</div>' +
-            '<div class="arcade-style-theme-rail" id="arcade-style-theme-rail" hidden>' +
-            '<input type="text" id="arcade-style-theme-filter" class="arcade-style-theme-filter" placeholder="Filter 41 themes…" maxlength="40">' +
-            '<div class="arcade-style-theme-rail-pills" id="arcade-style-theme-rail-pills"></div>' +
             '</div>' +
             '<iframe id="arcade-style-preview-frame" title="Chat dock style preview"></iframe>' +
             '</div>' +
@@ -1913,16 +1926,13 @@
             '<textarea id="arcade-style-usercss" spellcheck="false" rows="4"></textarea>' +
             '</div>';
         document.body.appendChild(panel);
-        renderStylePresets(panel);
+        buildBrowseModal();
         renderStyleControls(panel);
-        renderMyPresetsSection(panel);
-        renderMyLibrarySaveRow(panel);
-        renderThemeRail(panel);
-        initThemeRailFilter(panel);
         initThemePreviewBarActions(panel);
         initStyleProfileSeg(panel);
-        initCanvasModeSeg(panel);
+        initBackToDockButton(panel);
         syncCanvasModeUI();
+        panel.querySelector('#arcade-style-browse-btn').addEventListener('click', openBrowseModal);
         panel.querySelector('#arcade-style-save').addEventListener('click', saveStyleBlob);
         panel.querySelector('#arcade-style-reload').addEventListener('click', function () {
             if (activePreviewMode === 'theme' && activeThemeEntry) loadThemePreviewFrame(activeThemeEntry);
@@ -1932,6 +1942,12 @@
             styleUserCss = e.target.value;
             queueStylePreviewRefresh();
         });
+    }
+
+    function initBackToDockButton(panel) {
+        var btn = panel.querySelector('#arcade-style-back-dock');
+        if (!btn) return;
+        btn.addEventListener('click', backToDockPreview);
     }
 
     function initStyleProfileSeg(panel) {
@@ -1966,20 +1982,383 @@
         }
     }
 
-    function renderStylePresets(panel) {
-        var host = panel.querySelector('#arcade-style-presets');
-        STYLE_PRESETS.forEach(function (preset) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'arcade-btn arcade-btn--sm';
-            btn.textContent = preset.name;
-            btn.addEventListener('click', function () {
-                styleState = JSON.parse(JSON.stringify(preset.state)); // presets fill the CONTROLS, not opaque css
-                syncStyleControlsFromState();
-                queueStylePreviewRefresh();
+    // --------------------------------------------------------------------
+    // Style v4 — Browse Looks modal (style-builder-v4-spec.md §A,
+    // style-tab-v4-scout.md §5.1, IA Option A). ONE preset destination:
+    // stock PRESETS + MY PRESETS + the old THEMES rail (which itself grouped
+    // MY LIBRARY + Steve's templates) all collapse into this one modal, with
+    // a Chat/Overlays/Special/Mine filter over a text/chip card grid — NO
+    // thumbnails this pass (spec §A.3: a flagged follow-up, don't fake it).
+    // Every v1.1/v3 behavior is relocated verbatim where possible: applying a
+    // stock or My Preset still just fills styleState/styleUserCss and rides
+    // the existing sync/preview path; clicking a theme/library card still
+    // calls previewThemePage/previewLibraryEntry unchanged; Save-current-as
+    // (both My Presets and My Library) still calls the same save functions
+    // below with the same conflict/cap/fire-and-honestly-confirm behavior.
+    // Same overlay-pattern discipline as the shell's other pops: Escape,
+    // backdrop click, and the × button all close it; focus is trapped inside
+    // the dialog while open and restored to the trigger button on close.
+    // --------------------------------------------------------------------
+    var browseModalOpen = false;
+    var browseFilter = 'chat';
+    var browseModalTriggerEl = null;
+
+    function buildBrowseModal() {
+        var modal = document.createElement('div');
+        modal.className = 'arcade-browse-modal';
+        modal.id = 'arcade-browse-modal';
+        modal.hidden = true;
+        modal.innerHTML =
+            '<div class="arcade-browse-backdrop"></div>' +
+            '<div class="arcade-browse-dialog" role="dialog" aria-modal="true" aria-labelledby="arcade-browse-title">' +
+            '<div class="arcade-browse-head">' +
+            '<span class="arcade-browse-title" id="arcade-browse-title">Browse looks</span>' +
+            '<input type="text" id="arcade-browse-search" class="arcade-browse-search" placeholder="Filter by name…" maxlength="40">' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon" id="arcade-browse-close" aria-label="Close">×</button>' +
+            '</div>' +
+            '<div class="arcade-seg" role="group" aria-label="Look category" id="arcade-browse-filter-seg">' +
+            '<button type="button" class="is-on" data-arcade-browse-filter="chat" aria-pressed="true">Chat</button>' +
+            '<button type="button" data-arcade-browse-filter="overlay" aria-pressed="false">Overlays</button>' +
+            '<button type="button" data-arcade-browse-filter="special" aria-pressed="false">Special</button>' +
+            '<button type="button" data-arcade-browse-filter="mine" aria-pressed="false">Mine</button>' +
+            '</div>' +
+            '<div class="arcade-browse-grid" id="arcade-browse-grid"></div>' +
+            '</div>';
+        document.body.appendChild(modal);
+        modal.querySelector('.arcade-browse-backdrop').addEventListener('click', closeBrowseModal);
+        modal.querySelector('#arcade-browse-close').addEventListener('click', closeBrowseModal);
+        modal.querySelector('#arcade-browse-search').addEventListener('input', renderBrowseGrid);
+        var seg = modal.querySelector('#arcade-browse-filter-seg');
+        seg.addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-arcade-browse-filter]');
+            if (!btn || !seg.contains(btn)) return;
+            browseFilter = btn.dataset.arcadeBrowseFilter;
+            seg.querySelectorAll('button').forEach(function (b) {
+                var on = b === btn;
+                b.classList.toggle('is-on', on);
+                b.setAttribute('aria-pressed', String(on));
             });
-            host.appendChild(btn);
+            var search = document.getElementById('arcade-browse-search');
+            if (search) search.value = '';
+            renderBrowseGrid();
         });
+        renderBrowseFilterCounts();
+    }
+
+    function renderBrowseFilterCounts() {
+        var seg = document.getElementById('arcade-browse-filter-seg');
+        if (!seg) return;
+        var counts = { chat: 0, overlay: 0, special: 0 };
+        THEME_PAGES.forEach(function (e) { if (counts.hasOwnProperty(e.target)) counts[e.target]++; });
+        var mine = STYLE_PRESETS.length + myStylePresets.length + myThemeLibrary.length;
+        var labels = { chat: 'Chat', overlay: 'Overlays', special: 'Special', mine: 'Mine' };
+        seg.querySelectorAll('button[data-arcade-browse-filter]').forEach(function (b) {
+            var key = b.dataset.arcadeBrowseFilter;
+            var n = key === 'mine' ? mine : counts[key];
+            b.textContent = labels[key] + ' (' + n + ')';
+        });
+    }
+
+    function trapFocus(container, e) {
+        var sel = 'button:not([hidden]):not([disabled]), [href], input:not([hidden]):not([disabled]), ' +
+            'select:not([hidden]), textarea:not([hidden]), [tabindex]:not([tabindex="-1"])';
+        var focusables = container.querySelectorAll(sel);
+        if (!focusables.length) return;
+        var first = focusables[0], last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    function onBrowseModalKeydown(e) {
+        var modal = document.getElementById('arcade-browse-modal');
+        if (!modal || modal.hidden) return;
+        if (e.key === 'Escape') { e.preventDefault(); closeBrowseModal(); return; }
+        if (e.key === 'Tab') {
+            var dialog = modal.querySelector('.arcade-browse-dialog');
+            if (dialog) trapFocus(dialog, e);
+        }
+    }
+
+    function openBrowseModal() {
+        var modal = document.getElementById('arcade-browse-modal');
+        if (!modal) return;
+        browseModalTriggerEl = document.activeElement;
+        modal.hidden = false;
+        browseModalOpen = true;
+        renderBrowseFilterCounts();
+        renderBrowseGrid();
+        document.addEventListener('keydown', onBrowseModalKeydown, true);
+        var closeBtn = document.getElementById('arcade-browse-close');
+        if (closeBtn) closeBtn.focus();
+    }
+
+    function closeBrowseModal() {
+        var modal = document.getElementById('arcade-browse-modal');
+        if (!modal || modal.hidden) return;
+        modal.hidden = true;
+        browseModalOpen = false;
+        document.removeEventListener('keydown', onBrowseModalKeydown, true);
+        if (browseModalTriggerEl && typeof browseModalTriggerEl.focus === 'function') browseModalTriggerEl.focus();
+        browseModalTriggerEl = null;
+    }
+
+    function renderBrowseGrid() {
+        var grid = document.getElementById('arcade-browse-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        var q = ((document.getElementById('arcade-browse-search') || {}).value || '').trim().toLowerCase();
+        function matches(name) { return !q || String(name).toLowerCase().indexOf(q) !== -1; }
+
+        if (browseFilter === 'mine') { renderBrowseMineTab(grid, matches, q); return; }
+
+        var entries = THEME_PAGES.filter(function (e) { return e.target === browseFilter && matches(e.name); });
+        if (!entries.length) {
+            grid.appendChild(buildBrowseEmpty(q ? 'No looks match "' + q + '"' : 'No looks in this category'));
+            return;
+        }
+        entries.forEach(function (entry) { grid.appendChild(buildBrowseThemeCard(entry)); });
+    }
+
+    function renderBrowseMineTab(grid, matches, q) {
+        resetPendingDelete();
+        resetPendingApply();
+        resetPendingLibraryDelete();
+
+        var stockMatches = STYLE_PRESETS.filter(function (p) { return matches(p.name); });
+        if (stockMatches.length) {
+            grid.appendChild(buildBrowseGroupLabel('STOCK PRESETS'));
+            stockMatches.forEach(function (p) { grid.appendChild(buildBrowseStockPresetCard(p)); });
+        }
+
+        grid.appendChild(buildBrowseGroupLabel('MY PRESETS'));
+        var mpMatches = myStylePresets.filter(function (p) { return matches(p.name); });
+        if (mpMatches.length) mpMatches.forEach(function (p) { grid.appendChild(buildBrowseMyPresetCard(p)); });
+        else if (!q) grid.appendChild(buildBrowseEmpty('No saved presets yet'));
+        grid.appendChild(buildBrowseSaveRow('Save current as…', 'arcade-browse-mypreset-name', function (name) { saveCurrentAsMyPreset(name); }, ''));
+
+        grid.appendChild(buildBrowseGroupLabel('MY LIBRARY'));
+        var libMatches = myThemeLibrary.filter(function (e) { return matches(e.name); });
+        if (libMatches.length) libMatches.forEach(function (e) { grid.appendChild(buildBrowseLibraryCard(e)); });
+        else if (!q) grid.appendChild(buildBrowseEmpty('No library entries yet'));
+        var themeStylable = activePreviewMode === 'theme' && !!(activeThemeEntry && activeThemeEntry.cssb64);
+        if (themeStylable) {
+            grid.appendChild(buildBrowseSaveRow('Save to My Library…', 'arcade-browse-mylibrary-name', function (name) { saveCurrentToMyLibrary(name); }, activeLibraryEntry ? activeLibraryEntry.name : ''));
+        }
+    }
+
+    function buildBrowseGroupLabel(text) {
+        var label = document.createElement('div');
+        label.className = 'arcade-browse-group-label';
+        label.textContent = text;
+        return label;
+    }
+
+    function buildBrowseEmpty(text) {
+        var empty = document.createElement('div');
+        empty.className = 'arcade-style-mypresets-empty arcade-browse-empty';
+        empty.textContent = text;
+        return empty;
+    }
+
+    function buildBrowseSaveRow(placeholder, id, onSave, prefill) {
+        var row = document.createElement('div');
+        row.className = 'arcade-browse-saverow';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.id = id;
+        input.className = 'arcade-style-mypreset-name';
+        input.placeholder = placeholder;
+        input.maxLength = 40;
+        if (prefill) input.value = prefill;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm';
+        btn.textContent = 'Save';
+        function doSave() { onSave(input.value); }
+        btn.addEventListener('click', doSave);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSave(); } });
+        row.appendChild(input);
+        row.appendChild(btn);
+        return row;
+    }
+
+    function switchToDockModeForModalApply() {
+        if (activePreviewMode !== 'theme') return;
+        backToDockPreview();
+    }
+
+    function buildBrowseStockPresetCard(preset) {
+        var card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'arcade-browse-card arcade-browse-card--preset';
+        var name = document.createElement('span');
+        name.className = 'arcade-browse-card__name';
+        name.textContent = preset.name;
+        card.appendChild(name);
+        var chip = document.createElement('span');
+        chip.className = 'arcade-style-theme-chip arcade-style-theme-chip--preset';
+        chip.textContent = 'CSS PRESET';
+        card.appendChild(chip);
+        card.title = 'Apply "' + preset.name + '"';
+        card.addEventListener('click', function () {
+            switchToDockModeForModalApply();
+            styleState = JSON.parse(JSON.stringify(preset.state)); // presets fill the CONTROLS, not opaque css
+            syncStyleControlsFromState();
+            queueStylePreviewRefresh();
+            closeBrowseModal();
+        });
+        return card;
+    }
+
+    function buildBrowseMyPresetCard(preset) {
+        var card = document.createElement('div');
+        card.className = 'arcade-browse-card arcade-browse-card--preset';
+        var hit = document.createElement('button');
+        hit.type = 'button';
+        // arcade-style-preset-apply is kept alongside the card-hit class
+        // purely so applyMyPreset()'s is-confirm arm (the "click again to
+        // also replace your Custom CSS" state) keeps its existing warning-
+        // amber styling — same token, same selector, new host element.
+        hit.className = 'arcade-browse-card__hit arcade-style-preset-apply';
+        var name = document.createElement('span');
+        name.className = 'arcade-browse-card__name';
+        name.textContent = preset.name;
+        hit.appendChild(name);
+        var chip = document.createElement('span');
+        chip.className = 'arcade-style-theme-chip arcade-style-theme-chip--preset';
+        chip.textContent = 'CSS PRESET';
+        hit.appendChild(chip);
+        hit.title = 'Apply "' + preset.name + '"';
+        hit.addEventListener('click', function () {
+            switchToDockModeForModalApply();
+            applyMyPreset(preset, hit);
+            if (pendingApplyId !== preset.id) closeBrowseModal(); // stays open only while the Custom-CSS conflict arm is live
+        });
+        card.appendChild(hit);
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-preset-del';
+        del.title = 'Delete "' + preset.name + '"';
+        del.setAttribute('aria-label', 'Delete ' + preset.name);
+        del.textContent = '×';
+        del.addEventListener('click', function (e) { e.stopPropagation(); armPresetDelete(preset.id, preset.name, del); });
+        card.appendChild(del);
+        return card;
+    }
+
+    function buildBrowseThemeCard(entry) {
+        var slug = themeSlug(entry);
+        var card = document.createElement('div');
+        card.className = 'arcade-browse-card arcade-browse-card--theme';
+        card.dataset.themeSlug = slug;
+        card.dataset.themeName = entry.name;
+        var hit = document.createElement('button');
+        hit.type = 'button';
+        hit.className = 'arcade-browse-card__hit';
+        var name = document.createElement('span');
+        name.className = 'arcade-browse-card__name';
+        name.textContent = entry.name;
+        hit.appendChild(name);
+        var chips = document.createElement('span');
+        chips.className = 'arcade-browse-card__chips';
+        if (entry.cssb64) {
+            var stylableChip = document.createElement('span');
+            stylableChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--stylable';
+            stylableChip.textContent = 'stylable';
+            chips.appendChild(stylableChip);
+        }
+        var customChip = document.createElement('span');
+        customChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--custom';
+        customChip.textContent = 'custom';
+        customChip.hidden = !(entry.cssb64 && themeOverrides[slug]);
+        chips.appendChild(customChip);
+        var targetChip = document.createElement('span');
+        targetChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--target';
+        targetChip.textContent = THEME_TARGET_LABEL[entry.target] || entry.target;
+        chips.appendChild(targetChip);
+        hit.appendChild(chips);
+        hit.title = entry.cssb64 ? 'Preview "' + entry.name + '"' : 'Preview "' + entry.name + '" — this theme has its own fixed look';
+        hit.addEventListener('click', function () { previewThemePage(entry); closeBrowseModal(); });
+        card.appendChild(hit);
+        if (entry.cssb64) {
+            var actions = document.createElement('span');
+            actions.className = 'arcade-browse-card__actions';
+            var copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'arcade-btn arcade-btn--sm';
+            copyBtn.textContent = 'Copy URL';
+            copyBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var params = themeOverrides[slug] ? ['cssb64=' + encodeCssB64(themeOverrides[slug])] : [];
+                copyElementOverlayUrl({ overlayPage: 'themes/' + entry.file, params: params }, copyBtn);
+            });
+            actions.appendChild(copyBtn);
+            card.appendChild(actions);
+        }
+        return card;
+    }
+
+    // Library cards carry their OWN saved state/userCss (not the live
+    // scratch styleState/styleUserCss, which only reflects whatever entry is
+    // currently loaded in the canvas) — so a card's Copy URL works correctly
+    // for ANY library entry from the grid, not just the one being previewed.
+    function buildBrowseLibraryCard(entry) {
+        var card = document.createElement('div');
+        card.className = 'arcade-browse-card arcade-browse-card--theme arcade-browse-card--library';
+        card.dataset.libraryId = entry.id;
+        card.dataset.themeName = entry.name;
+        var hit = document.createElement('button');
+        hit.type = 'button';
+        hit.className = 'arcade-browse-card__hit';
+        var name = document.createElement('span');
+        name.className = 'arcade-browse-card__name';
+        name.textContent = entry.name;
+        hit.appendChild(name);
+        var chips = document.createElement('span');
+        chips.className = 'arcade-browse-card__chips';
+        var yoursChip = document.createElement('span');
+        yoursChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--yours';
+        yoursChip.textContent = 'yours';
+        chips.appendChild(yoursChip);
+        var forkChip = document.createElement('span');
+        forkChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--preset';
+        forkChip.textContent = 'FORKED THEME';
+        chips.appendChild(forkChip);
+        var baseEntry = findThemePageByFile(entry.baseTheme);
+        if (baseEntry) {
+            var targetChip = document.createElement('span');
+            targetChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--target';
+            targetChip.textContent = THEME_TARGET_LABEL[baseEntry.target] || baseEntry.target;
+            chips.appendChild(targetChip);
+        }
+        hit.appendChild(chips);
+        hit.title = 'Preview "' + entry.name + '"' + (baseEntry ? ' — yours, based on ' + baseEntry.name : ' — yours (base theme missing)');
+        hit.addEventListener('click', function () { previewLibraryEntry(entry); closeBrowseModal(); });
+        card.appendChild(hit);
+        var actions = document.createElement('span');
+        actions.className = 'arcade-browse-card__actions';
+        if (baseEntry && baseEntry.cssb64) {
+            var copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'arcade-btn arcade-btn--sm';
+            copyBtn.textContent = 'Copy URL';
+            copyBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var params = ['cssb64=' + encodeCssB64(buildStyleCss(entry.state, entry.userCss))];
+                copyElementOverlayUrl({ overlayPage: 'themes/' + baseEntry.file, params: params }, copyBtn);
+            });
+            actions.appendChild(copyBtn);
+        }
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-preset-del';
+        del.title = 'Delete "' + entry.name + '"';
+        del.setAttribute('aria-label', 'Delete ' + entry.name);
+        del.textContent = '×';
+        del.addEventListener('click', function (e) { e.stopPropagation(); armLibraryDelete(entry.id, entry.name, del); });
+        actions.appendChild(del);
+        card.appendChild(actions);
+        return card;
     }
 
     // --------------------------------------------------------------------
@@ -1988,53 +2367,20 @@
     // blob (one Style-tab boot, two independent ninjafy settings reads —
     // arcadeStylePresets is its OWN top-level key, never nested under
     // cssb64). Apply loads state+userCss into the SAME controls the stock
-    // PRESETS row uses, so it rides the existing sync/preview path.
+    // PRESETS row used to (v4: now a Mine-tab card in the Browse Looks
+    // modal), so it rides the existing sync/preview path.
+    //
+    // renderMyPresetPills/renderThemeRailPills (below) are the SAME function
+    // names v1.1/v3 called after every save/delete — v4 repoints their
+    // bodies at the modal grid (a cheap re-render when the Mine tab happens
+    // to be open, a no-op otherwise, since the data itself lives in
+    // myStylePresets/myThemeLibrary and is re-read fresh next time the modal
+    // opens) rather than hunting down every call site.
     // --------------------------------------------------------------------
-    function renderMyPresetsSection(panel) {
-        renderMyPresetPills();
-        var input = panel.querySelector('#arcade-style-mypreset-name');
-        var saveBtn = panel.querySelector('#arcade-style-mypreset-save');
-        saveBtn.addEventListener('click', function () { saveCurrentAsMyPreset(input.value); input.value = ''; });
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); saveCurrentAsMyPreset(input.value); input.value = ''; }
-        });
-    }
-
     function renderMyPresetPills() {
-        var host = document.getElementById('arcade-style-mypresets-pills');
-        if (!host) return;
-        host.innerHTML = '';
         resetPendingDelete();
         resetPendingApply();
-        if (!myStylePresets.length) {
-            var empty = document.createElement('span');
-            empty.className = 'arcade-style-mypresets-empty';
-            empty.textContent = 'No saved presets yet';
-            host.appendChild(empty);
-            return;
-        }
-        myStylePresets.forEach(function (preset) { host.appendChild(buildMyPresetPill(preset)); });
-    }
-
-    function buildMyPresetPill(preset) {
-        var pill = document.createElement('span');
-        pill.className = 'arcade-style-preset-pill';
-        var apply = document.createElement('button');
-        apply.type = 'button';
-        apply.className = 'arcade-style-preset-apply';
-        apply.textContent = preset.name;
-        apply.title = 'Apply "' + preset.name + '"';
-        apply.addEventListener('click', function () { applyMyPreset(preset, apply); });
-        pill.appendChild(apply);
-        var del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-preset-del';
-        del.title = 'Delete "' + preset.name + '"';
-        del.setAttribute('aria-label', 'Delete ' + preset.name);
-        del.textContent = '×';
-        del.addEventListener('click', function () { armPresetDelete(preset.id, preset.name, del); });
-        pill.appendChild(del);
-        return pill;
+        if (browseModalOpen && browseFilter === 'mine') renderBrowseGrid();
     }
 
     // Stock presets never touch userCss (v1), but a My Preset carries its
@@ -2099,6 +2445,7 @@
         if (overwrote) myStylePresets[existingIdx] = entry; else myStylePresets.push(entry);
         setStyleStatus('Saving…', false);
         renderMyPresetPills();
+        renderBrowseFilterCounts();
         saveMyPresets(function () {
             setStyleStatus((overwrote ? 'Saved ✓ — overwrote "' : 'Saved ✓ — "') + name + '"', false);
             setTimeout(function () { setStyleStatus('', false); }, 4000);
@@ -2149,6 +2496,7 @@
     function deleteMyPreset(id, name) {
         myStylePresets = myStylePresets.filter(function (p) { return p.id !== id; });
         renderMyPresetPills();
+        renderBrowseFilterCounts();
         setStyleStatus('Saving…', false);
         saveMyPresets(function () {
             setStyleStatus('Deleted "' + name + '"', false);
@@ -2189,21 +2537,13 @@
     // scoped to theme mode: an entry additionally carries `baseTheme` (a
     // THEME_PAGES `file`) so previewLibraryEntry can rebuild the canvas.
     // --------------------------------------------------------------------
-    function renderMyLibrarySaveRow(panel) {
-        var input = panel.querySelector('#arcade-style-mylibrary-name');
-        var saveBtn = panel.querySelector('#arcade-style-mylibrary-save-btn');
-        if (!input || !saveBtn) return;
-        // Deliberately does NOT clear input.value after saving (unlike My
-        // Presets' save row) — spec §B.4: "re-saving under the same name
-        // updates it, new name forks it". Leaving the name in place is what
-        // makes that iterate-then-Save-again workflow work; the name only
-        // needs to change when the user actually wants a fork.
-        saveBtn.addEventListener('click', function () { saveCurrentToMyLibrary(input.value); });
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); saveCurrentToMyLibrary(input.value); }
-        });
-    }
-
+    // v4: the save-to-library input+button used to be a static row in the
+    // panel body (renderMyLibrarySaveRow, wired once at buildStylePanel()
+    // time); it's now built fresh inside the Browse Looks modal's Mine tab
+    // every render (buildBrowseSaveRow) — same saveCurrentToMyLibrary() call,
+    // same "leave the name in place so Save-again updates it" behavior
+    // (spec §B.4), just no longer a fixed DOM node to wire listeners onto
+    // once.
     function saveCurrentToMyLibrary(rawName) {
         if (activePreviewMode !== 'theme' || !activeThemeEntry || !activeThemeEntry.cssb64) {
             setStyleStatus('Preview a stylable theme before saving to My Library', true);
@@ -2231,6 +2571,7 @@
         activeLibraryEntry = entry;
         setStyleStatus('Saving…', false);
         renderThemeRailPills();
+        renderBrowseFilterCounts();
         syncCanvasModeUI();
         saveMyLibrary(function () {
             setStyleStatus((overwrote ? 'Saved ✓ — overwrote "' : 'Saved ✓ — "') + name + '"', false);
@@ -2290,12 +2631,12 @@
 
     function deleteLibraryEntry(id, name) {
         myThemeLibrary = myThemeLibrary.filter(function (e) { return e.id !== id; });
-        if (activeLibraryEntry && activeLibraryEntry.id === id) {
-            activeLibraryEntry = null;
-            var libNameInput = document.getElementById('arcade-style-mylibrary-name');
-            if (libNameInput) libNameInput.value = '';
-        }
+        if (activeLibraryEntry && activeLibraryEntry.id === id) activeLibraryEntry = null;
+        // v4: the save-to-library input is rebuilt fresh from activeLibraryEntry
+        // every time the Mine tab renders (buildBrowseSaveRow) — no separate
+        // DOM clear needed here now.
         renderThemeRailPills();
+        renderBrowseFilterCounts();
         syncCanvasModeUI();
         setStyleStatus('Saving…', false);
         saveMyLibrary(function () {
@@ -2305,128 +2646,21 @@
     }
 
     // --------------------------------------------------------------------
-    // Theme rail (v3, part A — style-builder-v3-theme-preview-spec.md,
-    // amended live 0018.05.26 by Pac: "the preview/canvas is the hero" —
-    // REPLACES v1.1's bottom collapsible THEME PAGES strip entirely. Theme
-    // browsing now lives INSIDE the preview surface: the DOCK|THEMES seg in
-    // the preview bar (initCanvasModeSeg) switches the canvas between the
-    // dock-profile preview and theme-preview mode; THEMES mode reveals this
-    // slim horizontal rail (one row, scrolls sideways, filterable) directly
-    // above the iframe — never a tall block pushing the canvas down. A pill
-    // click loads that theme into the SAME canvas (previewThemePage). The
-    // Copy URL / stylable chip / clear-override control that used to live on
-    // each v1.1 pill now live ONCE in the shared preview bar (see
-    // initThemePreviewBarActions + syncCanvasModeUI), acting on whichever
-    // theme is currently in the canvas — reuses v1's element-registry copy
-    // plumbing verbatim (buildElementOverlayUrl/copyElementOverlayUrl take
-    // any object with overlayPage+params).
+    // Theme browsing (v3 → v4). v3's slim horizontal THEMES rail (pills
+    // directly above the iframe) is REPLACED by the Browse Looks modal's
+    // Chat/Overlays/Special/Mine card grid (buildBrowseThemeCard/
+    // buildBrowseLibraryCard above) — same click-to-preview behavior
+    // (previewThemePage/previewLibraryEntry, unchanged below), same honest
+    // capability chips, same Copy URL/clear-override plumbing on whichever
+    // theme is currently in the canvas (initThemePreviewBarActions +
+    // syncCanvasModeUI, unchanged). renderThemeRailPills is the SAME
+    // function name v3 called after every library save/delete — v4 repoints
+    // its body at the modal grid (see renderMyPresetPills above for the
+    // identical pattern) rather than hunting down every call site.
     // --------------------------------------------------------------------
-    function renderThemeRail(panel) {
-        renderThemeRailPills();
-    }
-
-    // Rebuilds the rail's pill list — called at panel construction (empty
-    // My Library at that point) AND again once loadStyleSettings() actually
-    // has myThemeLibrary, plus after every library save/delete. Decoupled
-    // from a `panel` argument (like renderMyPresetPills) since those later
-    // calls happen well after buildStylePanel() returns.
     function renderThemeRailPills() {
-        var host = document.getElementById('arcade-style-theme-rail-pills');
-        if (!host) return;
-        host.innerHTML = '';
         resetPendingLibraryDelete();
-        // MY LIBRARY group listed FIRST (spec §B.3) — inline labels, not
-        // extra rows, so the rail stays the one slim horizontal scroller
-        // ("canvas-first… rail stays slim; library group adds no vertical
-        // sprawl"). Only shown when there's actually something in it.
-        if (myThemeLibrary.length) {
-            var libLabel = document.createElement('span');
-            libLabel.className = 'arcade-style-rail-group-label';
-            libLabel.textContent = 'MY LIBRARY';
-            host.appendChild(libLabel);
-            myThemeLibrary.forEach(function (entry) { host.appendChild(buildLibraryRailPill(entry)); });
-            var stockLabel = document.createElement('span');
-            stockLabel.className = 'arcade-style-rail-group-label';
-            stockLabel.textContent = "STEVE'S THEMES";
-            host.appendChild(stockLabel);
-        }
-        THEME_PAGES.forEach(function (entry) { host.appendChild(buildThemeRailPill(entry)); });
-    }
-
-    function buildThemeRailPill(entry) {
-        var slug = themeSlug(entry);
-        var pill = document.createElement('button');
-        pill.type = 'button';
-        pill.className = 'arcade-style-rail-pill';
-        pill.dataset.themeSlug = slug;
-        pill.dataset.themeName = entry.name;
-        var name = document.createElement('span');
-        name.className = 'arcade-style-rail-pill__name';
-        name.textContent = entry.name;
-        pill.appendChild(name);
-        if (entry.cssb64) {
-            var stylableChip = document.createElement('span');
-            stylableChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--stylable';
-            stylableChip.textContent = 'stylable';
-            pill.appendChild(stylableChip);
-        }
-        var customChip = document.createElement('span');
-        customChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--custom';
-        customChip.textContent = 'custom';
-        customChip.hidden = !(entry.cssb64 && themeOverrides[slug]);
-        pill.appendChild(customChip);
-        pill.title = entry.cssb64 ? 'Preview "' + entry.name + '"' : 'Preview "' + entry.name + '" — this theme has its own fixed look';
-        pill.addEventListener('click', function () { previewThemePage(entry); });
-        return pill;
-    }
-
-    // Library pills are a <span> wrapper around TWO siblings (preview button
-    // + delete button) — NOT a delete button nested inside the preview
-    // button (invalid HTML), same shape buildMyPresetPill uses for its
-    // apply/delete pair.
-    function buildLibraryRailPill(entry) {
-        var wrap = document.createElement('span');
-        wrap.className = 'arcade-style-rail-pill-wrap';
-        var pill = document.createElement('button');
-        pill.type = 'button';
-        pill.className = 'arcade-style-rail-pill arcade-style-rail-pill--library';
-        pill.dataset.libraryId = entry.id;
-        pill.dataset.themeName = entry.name; // reuses the same filter lookup as Steve's pills
-        var name = document.createElement('span');
-        name.className = 'arcade-style-rail-pill__name';
-        name.textContent = entry.name;
-        pill.appendChild(name);
-        var yoursChip = document.createElement('span');
-        yoursChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--yours';
-        yoursChip.textContent = 'yours';
-        pill.appendChild(yoursChip);
-        var baseEntry = findThemePageByFile(entry.baseTheme);
-        pill.title = 'Preview "' + entry.name + '"' + (baseEntry ? ' — yours, based on ' + baseEntry.name : ' — yours (base theme missing)');
-        pill.addEventListener('click', function () { previewLibraryEntry(entry); });
-        wrap.appendChild(pill);
-        var del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-preset-del';
-        del.title = 'Delete "' + entry.name + '"';
-        del.setAttribute('aria-label', 'Delete ' + entry.name);
-        del.textContent = '×';
-        del.addEventListener('click', function () { armLibraryDelete(entry.id, entry.name, del); });
-        wrap.appendChild(del);
-        return wrap;
-    }
-
-    function initThemeRailFilter(panel) {
-        var input = panel.querySelector('#arcade-style-theme-filter');
-        var host = panel.querySelector('#arcade-style-theme-rail-pills');
-        if (!input || !host) return;
-        input.addEventListener('input', function () {
-            var q = input.value.trim().toLowerCase();
-            host.querySelectorAll('.arcade-style-rail-pill').forEach(function (p) {
-                var name = (p.dataset.themeName || '').toLowerCase();
-                var target = p.closest('.arcade-style-rail-pill-wrap') || p; // library pills hide their wrapper (name + delete together)
-                target.hidden = !!q && name.indexOf(q) === -1;
-            });
-        });
+        if (browseModalOpen && browseFilter === 'mine') renderBrowseGrid();
     }
 
     // Shared preview-bar actions for the theme currently in the canvas
@@ -2484,6 +2718,7 @@
         row.dataset.styleControl = ctl.id;
         var label = document.createElement('label');
         label.textContent = ctl.label;
+        label.title = ctl.label; // v4 density pass: label ellipsizes at 280px, full text on hover
         label.setAttribute('for', 'arcade-style-ctl-' + ctl.id);
         row.appendChild(label);
         var input;
@@ -2593,7 +2828,7 @@
                             myThemeLibrary = Array.isArray(parsedLibrary) ? parsedLibrary : [];
                             // v3 — per-theme overrides ride the SAME getSettings response
                             // (one key per theme, arcadeThemeCss_<slug>/textparam1); no
-                            // extra IPC round trip needed to know which of the 41 have one.
+                            // extra IPC round trip needed to know which of the 42 have one.
                             THEME_PAGES.forEach(function (entry) {
                                 var slug = themeSlug(entry);
                                 var overrideEntry = settings[THEME_OVERRIDE_PREFIX + slug];
@@ -2605,6 +2840,7 @@
                         renderMyPresetPills();
                         renderThemeRailPills(); // My Library was empty at panel construction — reflect the real loaded list now
                         refreshAllThemeCustomChips();
+                        renderBrowseFilterCounts(); // Mine (n) was a guess at modal-build time — reflect the real loaded counts now
                         resolve();
                     });
                     return;
@@ -2613,6 +2849,7 @@
             setStyleStatus('settings bridge unavailable — styles will not load or save', true);
             loadActiveProfileIntoControls();
             renderMyPresetPills();
+            renderBrowseFilterCounts();
             resolve();
         });
     }
@@ -2933,10 +3170,10 @@
 
     // Hides/shows the STYLE_CONTROLS column + Custom CSS box + Save button
     // depending on whether there's anything to edit right now — spec §B.3:
-    // "Themes with cssb64:false: no editor claims." Currently true for ALL 41
-    // THEME_PAGES entries (see the support-map comment above THEME_PAGES), so
-    // in practice this note shows for every theme preview today; the branch
-    // is written generically so a future theme gaining cssb64 support just
+    // "Themes with cssb64:false: no editor claims." True for 34 of the 42
+    // THEME_PAGES entries (see the support-map comment above THEME_PAGES) —
+    // the other 8 (the Curated-8 CSS unlock) DO get an editor; the branch is
+    // written generically so a future theme gaining cssb64 support just
     // works without further changes here.
     function updateStyleEditorAvailability() {
         var available = isStyleEditorAvailable();
@@ -2952,39 +3189,31 @@
         if (saveBtn) saveBtn.hidden = !available;
     }
 
-    // Single sync point for every mode-dependent bit of chrome: the DOCK|
-    // THEMES seg's is-on state, the "Previewing: …" label, the rail's
-    // visibility, hiding the dock-only PROFILE/PRESETS/MY PRESETS rows while
-    // a theme is in the canvas (they describe dock-profile state that has no
-    // meaning for a theme page), the shared stylable chip / Copy URL / clear-
-    // override controls on the previewed theme, the rail's active-pill
-    // highlight, and the editor availability gate above. Called on every
-    // mode/entry change so there's exactly one place that can drift.
+    // Single sync point for every mode-dependent bit of chrome: the
+    // "Previewing: …" label, the "← Back to dock" button's visibility
+    // (v4 — replaces the old DOCK|THEMES seg's is-on state now that mode
+    // switching happens via the Browse Looks modal instead), hiding the
+    // PROFILE row while a theme is in the canvas (it describes dock-profile
+    // state that has no meaning for a theme page — PRESETS/MY PRESETS rows
+    // no longer live in the panel body at all, v4, so there's nothing left
+    // to hide for them here), the shared stylable chip / Copy URL / clear-
+    // override controls on the previewed theme, the Browse Looks modal's
+    // active-card highlight (only visible while that tab happens to be
+    // open), and the editor availability gate above. Called on every mode/
+    // entry change so there's exactly one place that can drift.
     function syncCanvasModeUI() {
         var inTheme = activePreviewMode === 'theme';
-        var seg = document.getElementById('arcade-style-canvas-mode-seg');
-        if (seg) {
-            seg.querySelectorAll('button').forEach(function (b) {
-                var on = (b.dataset.arcadeCanvasMode === 'theme') === inTheme;
-                b.classList.toggle('is-on', on);
-                b.setAttribute('aria-pressed', String(on));
-            });
-        }
         var label = document.getElementById('arcade-style-preview-profile');
         if (label) {
             label.textContent = inTheme
                 ? ('PREVIEWING: ' + (activeThemeEntry ? activeThemeEntry.name : '—'))
                 : ('Previewing: ' + STYLE_PROFILE_LABEL[activeStyleProfile]);
         }
-        var rail = document.getElementById('arcade-style-theme-rail');
-        if (rail) rail.hidden = !inTheme;
+        var backDockBtn = document.getElementById('arcade-style-back-dock');
+        if (backDockBtn) backDockBtn.hidden = !inTheme;
         var profileSegEl = document.getElementById('arcade-style-profile-seg');
         var profileRow = profileSegEl && profileSegEl.closest('.arcade-style-profile-row');
         if (profileRow) profileRow.hidden = inTheme;
-        var presetsRow = document.getElementById('arcade-style-presets');
-        if (presetsRow) presetsRow.hidden = inTheme;
-        var myPresetsRow = document.getElementById('arcade-style-mypresets');
-        if (myPresetsRow) myPresetsRow.hidden = inTheme;
         var themeStylable = inTheme && !!(activeThemeEntry && activeThemeEntry.cssb64);
         var stylableChip = document.getElementById('arcade-style-preview-stylable-chip');
         if (stylableChip) stylableChip.hidden = !themeStylable;
@@ -2995,32 +3224,14 @@
         }
         var clearBtn = document.getElementById('arcade-style-preview-clear-override');
         if (clearBtn) clearBtn.hidden = !(inTheme && activeThemeEntry && activeThemeEntry.cssb64 && themeOverrides[themeSlug(activeThemeEntry)]);
-        // My Library save row (spec §B.2) — only while previewing a
-        // STYLABLE theme, mirrors themeStylable exactly (dock-profile mode
-        // has its own PRESETS/MY PRESETS rows for the same job).
-        var mylibrarySaveRow = document.getElementById('arcade-style-mylibrary-save');
-        if (mylibrarySaveRow) mylibrarySaveRow.hidden = !themeStylable;
-        document.querySelectorAll('.arcade-style-rail-pill').forEach(function (p) {
-            var isLibraryPill = !!p.dataset.libraryId;
-            var active = isLibraryPill
+        document.querySelectorAll('.arcade-browse-card[data-theme-slug], .arcade-browse-card[data-library-id]').forEach(function (p) {
+            var isLibraryCard = !!p.dataset.libraryId;
+            var active = isLibraryCard
                 ? (inTheme && !!activeLibraryEntry && p.dataset.libraryId === activeLibraryEntry.id)
                 : (inTheme && !activeLibraryEntry && !!activeThemeEntry && p.dataset.themeSlug === themeSlug(activeThemeEntry));
             p.classList.toggle('is-active', active);
         });
         updateStyleEditorAvailability();
-    }
-
-    function initCanvasModeSeg(panel) {
-        var seg = panel.querySelector('#arcade-style-canvas-mode-seg');
-        if (!seg) return;
-        seg.addEventListener('click', function (e) {
-            var btn = e.target.closest('button[data-arcade-canvas-mode]');
-            if (!btn || !seg.contains(btn)) return;
-            var mode = btn.dataset.arcadeCanvasMode === 'theme' ? 'theme' : 'dock';
-            if (mode === activePreviewMode) return;
-            if (mode === 'dock') { backToDockPreview(); return; }
-            previewThemePage(activeThemeEntry || THEME_PAGES[0]);
-        });
     }
 
     // Loads a theme's saved override (or a blank slate) into the SAME
@@ -3045,8 +3256,6 @@
         activeThemeEntry = entry;
         activeLibraryEntry = null; // Steve's template, unforked — the Pac ruling's "starting point"
         if (entry.cssb64) loadThemeOverrideIntoControls(entry);
-        var libNameInput = document.getElementById('arcade-style-mylibrary-name');
-        if (libNameInput) libNameInput.value = '';
         syncCanvasModeUI();
         loadThemePreviewFrame(entry);
     }
@@ -3074,8 +3283,8 @@
         var ta = document.getElementById('arcade-style-usercss');
         if (ta) ta.value = styleUserCss;
         syncStyleControlsFromState();
-        var libNameInput = document.getElementById('arcade-style-mylibrary-name');
-        if (libNameInput) libNameInput.value = entry.name;
+        // v4: the save-to-library input prefills from activeLibraryEntry.name
+        // itself (buildBrowseSaveRow), so no separate DOM write is needed here.
         syncCanvasModeUI();
         loadThemePreviewFrame(baseEntry);
     }
@@ -3091,7 +3300,7 @@
     }
 
     // session+loadlast=30 always ride along (spec §A.1) — loadlast is inert
-    // on all 41 pages today (none read it, see the support-map comment) but
+    // on all 42 pages today (none read it, see the support-map comment) but
     // costs nothing and future-proofs a theme that adds it later; cssb64
     // only added when the entry's support-map boolean says the page actually
     // reads it.
@@ -3137,12 +3346,12 @@
 
     // Empty-history fallback (spec §A.2): a theme page joins its OWN P2P
     // session the same way a real OBS browser source would (every one of the
-    // 41 reads urlParams "session"/"room"/"roomid" — see the support-map
+    // 42 reads urlParams "session"/"room"/"roomid" — see the support-map
     // comment), so real chat shows up live with ZERO extra plumbing here —
     // that's honestly labelled as "connects live", not "seeded history".
     // Only when entry.seedable is true (source-verified: the page exposes a
     // dock.html-shaped processInput({recentHistory}) batch ingest — true for
-    // NONE of the 41 today) do we attempt the SAME same-origin bridge
+    // NONE of the 42 today) do we attempt the SAME same-origin bridge
     // fallback (real history, then obviously-fake samples) v2 built for the
     // dock preview — reused verbatim via seedStylePreviewFromBridge, never a
     // per-theme reinvention (the law: "do NOT invent an ingest per theme").
@@ -3164,8 +3373,8 @@
 
     function refreshThemeCustomChip(entry) {
         var slug = themeSlug(entry);
-        var pill = document.querySelector('.arcade-style-rail-pill[data-theme-slug="' + slug + '"]');
-        var chip = pill && pill.querySelector('.arcade-style-theme-chip--custom');
+        var card = document.querySelector('.arcade-browse-card[data-theme-slug="' + slug + '"]');
+        var chip = card && card.querySelector('.arcade-style-theme-chip--custom');
         if (chip) chip.hidden = !(entry.cssb64 && themeOverrides[slug]);
         syncCanvasModeUI(); // refreshes the shared clear-override button too
     }
