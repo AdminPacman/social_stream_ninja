@@ -666,17 +666,10 @@ body.arcade-shell .arcade-style-profile-row .arcade-seg button.is-confirm {
   color: var(--arc-warning); text-decoration: underline dotted;
 }
 
-/* v2 — CLOCK control group (mode segmented + seconds toggle), small, sits
-   just below the presets rows. */
-body.arcade-shell .arcade-clock { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-body.arcade-shell .arcade-clock .arcade-k {
-  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
-}
-body.arcade-shell .arcade-clock-seconds {
-  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-  font: 500 11px/1 var(--arc-font-ui); color: var(--arc-muted);
-}
-body.arcade-shell .arcade-clock-seconds input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--arc-info); }
+/* v3 (0018.05.26, Pac live-testing amendment): the panel's CLOCK control
+   group was REMOVED from buildStylePanel()'s markup — clock control is
+   moving to a popover on the topbar clock itself (separate branch). These
+   rules are dead with it; left removed rather than orphaned. */
 
 body.arcade-shell .arcade-style-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 body.arcade-shell .arcade-style-presets .arcade-k {
@@ -729,20 +722,69 @@ body.arcade-shell .arcade-style-row:hover .arcade-style-clear { visibility: visi
 body.arcade-shell .arcade-style-preview {
   display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0;
 }
-body.arcade-shell .arcade-style-preview-bar { display: flex; align-items: center; gap: 10px; }
+body.arcade-shell .arcade-style-preview-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 body.arcade-shell .arcade-style-hint {
   font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-faint); flex: 1; min-width: 0;
 }
 /* v2 — "Previewing: STREAM WIDGET" / "Previewing: DOCK (APP)" label next to
    the Reload preview button, so it's always clear which profile's real
-   dockParams the preview iframe is mirroring. */
+   dockParams the preview iframe is mirroring. v3: same element also carries
+   "PREVIEWING: <theme name>" while the DOCK|THEMES seg (below) is on THEMES
+   — see syncCanvasModeUI(). */
 body.arcade-shell .arcade-style-preview-profile {
   font: 600 10px/1 var(--arc-font-mono); letter-spacing: 0.06em; color: var(--arc-muted); white-space: nowrap;
 }
+/* v3 — compact DOCK|THEMES canvas-mode seg living right in the preview bar
+   (Pac's live-testing amendment: theme browsing integrates into the preview
+   surface instead of a separate bottom strip). Smaller footprint than the
+   PROFILE seg above the presets rows. */
+body.arcade-shell .arcade-seg--sm button { padding: 3px 8px; font-size: 10px; }
 body.arcade-shell .arcade-style-preview iframe {
   flex: 1; min-height: 0; width: 100%;
   border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
   background: repeating-conic-gradient(var(--arc-panel-2) 0% 25%, var(--arc-panel) 0% 50%) 0 0 / 18px 18px;
+}
+/* v3 — theme rail: ONE slim horizontal-scroll row, only visible in THEMES
+   canvas mode, sitting between the preview bar and the iframe. Deliberately
+   flex-shrink:0 (never squeezed) but never grows either — the iframe below
+   it keeps all the real estate ("the preview/canvas is the hero"). */
+body.arcade-shell .arcade-style-theme-rail { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+body.arcade-shell .arcade-style-theme-filter {
+  height: 24px; width: 130px; flex-shrink: 0; padding: 0 8px;
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  font: 400 11px/1 var(--arc-font-ui);
+}
+body.arcade-shell .arcade-style-theme-rail-pills {
+  display: flex; align-items: center; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding: 2px 0;
+}
+body.arcade-shell .arcade-style-rail-pill {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  height: 24px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--arc-edge); background: var(--arc-panel-2);
+  color: var(--arc-muted); font: 500 11px/1 var(--arc-font-ui);
+  cursor: pointer; white-space: nowrap;
+}
+body.arcade-shell .arcade-style-rail-pill:hover { color: var(--arc-ink); border-color: var(--arc-info); }
+body.arcade-shell .arcade-style-rail-pill.is-active {
+  color: var(--arc-ink); border-color: var(--arc-info); background: rgba(53, 208, 255, 0.12);
+}
+/* v3 — honest capability chips, shared by the rail pills AND the preview
+   bar's "stylable" chip for the theme currently in the canvas. Never shown
+   without the source-verified boolean on THEME_PAGES (see the support-map
+   comment above that array in arcade-shell.js). */
+body.arcade-shell .arcade-style-theme-chip {
+  display: inline-flex; align-items: center; height: 15px; padding: 0 6px;
+  border-radius: 999px; font: 700 9px/1 var(--arc-font-ui); letter-spacing: 0.05em;
+  text-transform: uppercase; white-space: nowrap;
+}
+body.arcade-shell .arcade-style-theme-chip--stylable { background: rgba(53, 208, 255, 0.16); color: var(--arc-info); }
+body.arcade-shell .arcade-style-theme-chip--custom { background: rgba(247, 201, 72, 0.16); color: var(--arc-warning); }
+/* v3 — controls column now wraps STYLE_CONTROLS + the honest "no editor
+   here" note (mutually exclusive, see updateStyleEditorAvailability). */
+body.arcade-shell .arcade-style-controls-col { display: flex; flex-direction: column; min-height: 0; }
+body.arcade-shell .arcade-style-no-editor-note {
+  padding: 14px 6px; font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted);
 }
 body.arcade-shell .arcade-style #arcade-style-usercss {
   width: 100%; min-height: 84px; resize: vertical; box-sizing: border-box;
@@ -782,8 +824,11 @@ body.arcade-shell .arcade-style-preset-apply {
 }
 body.arcade-shell .arcade-style-preset-apply:hover { color: var(--arc-info); }
 /* armed-for-delete (second click confirms) — danger token, matches
-   .arcade-btn--danger's semantic use elsewhere in this file */
-body.arcade-shell .arcade-style-preset-del.is-confirm {
+   .arcade-btn--danger's semantic use elsewhere in this file. v3's theme
+   clear-override button (#arcade-style-preview-clear-override) shares the
+   exact same confirm-arm shape (armThemeOverrideClear), same token. */
+body.arcade-shell .arcade-style-preset-del.is-confirm,
+body.arcade-shell #arcade-style-preview-clear-override.is-confirm {
   color: var(--arc-danger); border-color: var(--arc-danger); background: rgba(229, 104, 107, 0.14);
 }
 /* armed-for-Custom-CSS-overwrite (second click confirms) — WARNING token,
@@ -802,27 +847,8 @@ body.arcade-shell .arcade-style-mypreset-name {
   font: 400 11px/1 var(--arc-font-ui);
 }
 
-body.arcade-shell .arcade-style-themes { display: flex; flex-direction: column; gap: 6px; }
-body.arcade-shell .arcade-style-themes-toggle {
-  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
-  border: 0; background: none; padding: 4px 0; cursor: pointer;
-}
-body.arcade-shell .arcade-style-themes-toggle .arcade-k {
-  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
-}
-body.arcade-shell .arcade-style-themes-toggle:hover .arcade-k { color: var(--arc-ink); }
-body.arcade-shell .arcade-style-themes-count { font: 400 10px/1 var(--arc-font-mono); color: var(--arc-faint); }
-body.arcade-shell .arcade-style-themes-chevron { color: var(--arc-faint); font-size: 10px; }
-body.arcade-shell .arcade-style-themes-row {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  max-height: 220px; overflow-y: auto; padding: 4px 2px;
-}
-body.arcade-shell .arcade-style-theme-pill {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 28px; padding: 0 4px 0 10px;
-  border-radius: 999px; border: 1px solid var(--arc-edge);
-  background: var(--arc-panel-2);
-}
-body.arcade-shell .arcade-style-theme-pill__name {
-  font: 500 11px/1 var(--arc-font-ui); color: var(--arc-ink); white-space: nowrap;
-}
+/* v3 (0018.05.26, Pac live-testing amendment): the v1.1 bottom collapsible
+   THEME PAGES strip (.arcade-style-themes*/.arcade-style-theme-pill*) is
+   REMOVED — theme browsing now integrates into the preview surface itself
+   (see .arcade-style-theme-rail / .arcade-style-rail-pill above, and the
+   DOCK|THEMES seg in .arcade-style-preview-bar). "Canvas is the hero." */
