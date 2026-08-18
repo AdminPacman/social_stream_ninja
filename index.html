@@ -13152,6 +13152,30 @@
             });
         }
 
+        // The user's saved Custom CSS (dock) — the popup's cssb64/textparam1
+        // setting (also written by the arcade shell's Style Builder). Read so
+        // the EMBEDDED dock matches the OBS-copied dock URL, which already
+        // honors this same setting via popup.js's URL builder.
+        function getSavedDockCustomCss() {
+            return new Promise(resolve => {
+                const finish = response => {
+                    let css = '';
+                    try {
+                        const entry = response && response.settings && response.settings.cssb64;
+                        if (entry && typeof entry.textparam1 === 'string') css = entry.textparam1;
+                    } catch (_) { }
+                    resolve(css);
+                };
+                try {
+                    if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                        window.ninjafy.sendMessage(null, { getSettings: true }, finish);
+                    } else {
+                        finish(null);
+                    }
+                } catch (_) { finish(null); }
+            });
+        }
+
         async function ensureChatDockLoaded(forceReload = false) {
             const frame = document.getElementById('chat-dock-frame');
             if (!frame) return false;
@@ -13196,6 +13220,14 @@
                     'fadeout',
                     'smooth'
                 ];
+                // Ride the user's saved Custom CSS (dock) along, using the
+                // popup URL-builder's exact encode order (inner
+                // encodeURIComponent for UTF-8 safety, btoa, outer
+                // encodeURIComponent for URL safety).
+                const customDockCss = await getSavedDockCustomCss();
+                if (customDockCss) {
+                    dockParams.push('cssb64=' + encodeURIComponent(btoa(encodeURIComponent(customDockCss))));
+                }
                 const resolved = await resolveSocialStreamPage('dock.html', {
                     versionParam: 'v=1',
                     extraParams: dockParams.concat(getLanguageExtraParams())
