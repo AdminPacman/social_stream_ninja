@@ -43,8 +43,10 @@
     // here (plus its overlay page, when built). See pacsarcade design-briefs/
     // ssn-ui-overhaul/element-registry-spec.md. status 'ready' = the overlay
     // page ships and the card is live (Copy overlay URL); 'planned' = an
-    // honest SOON stub with no actions. Only music ships ready this pass;
-    // tip/hype/map pages are follow-on tasks that clone the music card.
+    // honest SOON stub with no actions. Music and Hype Train ship ready
+    // (watchtime-loyalty-elements-spec.md item 3 — hype.html is stock SSN,
+    // verified as a standalone session overlay, no new page built). Fren Map
+    // stays planned — no geo data source exists.
     // --------------------------------------------------------------------
     var ELEMENTS = [
         {
@@ -58,8 +60,9 @@
             blurb: 'Lightning / zap tip jar with a configurable goal.'
         },
         {
-            id: 'hype', name: 'Hype Train', category: 'hype', status: 'planned',
-            blurb: 'Community hype meter that fills from chat energy.'
+            id: 'hype', name: 'Hype Train', category: 'hype', status: 'ready',
+            overlayPage: 'hype.html',
+            blurb: 'Live viewer/chatter counts by platform, straight from the session.'
         },
         {
             id: 'map', name: 'Fren Map', category: 'community', status: 'planned',
