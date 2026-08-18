@@ -27,6 +27,7 @@
         { id: 'games', label: 'Games' },
         { id: 'elements', label: 'Elements' },
         { id: 'style', label: 'Style' },
+        { id: 'alerts', label: 'Alerts' },
         { id: 'vdo', label: 'VDO' },
         { id: 'eventflow', label: 'Event Flow' },
         { id: 'settings', label: 'Settings' }
@@ -737,7 +738,7 @@
     // the panel + hides #content-pane while data-arcade-tab matches. The boot
     // guard is naturally a no-op for them (expected = ARCADE_TAB_PAGE[custom]
     // is undefined, so it never fights). See buildElementsPanel().
-    var CUSTOM_TABS = { elements: true, style: true };
+    var CUSTOM_TABS = { elements: true, style: true, alerts: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -753,6 +754,7 @@
             savePopupScroll(document.body.dataset.arcadeTab);
             setArcadeTab(tabId);
             if (tabId === 'style') ensureStylePanelLive(); // lazy: load saved blob + first preview on first visit
+            if (tabId === 'alerts') ensureAlertsPanelLive(); // lazy: load saved param25 settings + first preview on first visit
             return;
         }
         var pageId = ARCADE_TAB_PAGE[tabId];
@@ -1000,6 +1002,468 @@
             return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
         }).catch(function (e) {
             console.error('[arcade-shell] copy overlay url failed:', e);
+            flashButton(btn, 'Open from Settings', 2200);
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // Alerts Builder — custom "Alerts" tab (Stage 2 shell surface). Spec:
+    // pacsarcade design-briefs/ssn-ui-overhaul/alert-style-builder-spec.md.
+    //
+    // Canvas-first per Pac's design-tool ruling (same law the Style tab
+    // follows): a live multi-alerts.html PREVIEW iframe is the hero, with a
+    // compact rail of 7 event-meaning cards below it (follow/subscription/
+    // donation/bits/raid/auction/hype). Each card edits accent, style
+    // preset, headline template, font, fallback media, sound, and enabled —
+    // the SAME per-event param25 settings the popup's multi-alert section
+    // owns (multi-alerts.js CATEGORY_*_PARAMS, ~:221-280: followaccent,
+    // followstyle, followtemplate [Stage 2 H3], followfont/followmedia
+    // [Stage 2 H4], followsound, disablefollows — and the auction/hype
+    // opt-in pair auctionwins/hypetrain). Reads/writes go through the SAME
+    // canonical saveSetting IPC (window.ninjafy.sendMessage) the Style tab
+    // already uses for ITS settings — settings are shared truth, so an edit
+    // here shows up in the popup's multi-alert section and vice versa.
+    //
+    // PREVIEW ISOLATION GUARANTEE: the preview iframe is always loaded with
+    // &preview=1, which flips multi-alerts.js's settings.previewOnly flag —
+    // the ONE gate (multi-alerts.js ~:317-328) that skips ALL P2P bridge /
+    // socket setup for that page load, entirely regardless of the &session
+    // value riding along. "Fire test alert" posts
+    // {multiAlertsPreview:{category, overrides}} — the exact descriptor
+    // shape popup.js's buildMultiAlertPreviewDescriptor produces (popup.js
+    // ~:7388) — directly into frame.contentWindow via postMessage(*, ...).
+    // That message targets ONLY this iframe's own window object; nothing is
+    // ever sent to window.parent, to the app's own P2P/session bridge, or to
+    // any other frame, so a test alert can never reach the real live overlay
+    // a viewer might be watching.
+    // --------------------------------------------------------------------
+    var ALERT_EVENTS = [
+        { id: 'follow', label: 'Follow', emoji: '💖' },
+        { id: 'subscription', label: 'Subscription', emoji: '💜' },
+        { id: 'donation', label: 'Donation', emoji: '💚' },
+        { id: 'bits', label: 'Bits / Cheer', emoji: '💙' },
+        { id: 'raid', label: 'Raid', emoji: '🧡' },
+        { id: 'auction', label: 'Auction Win', emoji: '💛' },
+        { id: 'hype', label: 'Hype Train', emoji: '❤️' }
+    ];
+
+    // Mirrors multi-alerts.js's CATEGORY_*_PARAMS verbatim (source of truth:
+    // resources/social_stream_fallback/main/multi-alerts.js ~:221-280) — the
+    // param NAMEs below are the identical strings the popup's own
+    // data-textparam25/data-optionparam25/data-param25 inputs already read
+    // and write, so this tab and the popup stay consistent by construction.
+    // enable.invert=true categories are disable-by-default (default enabled,
+    // a "disableX" param turns them off); invert=false are the two opt-in
+    // categories (default DISABLED, a present param turns them on) — see
+    // CATEGORY_DISABLE_PARAMS vs CATEGORY_OPT_IN_PARAMS in multi-alerts.js.
+    var ALERT_PARAM_MAP = {
+        follow: { accent: 'followaccent', style: 'followstyle', template: 'followtemplate', font: 'followfont', media: 'followmedia', sound: 'followsound', enable: { param: 'disablefollows', invert: true } },
+        subscription: { accent: 'subaccent', style: 'substyle', template: 'subtemplate', font: 'subfont', media: 'submedia', sound: 'subsound', enable: { param: 'disablesubs', invert: true } },
+        donation: { accent: 'donoaccent', style: 'donostyle', template: 'donotemplate', font: 'donofont', media: 'donomedia', sound: 'donosound', enable: { param: 'disabledonos', invert: true } },
+        bits: { accent: 'bitsaccent', style: 'bitsstyle', template: 'bitstemplate', font: 'bitsfont', media: 'bitsmedia', sound: 'bitssound', enable: { param: 'disablebits', invert: true } },
+        raid: { accent: 'raidaccent', style: 'raidstyle', template: 'raidtemplate', font: 'raidfont', media: 'raidmedia', sound: 'raidsound', enable: { param: 'disableraids', invert: true } },
+        auction: { accent: 'auctionaccent', style: 'auctionstyle', template: 'auctiontemplate', font: 'auctionfont', media: 'auctionmedia', sound: 'auctionsound', enable: { param: 'auctionwins', invert: false } },
+        hype: { accent: 'hypeaccent', style: 'hypestyle', template: 'hypetemplate', font: 'hypefont', media: 'hypemedia', sound: 'hypesound', enable: { param: 'hypetrain', invert: false } }
+    };
+
+    var ALERT_STYLE_OPTIONS = ['twitch', 'classic', 'minimal', 'solid'];
+    var ALERT_TEMPLATE_PLACEHOLDER = {
+        follow: '{name} just followed!', subscription: '{name} just subscribed ({tier})',
+        donation: '{name} sent {amount}!', bits: '{name} cheered {amount}!',
+        raid: '{name} is raiding with {viewers} viewers!', auction: '{name} won {title} for {amount}!',
+        hype: 'Hype Train reached Level {level}!'
+    };
+
+    var alertsPanelLive = false;
+    var alertsState = {}; // category -> { accent, style, template, font, media, sound, enabled }
+    var alertsPreviewToken = 0;
+    var alertsReloadTimer = null;
+
+    function defaultAlertCategoryState(category) {
+        var map = ALERT_PARAM_MAP[category];
+        var defaultEnabled = map && map.enable ? !!map.enable.invert : true;
+        return { accent: '', style: 'twitch', template: '', font: '', media: '', sound: '', enabled: defaultEnabled };
+    }
+
+    function debounce(fn, ms) {
+        var timer = null;
+        return function () {
+            var args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function () { fn.apply(null, args); }, ms);
+        };
+    }
+
+    function setAlertsStatus(text, isError) {
+        var el = document.getElementById('arcade-alerts-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    function setAlertsPreviewHint(text) {
+        var el = document.getElementById('arcade-alerts-preview-hint');
+        if (el) el.textContent = text || '';
+    }
+
+    function buildAlertsPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-alerts';
+        panel.setAttribute('aria-label', 'Alert box builder');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">ALERTS</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-alerts-status"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--primary" id="arcade-alerts-copy">Copy overlay URL</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-alerts-preview">' +
+            '<div class="arcade-alerts-preview-bar">' +
+            '<span class="arcade-style-hint" id="arcade-alerts-preview-hint">Loading preview…</span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-clear">Clear</button>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-reload">Reload preview</button>' +
+            '</div>' +
+            '<iframe id="arcade-alerts-preview-frame" title="Alert box preview"></iframe>' +
+            '</div>' +
+            '<div class="arcade-alerts-rail" id="arcade-alerts-rail"></div>' +
+            '</div>';
+        document.body.appendChild(panel);
+
+        var rail = panel.querySelector('#arcade-alerts-rail');
+        ALERT_EVENTS.forEach(function (evt) {
+            alertsState[evt.id] = defaultAlertCategoryState(evt.id);
+            rail.appendChild(buildAlertEventCard(evt));
+        });
+
+        panel.querySelector('#arcade-alerts-copy').addEventListener('click', function (e) {
+            copyAlertsOverlayUrl(e.currentTarget);
+        });
+        panel.querySelector('#arcade-alerts-clear').addEventListener('click', clearAlertsPreview);
+        panel.querySelector('#arcade-alerts-reload').addEventListener('click', reloadAlertsPreview);
+    }
+
+    function buildAlertFieldRow(category, field, label, placeholder) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.placeholder = placeholder || '';
+        input.dataset.arcadeAlertField = field;
+        input.addEventListener('input', debounce(function () {
+            setAlertField(category, field, input.value, row);
+        }, 300));
+        row.appendChild(input);
+        return row;
+    }
+
+    function buildAlertStyleRow(category) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = 'Style preset';
+        row.appendChild(lbl);
+        var select = document.createElement('select');
+        select.dataset.arcadeAlertField = 'style';
+        ALERT_STYLE_OPTIONS.forEach(function (opt) {
+            var o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+            select.appendChild(o);
+        });
+        select.addEventListener('change', function () {
+            setAlertField(category, 'style', select.value, row);
+        });
+        row.appendChild(select);
+        return row;
+    }
+
+    function buildAlertEventCard(evt) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        card.dataset.arcadeAlertEvent = evt.id;
+
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = evt.emoji + ' ' + evt.label;
+        head.appendChild(name);
+
+        var enableLabel = document.createElement('label');
+        enableLabel.className = 'arcade-alert-card__enable';
+        var enableInput = document.createElement('input');
+        enableInput.type = 'checkbox';
+        enableInput.checked = alertsState[evt.id].enabled;
+        enableInput.dataset.arcadeAlertField = 'enabled';
+        enableInput.addEventListener('change', function () {
+            setAlertField(evt.id, 'enabled', enableInput.checked, null);
+        });
+        enableLabel.appendChild(enableInput);
+        enableLabel.appendChild(document.createTextNode('On'));
+        head.appendChild(enableLabel);
+        card.appendChild(head);
+
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        body.appendChild(buildAlertFieldRow(evt.id, 'accent', 'Accent', CATEGORY_ACCENT_DEFAULTS[evt.id] || '#9146ff'));
+        body.appendChild(buildAlertStyleRow(evt.id));
+        body.appendChild(buildAlertFieldRow(evt.id, 'template', 'Headline', ALERT_TEMPLATE_PLACEHOLDER[evt.id] || ''));
+        body.appendChild(buildAlertFieldRow(evt.id, 'font', 'Font', 'Georgia, serif'));
+        body.appendChild(buildAlertFieldRow(evt.id, 'media', 'Fallback media', 'https://…'));
+        body.appendChild(buildAlertFieldRow(evt.id, 'sound', 'Sound URL', 'https://…'));
+        card.appendChild(body);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-alert-card__actions';
+        var testBtn = document.createElement('button');
+        testBtn.type = 'button';
+        testBtn.className = 'arcade-btn arcade-btn--sm';
+        testBtn.textContent = 'Fire test alert';
+        testBtn.addEventListener('click', function () { fireTestAlert(evt.id); });
+        actions.appendChild(testBtn);
+        card.appendChild(actions);
+
+        return card;
+    }
+
+    // Same accent defaults multi-alerts.js's CATEGORY_ACCENTS ships (~:35-43)
+    // — placeholder-only (never a real stored value), so an untouched field
+    // honestly shows what the alert box will actually render.
+    var CATEGORY_ACCENT_DEFAULTS = {
+        follow: '#ff68b3', subscription: '#8b5cf6', donation: '#14f195', bits: '#38bdf8',
+        raid: '#f59e0b', auction: '#fbbf24', hype: '#f43f5e'
+    };
+
+    function saveAlertSetting(paramType, paramName, value) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: paramType, target: null, setting: paramName, value: value }, function () {});
+            }
+        } catch (e) { console.error('[arcade-shell] alert setting save failed:', e); }
+    }
+
+    function setAlertField(category, field, value, rowEl) {
+        var st = alertsState[category];
+        var map = ALERT_PARAM_MAP[category];
+        if (!st || !map) return;
+        st[field] = value;
+        if (rowEl) rowEl.classList.toggle('is-set', field === 'style' ? value !== 'twitch' : !!value);
+
+        if (field === 'enabled') {
+            var enable = map.enable;
+            saveAlertSetting('param25', enable.param, enable.invert ? !value : !!value);
+        } else if (field === 'style') {
+            saveAlertSetting('optionparam25', map.style, value);
+        } else {
+            saveAlertSetting('textparam25', map[field], value);
+        }
+        queueAlertsPreviewReload();
+    }
+
+    function syncAlertCardFromState(category) {
+        var card = document.querySelector('.arcade-alert-card[data-arcade-alert-event="' + category + '"]');
+        if (!card) return;
+        var st = alertsState[category];
+        ['accent', 'template', 'font', 'media', 'sound'].forEach(function (field) {
+            var input = card.querySelector('[data-arcade-alert-field="' + field + '"]');
+            if (!input) return;
+            input.value = st[field] || '';
+            input.closest('.arcade-alert-row').classList.toggle('is-set', !!st[field]);
+        });
+        var styleSelect = card.querySelector('[data-arcade-alert-field="style"]');
+        if (styleSelect) {
+            styleSelect.value = st.style || 'twitch';
+            styleSelect.closest('.arcade-alert-row').classList.toggle('is-set', st.style !== 'twitch');
+        }
+        var enableInput = card.querySelector('[data-arcade-alert-field="enabled"]');
+        if (enableInput) enableInput.checked = !!st.enabled;
+    }
+
+    function readTextParam25(settings, paramName) {
+        var entry = settings[paramName];
+        return (entry && typeof entry.textparam25 === 'string') ? entry.textparam25 : '';
+    }
+    function readOptionParam25(settings, paramName) {
+        var entry = settings[paramName];
+        return (entry && typeof entry.optionparam25 === 'string') ? entry.optionparam25 : '';
+    }
+    function readParam25(settings, paramName) {
+        var entry = settings[paramName];
+        return entry ? entry.param25 : undefined;
+    }
+
+    // ONE getSettings read for all 7 categories' saved param25 values —
+    // same shape/IPC the Style tab's loadStyleSettings() already uses.
+    function loadAlertsSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            ALERT_EVENTS.forEach(function (evt) {
+                                var map = ALERT_PARAM_MAP[evt.id];
+                                var st = alertsState[evt.id];
+                                st.accent = readTextParam25(settings, map.accent);
+                                st.style = readOptionParam25(settings, map.style) || 'twitch';
+                                st.template = readTextParam25(settings, map.template);
+                                st.font = readTextParam25(settings, map.font);
+                                st.media = readTextParam25(settings, map.media);
+                                st.sound = readTextParam25(settings, map.sound);
+                                var paramIsSet = !!readParam25(settings, map.enable.param);
+                                st.enabled = map.enable.invert ? !paramIsSet : paramIsSet;
+                                syncAlertCardFromState(evt.id);
+                            });
+                        } catch (e) { console.error('[arcade-shell] alerts settings parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] alerts settings load failed:', e); }
+            setAlertsStatus('settings bridge unavailable — alert edits will not persist', true);
+            resolve();
+        });
+    }
+
+    // Per-event URL params from the CURRENT in-memory state — shared by the
+    // preview builder (adds &preview/&embedded) and the real Copy-overlay-
+    // URL builder (does not). Omits anything at its default/blank so an
+    // untouched category rides the alert box's own built-in defaults.
+    function buildAlertEventParams() {
+        var params = [];
+        ALERT_EVENTS.forEach(function (evt) {
+            var map = ALERT_PARAM_MAP[evt.id];
+            var st = alertsState[evt.id];
+            if (st.accent) params.push(map.accent + '=' + encodeURIComponent(st.accent));
+            if (st.style && st.style !== 'twitch') params.push(map.style + '=' + encodeURIComponent(st.style));
+            if (st.template) params.push(map.template + '=' + encodeURIComponent(st.template));
+            if (st.font) params.push(map.font + '=' + encodeURIComponent(st.font));
+            if (st.media) params.push(map.media + '=' + encodeURIComponent(st.media));
+            if (st.sound) params.push(map.sound + '=' + encodeURIComponent(st.sound));
+            var enable = map.enable;
+            var paramShouldBeSet = enable.invert ? !st.enabled : !!st.enabled;
+            if (paramShouldBeSet) params.push(enable.param);
+        });
+        return params;
+    }
+
+    function buildAlertsPreviewParams(sessionId) {
+        return ['session=' + encodeURIComponent(sessionId), 'preview=1', 'embedded=1'].concat(buildAlertEventParams());
+    }
+
+    // First paint + every debounced reload after an edit. Always a full src
+    // reload (multi-alerts.js reads its settings ONCE from location.search
+    // at boot — there is no live same-origin var to poke the way dock's CSS
+    // custom properties allow, since several of these fields are JS logic
+    // — headline templates, font, media fallback — not CSS).
+    function initAlertsPreviewFrame() {
+        var frame = document.getElementById('arcade-alerts-preview-frame');
+        if (!frame) return;
+        var resolver = window.resolveSocialStreamPage;
+        var getSession = window.getChatDockSessionId;
+        if (typeof resolver !== 'function' || typeof getSession !== 'function') {
+            setAlertsPreviewHint('preview unavailable (app helpers not found)');
+            return;
+        }
+        var myToken = ++alertsPreviewToken;
+        frame.dataset.alertsPreviewReady = '';
+        setAlertsPreviewHint('Loading preview…');
+        Promise.resolve(getSession()).then(function (sessionId) {
+            if (!sessionId) { setAlertsPreviewHint('waiting for session…'); return; }
+            return resolver('multi-alerts.html', { extraParams: buildAlertsPreviewParams(sessionId) }).then(function (resolved) {
+                if (myToken !== alertsPreviewToken) return; // superseded by a newer reload
+                if (resolved && resolved.url) {
+                    frame.onload = function () {
+                        if (myToken !== alertsPreviewToken) return;
+                        frame.dataset.alertsPreviewReady = '1';
+                        setAlertsPreviewHint('Preview ready — use "Fire test alert" on any card below.');
+                    };
+                    frame.src = resolved.url;
+                }
+            });
+        }).catch(function (e) {
+            console.error('[arcade-shell] alerts preview init failed:', e);
+            setAlertsPreviewHint('preview failed — see console');
+        });
+    }
+
+    function reloadAlertsPreview() {
+        initAlertsPreviewFrame();
+    }
+
+    function queueAlertsPreviewReload() {
+        if (!alertsPanelLive) return;
+        clearTimeout(alertsReloadTimer);
+        alertsReloadTimer = setTimeout(reloadAlertsPreview, 400);
+    }
+
+    // Lazy boot on first Alerts-tab visit — same pattern as
+    // ensureStylePanelLive(): one getSettings read, then first preview load.
+    function ensureAlertsPanelLive() {
+        if (alertsPanelLive) { return; }
+        alertsPanelLive = true;
+        loadAlertsSettings().then(function () { initAlertsPreviewFrame(); });
+    }
+
+    // "Fire test alert" — see the PREVIEW ISOLATION GUARANTEE comment at the
+    // top of this section for exactly why this can never reach a live
+    // session: the message goes to frame.contentWindow ONLY, and that frame
+    // is always loaded with &preview=1, which is multi-alerts.js's own gate
+    // for skipping all P2P/socket setup (~:317-328).
+    function fireTestAlert(category) {
+        var frame = document.getElementById('arcade-alerts-preview-frame');
+        if (!frame || !frame.contentWindow || !frame.dataset.alertsPreviewReady) {
+            setAlertsPreviewHint('preview still loading — try again in a moment');
+            return;
+        }
+        frame.contentWindow.postMessage({ multiAlertsPreview: { category: category, overrides: {} } }, '*');
+    }
+
+    function clearAlertsPreview() {
+        var frame = document.getElementById('arcade-alerts-preview-frame');
+        if (!frame || !frame.contentWindow) return;
+        frame.contentWindow.postMessage({ multiAlertsPreview: false }, '*');
+    }
+
+    // Real OBS overlay URL (no &preview/&embedded) — same resolver + session
+    // pattern as buildElementOverlayUrl above.
+    function buildAlertsOverlayUrl() {
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') {
+            return Promise.reject(new Error('overlay resolver unavailable'));
+        }
+        var langParams = (typeof window.getLanguageExtraParams === 'function') ? window.getLanguageExtraParams() : [];
+
+        function withSession(sessionId) {
+            var params = [];
+            if (sessionId) params.push('session=' + encodeURIComponent(sessionId));
+            params = params.concat(buildAlertEventParams()).concat(langParams);
+            return resolver('multi-alerts.html', { extraParams: params }).then(function (resolved) {
+                return resolved && resolved.url;
+            });
+        }
+
+        if (typeof window.getChatDockSessionId === 'function') {
+            try {
+                return Promise.resolve(window.getChatDockSessionId()).then(withSession, function () { return withSession(null); });
+            } catch (e) {
+                return withSession(null);
+            }
+        }
+        return withSession(null);
+    }
+
+    function copyAlertsOverlayUrl(btn) {
+        buildAlertsOverlayUrl().then(function (url) {
+            if (!url) throw new Error('empty overlay url');
+            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
+        }).catch(function (e) {
+            console.error('[arcade-shell] copy alerts overlay url failed:', e);
             flashButton(btn, 'Open from Settings', 2200);
         });
     }
@@ -3427,6 +3891,7 @@
         buildRailAndSide();
         buildElementsPanel();
         buildStylePanel();
+        buildAlertsPanel();
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }
