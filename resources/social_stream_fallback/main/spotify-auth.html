@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect Spotify — Pac's Arcade</title>
+<!--
+  ============================================================================
+  PAC'S ARCADE — BRANDED SPOTIFY AUTH PAGE (spotify-auth.html)
+  ============================================================================
+  Authorization Code + PKCE, public client, NO client secret anywhere.
+  Built to the house tuna-music skill spec (REF-tuna-music-skill.md §5):
+    - A static HTTPS page is a fully compliant OAuth client — zero server.
+    - S256 code_challenge on /authorize, code_verifier + client_id (no secret,
+      no Basic header) on /api/token.
+    - state verified on every return.
+    - Tokens are handed to the host via postMessage (SSN callback contract) or,
+      if there is no opener, via a copy-to-clipboard handoff blob for SSN's
+      manual field. Raw tokens are NEVER displayed.
+
+  CONFIG — the operator edits these placeholders (or passes URL params):
+      ?client_id=XXXX&redirect_uri=https://pacsarcade.org/spotify-auth.html
+      &targetOrigin=https://your-overlay-origin
+    CLIENT_ID    : public client id of the house Spotify Developer app
+                   (Development Mode: Pac's Premium account owns it, up to
+                   5 authorized users). Register this page's EXACT URL as a
+                   redirect URI in the dashboard. HTTPS required; loopback
+                   must be an IP literal (http://127.0.0.1), never "localhost".
+    REDIRECT_URI : leave empty to use this page's own exact URL (recommended).
+    TARGET_ORIGIN: exact origin the token handoff postMessage is sent to
+                   (SECURITY). Default: this page's own origin. Set it to the
+                   overlay/SSN host's exact origin when the host differs —
+                   the token is NEVER broadcast with "*".
+
+  Design law (REF-design-qa-rubric.md): gold = MONEY only (none here), neon =
+  live, cyan = info, red = danger, pink = flair. Dark-neutral ground. Press
+  Start 2P is referenced as a pixel accent ONLY and only if the viewer has it
+  installed — no external font CDN; system/websafe stacks elsewhere.
+  ============================================================================
+-->
+<style>
+  :root {
+    /* dark-neutral grounds */
+    --bg: #0d0f14;
+    --bg-panel: #161a22;
+    --bg-inset: #0a0c10;
+    --line: #2a3040;
+    --text: #e8eaf0;
+    --text-dim: #9aa3b5;
+    /* semantic lock — NO gold anywhere on this page (no money figure) */
+    --neon: #39ff6a;   /* live / success */
+    --cyan: #33d6ff;   /* info */
+    --red: #ff4455;    /* danger / error */
+    --pink: #ff4fd8;   /* flair */
+    --spotify: #1db954; /* Spotify brand green — attribution marks only */
+    --pixel-font: "Press Start 2P", "Courier New", monospace; /* local install only, no CDN */
+    --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono-font: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+    --r: 8px;
+    --gap: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--ui-font);
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+    padding: 48px 24px 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--gap) * 1.5);
+  }
+  header.brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--gap);
+    text-align: center;
+  }
+  /* PLACEHOLDER — swap for the real tricolor-pac mark. Do NOT invent brand art. */
+  .mark-slot {
+    width: 96px;
+    height: 96px;
+    border: 2px dashed var(--line);
+    border-radius: var(--r);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-family: var(--mono-font);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding: 8px;
+  }
+  h1 {
+    font-family: var(--pixel-font);
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    margin: 0;
+    color: var(--text);
+  }
+  h1 .accent { color: var(--pink); } /* pink = flair */
+  .lede { color: var(--text-dim); margin: 0; max-width: 44ch; }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+  .status {
+    display: none;
+    border-radius: var(--r);
+    padding: 12px 16px;
+    font-size: 14px;
+    border: 1px solid var(--line);
+    background: var(--bg-inset);
+  }
+  .status.show { display: block; }
+  .status.info  { border-color: var(--cyan); color: var(--cyan); }
+  .status.error { border-color: var(--red);  color: var(--red); }
+  .status.live  { border-color: var(--neon); color: var(--neon); }
+
+  /* one button scale — md primary; ≥44px tap target; centered label */
+  .btn {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: var(--r);
+    min-height: 48px;
+    padding: 12px 24px;
+    font-family: var(--pixel-font);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    user-select: none;
+  }
+  .btn-primary {
+    background: var(--spotify);
+    color: #04160a;
+  }
+  .btn-primary:hover { box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.35); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--cyan);
+    border-color: var(--cyan);
+  }
+  .btn-ghost:hover { background: rgba(51, 214, 255, 0.08); }
+  .btn-ghost:active { transform: translateY(1px); }
+  .btn:focus-visible {
+    outline: 3px solid var(--cyan);
+    outline-offset: 2px;
+  }
+  .btn[disabled] { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
+
+  .spotify-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  /* PLACEHOLDER box — same labeled-slot pattern as the tricolor-pac mark.
+     Replace with Spotify's official brand asset before production. */
+  .logo-slot {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    border: 1px dashed currentColor;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: var(--mono-font);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .connected {
+    display: none;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+  .connected.show { display: flex; }
+  .connected .who {
+    font-family: var(--mono-font);
+    font-size: 14px;
+    color: var(--neon);
+    overflow-wrap: anywhere;
+  }
+  .hint { color: var(--text-dim); font-size: 13px; margin: 0; }
+  .hint code {
+    font-family: var(--mono-font);
+    color: var(--cyan);
+    font-size: 12px;
+  }
+  .fineprint {
+    color: var(--text-dim);
+    font-size: 12px;
+    text-align: center;
+    margin: 0;
+  }
+  footer {
+    padding: 24px;
+    color: var(--text-dim);
+    font-family: var(--mono-font);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+  footer .bft { color: var(--cyan); font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn { transition: none; }
+    .btn-primary:active, .btn-ghost:active { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="brand">
+    <!-- PLACEHOLDER: tricolor-pac mark goes here (operator supplies final art) -->
+    <div class="mark-slot" aria-label="tricolor-pac mark placeholder">TRICOLOR-PAC<br>MARK</div>
+    <h1>PAC'S <span class="accent">ARCADE</span></h1>
+    <p class="lede">Connect Spotify to light up the now-playing widget and the
+    <strong>!song</strong> command. Sign-in happens on Spotify's own page — this
+    page never sees your password and never holds a client secret.</p>
+  </header>
+
+  <section class="panel" aria-live="polite">
+    <div id="status" class="status" role="status"></div>
+
+    <div id="pre-auth">
+      <button id="connect" class="btn btn-primary" type="button">
+        <!-- PLACEHOLDER — do NOT ship invented brand art. The operator must
+             drop Spotify's OFFICIAL logo asset in this slot, per Spotify's
+             brand guidelines (developer.spotify.com/documentation/design). -->
+        <span class="logo-slot" aria-label="Spotify official logo placeholder">[ Spotify® official logo — insert brand asset ]</span>
+        CONNECT SPOTIFY
+      </button>
+    </div>
+
+    <div id="connected" class="connected">
+      <p class="who" id="who"></p>
+      <p class="hint" id="handoff-hint">Tokens were sent to the host window. You can close this tab.</p>
+      <button id="copy-blob" class="btn btn-ghost" type="button" hidden>
+        COPY HANDOFF FOR SSN SETTINGS
+      </button>
+      <p class="hint" id="copy-note" hidden>Blob copied — paste it into SSN's manual
+      Spotify field. It is stored in <code>spotifyTokens</code> like always.</p>
+    </div>
+
+    <p class="spotify-mark">
+      <!-- PLACEHOLDER — do NOT ship invented brand art. The operator must
+           drop Spotify's OFFICIAL logo asset in this slot, per Spotify's
+           brand guidelines (developer.spotify.com/documentation/design). -->
+      <span class="logo-slot" aria-label="Spotify official logo placeholder">[ Spotify® official logo — insert brand asset ]</span>
+      Powered by Spotify — sign-in and playback data come from Spotify.
+    </p>
+  </section>
+
+  <p class="fineprint">Authorization Code + PKCE. No client secret is used or stored
+  anywhere in this flow.</p>
+</main>
+<footer>PAC'S ARCADE · music kit · <span class="bft" id="bft"></span></footer>
+
+<script>
+"use strict";
+/* ============================== CONFIG ===================================== */
+/* Operator: replace the placeholder, or pass ?client_id=&redirect_uri= .      */
+var CONFIG = {
+  CLIENT_ID: "REPLACE_ME_SPOTIFY_CLIENT_ID",
+  REDIRECT_URI: "" /* empty = this page's own exact URL (must match dashboard) */
+};
+var SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+/* =========================================================================== */
+
+var qs = new URLSearchParams(location.search);
+var CLIENT_ID = qs.get("client_id") || CONFIG.CLIENT_ID;
+var REDIRECT_URI = qs.get("redirect_uri") || CONFIG.REDIRECT_URI ||
+  (location.origin + location.pathname);
+/* SECURITY: exact origin the token handoff is posted to. Defaults to this
+   page's own origin; NEVER "*" — a broadcast target would leak the token to
+   any window that happens to be the opener. */
+var TARGET_ORIGIN = qs.get("targetOrigin") || qs.get("target_origin") || location.origin;
+
+var statusEl = document.getElementById("status");
+function say(kind, msg) {
+  statusEl.className = "status show " + kind;
+  statusEl.textContent = msg;
+}
+
+/* ---- BFT date stamp (NNNN.MM.DD a₿, year = bitcoin's age) ---------------- */
+(function bft() {
+  var now = new Date();
+  var age = now.getFullYear() - 2009; /* genesis 2009 */
+  var nnnn = String(age).padStart(4, "0");
+  var mm = String(now.getMonth() + 1).padStart(2, "0");
+  var dd = String(now.getDate()).padStart(2, "0");
+  document.getElementById("bft").textContent = nnnn + "." + mm + "." + dd + " a₿";
+})();
+
+/* ---- PKCE helpers (Web Crypto, in-browser) -------------------------------- */
+function randomString(len) {
+  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  var rnd = new Uint8Array(len);
+  crypto.getRandomValues(rnd);
+  var out = "";
+  for (var i = 0; i < len; i++) out += chars[rnd[i] % chars.length];
+  return out;
+}
+function base64url(buf) {
+  var bytes = new Uint8Array(buf), bin = "";
+  for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function sha256b64url(text) {
+  var digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return base64url(digest);
+}
+
+/* ---- Step 1: start the flow ------------------------------------------------ */
+document.getElementById("connect").addEventListener("click", async function () {
+  if (!CLIENT_ID || CLIENT_ID.indexOf("REPLACE_ME") === 0) {
+    say("error", "No client_id configured. The operator must set CONFIG.CLIENT_ID " +
+      "or pass ?client_id=… — register this page's exact URL in the Spotify dashboard.");
+    return;
+  }
+  try {
+    var verifier = randomString(64);           /* 43–128 chars allowed */
+    var state = randomString(24);
+    var challenge = await sha256b64url(verifier);
+    sessionStorage.setItem("pkce_verifier", verifier);
+    sessionStorage.setItem("pkce_state", state);
+    sessionStorage.setItem("pkce_redirect_uri", REDIRECT_URI);
+
+    var url = "https://accounts.spotify.com/authorize" +
+      "?response_type=code" +
+      "&client_id=" + encodeURIComponent(CLIENT_ID) +
+      "&redirect_uri=" + encodeURIComponent(REDIRECT_URI) +
+      "&scope=" + encodeURIComponent(SCOPES) +
+      "&code_challenge_method=S256" +
+      "&code_challenge=" + encodeURIComponent(challenge) +
+      "&state=" + encodeURIComponent(state);
+    say("info", "Sending you to Spotify to sign in…");
+    location.assign(url);
+  } catch (e) {
+    say("error", "Could not start the flow: " + e.message);
+  }
+});
+
+/* ---- Step 2: handle the callback ------------------------------------------ */
+async function handleCallback() {
+  var code = qs.get("code"), state = qs.get("state"), err = qs.get("error");
+  if (!code && !err) return; /* fresh visit */
+
+  document.getElementById("pre-auth").hidden = true;
+
+  if (err) {
+    say("error", "Spotify returned an error: " + err +
+      (err === "access_denied" ? " (you declined — nothing was connected)." : "."));
+    history.replaceState(null, "", REDIRECT_URI);
+    document.getElementById("pre-auth").hidden = false;
+    return;
+  }
+
+  var savedState = sessionStorage.getItem("pkce_state");
+  var verifier = sessionStorage.getItem("pkce_verifier");
+  if (!state || state !== savedState || !verifier) {
+    say("error", "State mismatch — possible forged callback. Nothing was exchanged. " +
+      "Start again with Connect Spotify.");
+    return;
+  }
+  say("info", "Verifying with Spotify…");
+
+  try {
+    /* PKCE token exchange: client_id only — NO secret, NO Basic header. */
+    var body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code,
+      redirect_uri: sessionStorage.getItem("pkce_redirect_uri") || REDIRECT_URI,
+      client_id: CLIENT_ID,
+      code_verifier: verifier
+    });
+    var res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || data.error || ("HTTP " + res.status));
+
+    var tokens = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      tokenExpiry: Date.now() + (data.expires_in * 1000) - 60000 /* SSN convention */
+    };
+    sessionStorage.removeItem("pkce_verifier");
+    sessionStorage.removeItem("pkce_state");
+    history.replaceState(null, "", REDIRECT_URI); /* scrub ?code from the URL */
+
+    /* Friendly identity, never raw tokens. */
+    var name = "Spotify user";
+    try {
+      var me = await fetch("https://api.spotify.com/v1/me", {
+        headers: { Authorization: "Bearer " + tokens.accessToken }
+      });
+      if (me.ok) {
+        var profile = await me.json();
+        name = profile.display_name || profile.id || name;
+      }
+    } catch (_) { /* identity is cosmetic — connection still succeeded */ }
+
+    /* Token handoff: SSN callback contract (spotify-callback.js shape). */
+    var payload = {
+      type: "spotifyAuthCallback",
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      tokenExpiry: tokens.tokenExpiry,
+      clientId: CLIENT_ID,
+      redirectUri: REDIRECT_URI
+    };
+    var handedOff = false;
+    if (window.opener && !window.opener.closed) {
+      try {
+        /* Origin-pinned handoff only — no "*" fallback. If the host lives on
+           a different origin (e.g. SSN), the operator passes
+           ?targetOrigin=https://that-host exactly. */
+        window.opener.postMessage(payload, TARGET_ORIGIN);
+        handedOff = true;
+      } catch (_) { handedOff = false; }
+    }
+
+    document.getElementById("connected").classList.add("show");
+    document.getElementById("who").textContent = "● Connected as " + name;
+    say("live", "Spotify is connected. The arcade can now read what's playing.");
+
+    if (!handedOff) {
+      /* No host window — manual route into SSN's settings field.            */
+      /* Copy-to-clipboard only: raw tokens are NEVER shown on screen.        */
+      document.getElementById("handoff-hint").textContent =
+        "No host window detected. Use the button below, then paste into SSN's manual Spotify field.";
+      var copyBtn = document.getElementById("copy-blob");
+      copyBtn.hidden = false;
+      copyBtn.addEventListener("click", async function () {
+        try {
+          await navigator.clipboard.writeText(JSON.stringify({
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            tokenExpiry: tokens.tokenExpiry
+          }));
+          document.getElementById("copy-note").hidden = false;
+        } catch (e) {
+          say("error", "Clipboard blocked by the browser: " + e.message);
+        }
+      });
+    }
+  } catch (e) {
+    say("error", "Token exchange failed: " + e.message);
+    document.getElementById("pre-auth").hidden = false;
+  }
+}
+handleCallback();
+</script>
+</body>
+</html>

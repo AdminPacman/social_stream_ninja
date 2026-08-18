@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pac's Arcade — Now Playing</title>
+<!--
+  ============================================================================
+  PAC'S ARCADE — NOW-PLAYING WIDGET (music-widget.html)
+  OBS browser source. Polls the Spotify Web API, shows cover art + track +
+  artist + progress. Transparent-capable background; honest idle state;
+  never fakes a track outside of explicit ?demo mode.
+
+  TOKEN SUPPLY (pick one):
+    ?token=SPOTIFY_ACCESS_TOKEN     (or ?access_token=)
+    postMessage {type:"spotifyAuthCallback", accessToken, refreshToken, ...}
+    postMessage {type:"spotify-token", token:"…"}
+  In production the token arrives from SSN's onTrackUpdate plumbing / the
+  spotify-auth.html handoff — the operator never pastes it into OBS.
+
+  ── FULL URL PARAM LIST (Tuna-level customization) ──────────────────────────
+  token / access_token  Spotify access token (see above)
+  layout    horizontal (default) | vertical | compact
+            compact = smaller preset: 48px art, 14px title, 11px artist,
+            tighter padding, thin 2px progress line, times hidden
+  art       on (default) | off          — album art toggle
+  artsize   px, art edge length (default: horizontal 96, compact 48, vertical 160)
+  artpos    left (default) | right      — art side in horizontal layout
+  artradius px corner radius of art (default 8)
+  titlefont   font family for title  (websafe/system names only; no CDN fonts.
+              "Press Start 2P" works if installed locally — pixel accent only)
+  titlesize   px (default 16; compact 14)
+  titlecolor  CSS color (default #e8eaf0)
+  artistfont  font family for artist (default = UI stack)
+  artistsize  px (default 13)
+  artistcolor CSS color (default #9aa3b5)
+  progress    on (default) | off        — progress bar toggle
+  progresscolor CSS color (default neon #39ff6a = live)
+  trackcolor  CSS color of the unfilled progress track (default #2a3040)
+  bg        CSS color OR "transparent" (default transparent — OBS-safe)
+  fg        CSS color shorthand: sets BOTH title & artist color unless they
+            are given explicitly
+  width     px max-width of the widget (default 420; compact 300; vertical 240)
+  pad       px inner padding (default 12; compact 8)
+  radius    px outer corner radius (default 12; compact 8)
+  poll      ms between API polls (default 5000, min 1000)
+  idle      text shown when nothing is playing (default "Nothing playing")
+  align     left (default) | center | right — text alignment
+  trustOrigin  origin allowlist for postMessage token handoff (SECURITY).
+            Default: this page's own origin. Comma-separate several origins,
+            e.g. ?trustOrigin=https://pacsarcade.org,https://ssn.example.com
+            Messages from ANY other origin are ignored before the token is
+            touched. Never set this to an origin you don't control.
+  demo      1 — renders a fake track with no network calls (screenshots/tests)
+  ─────────────────────────────────────────────────────────────────────────────
+  Compliance: cover art + metadata shown together, always with Spotify
+  attribution, and the whole widget links back to the track on Spotify.
+  No caching beyond the live poll. NO gold anywhere (gold = MONEY only).
+  prefers-reduced-motion: progress updates step per poll, no interpolation.
+  ============================================================================
+-->
+<style>
+  :root {
+    --bg: transparent;
+    --line: #2a3040;
+    --text: #e8eaf0;
+    --text-dim: #9aa3b5;
+    --neon: #39ff6a;  /* live */
+    --cyan: #33d6ff;  /* info */
+    --red: #ff4455;   /* danger */
+    --pink: #ff4fd8;  /* flair */
+    --spotify: #1db954;
+    --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono-font: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--ui-font); }
+
+  #widget {
+    display: inline-flex;
+    gap: 12px;
+    align-items: center;
+    background: var(--bg);
+    border-radius: var(--radius, 12px);
+    padding: var(--pad, 12px);
+    max-width: var(--width, 420px);
+    color: var(--text);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  #widget:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+
+  #art {
+    flex: none;
+    width: var(--artsize, 96px);
+    height: var(--artsize, 96px);
+    border-radius: var(--artradius, 8px);
+    object-fit: cover;
+    background: var(--line);
+    display: block;
+  }
+  #art.hidden { display: none; }
+
+  #meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+  #title {
+    font-family: var(--titlefont, var(--ui-font));
+    font-size: var(--titlesize, 16px);
+    color: var(--titlecolor, var(--text));
+    font-weight: 700;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #artist {
+    font-family: var(--artistfont, var(--ui-font));
+    font-size: var(--artistsize, 13px);
+    color: var(--artistcolor, var(--text-dim));
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #bar {
+    margin-top: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--trackcolor, var(--line));
+    overflow: hidden;
+  }
+  #bar.hidden { display: none; }
+  #fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: var(--progresscolor, var(--neon));
+  }
+  #times {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono-font);
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  #attribution {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+  /* PLACEHOLDER box — same labeled-slot pattern as the tricolor-pac mark.
+     Replace with Spotify's official brand asset before production. */
+  .logo-slot {
+    display: inline-flex;
+    align-items: center;
+    border: 1px dashed var(--text-dim);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: var(--mono-font);
+    font-size: 8px;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  /* layouts */
+  #widget.vertical {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+  }
+  /* compact: genuinely smaller preset — 48px art, 14px title, 11px artist,
+     tighter gap/padding/width, progress becomes a thin line, times hidden.
+     All values remain overridable via the usual URL params. */
+  #widget.compact { gap: 8px; }
+  #widget.compact #title { font-size: var(--titlesize, 14px); }
+  #widget.compact #artist { font-size: var(--artistsize, 11px); }
+  #widget.compact #bar { height: 2px; border-radius: 1px; margin-top: 4px; }
+  #widget.compact #fill { border-radius: 1px; }
+  #widget.compact #times { display: none; }
+  #widget.compact #attribution { margin-top: 4px; }
+  #widget.art-right { flex-direction: row-reverse; }
+  #widget.align-center #meta { text-align: center; }
+  #widget.align-right #meta { text-align: right; }
+  #widget.vertical #title, #widget.vertical #artist { white-space: normal; }
+
+  /* idle state — honest, info-colored, never a fake track */
+  #widget.idle #art { display: none; }
+  #widget.idle #bar, #widget.idle #times { display: none; }
+  #widget.idle #title {
+    color: var(--cyan);
+    font-weight: 400;
+    white-space: normal;
+  }
+  #widget.idle #artist { display: none; }
+</style>
+</head>
+<body>
+<a id="widget" href="https://open.spotify.com/" target="_blank" rel="noopener"
+   role="status" aria-live="polite" aria-label="Now playing — opens on Spotify">
+  <img id="art" alt="" crossorigin="anonymous">
+  <div id="meta">
+    <div id="title"></div>
+    <div id="artist"></div>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="times"><span id="t-elapsed">0:00</span><span id="t-total">0:00</span></div>
+    <span id="attribution">
+      <!-- PLACEHOLDER — do NOT ship invented brand art. The operator must drop
+           Spotify's OFFICIAL logo asset in this slot, per Spotify's brand
+           guidelines (developer.spotify.com/documentation/design). -->
+      <span class="logo-slot" aria-label="Spotify official logo placeholder">[ Spotify® official logo — insert brand asset ]</span>
+      SPOTIFY
+    </span>
+  </div>
+</a>
+
+<script>
+"use strict";
+/* ---- params ---------------------------------------------------------------- */
+var P = new URLSearchParams(location.search);
+function param(name, dflt) { var v = P.get(name); return (v === null || v === "") ? dflt : v; }
+function onoff(name, dflt) {
+  var v = P.get(name);
+  if (v === null) return dflt;
+  return !(v === "0" || v === "off" || v === "false" || v === "no");
+}
+var cfg = {
+  token: P.get("token") || P.get("access_token") || "",
+  layout: param("layout", "horizontal"),
+  art: onoff("art", true),
+  artsize: param("artsize", ""),
+  artradius: param("artradius", ""),
+  artpos: param("artpos", "left"),
+  titlefont: param("titlefont", ""), titlesize: param("titlesize", ""), titlecolor: param("titlecolor", ""),
+  artistfont: param("artistfont", ""), artistsize: param("artistsize", ""), artistcolor: param("artistcolor", ""),
+  fg: param("fg", ""),
+  progress: onoff("progress", true),
+  progresscolor: param("progresscolor", ""),
+  trackcolor: param("trackcolor", ""),
+  bg: param("bg", "transparent"),
+  width: param("width", ""),
+  pad: param("pad", ""),
+  radius: param("radius", ""),
+  poll: Math.max(1000, parseInt(param("poll", "5000"), 10) || 5000),
+  idle: param("idle", "Nothing playing"),
+  align: param("align", "left"),
+  demo: onoff("demo", false)
+};
+/* Origin allowlist for postMessage token handoff — default same-origin only.
+   Comma-separated exact origins; "*" is deliberately NOT honored. */
+var trustedOrigins = param("trustOrigin", location.origin)
+  .split(",").map(function (o) { return o.trim(); }).filter(Boolean);
+var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---- apply styling ---------------------------------------------------------- */
+var w = document.getElementById("widget");
+var root = document.documentElement.style;
+if (cfg.layout === "vertical" || cfg.layout === "compact") w.classList.add(cfg.layout);
+if (cfg.layout === "horizontal" && cfg.artpos === "right") w.classList.add("art-right");
+if (cfg.align !== "left") w.classList.add("align-" + cfg.align);
+
+var defaultArt = cfg.layout === "vertical" ? "160" : cfg.layout === "compact" ? "48" : "96";
+root.setProperty("--artsize", (cfg.artsize || defaultArt) + "px");
+if (cfg.artradius) root.setProperty("--artradius", cfg.artradius + "px");
+root.setProperty("--width", (cfg.width ||
+  (cfg.layout === "vertical" ? "240" : cfg.layout === "compact" ? "300" : "420")) + "px");
+root.setProperty("--pad", (cfg.pad || (cfg.layout === "compact" ? "8" : "12")) + "px");
+root.setProperty("--radius", (cfg.radius || (cfg.layout === "compact" ? "8" : "12")) + "px");
+root.setProperty("--bg", cfg.bg === "transparent" ? "transparent" : cfg.bg);
+if (cfg.fg) { root.setProperty("--titlecolor", cfg.fg); root.setProperty("--artistcolor", cfg.fg); }
+if (cfg.titlefont) root.setProperty("--titlefont", cfg.titlefont);
+if (cfg.titlesize) root.setProperty("--titlesize", cfg.titlesize + "px");
+if (cfg.titlecolor) root.setProperty("--titlecolor", cfg.titlecolor);
+if (cfg.artistfont) root.setProperty("--artistfont", cfg.artistfont);
+if (cfg.artistsize) root.setProperty("--artistsize", cfg.artistsize + "px");
+if (cfg.artistcolor) root.setProperty("--artistcolor", cfg.artistcolor);
+if (cfg.progresscolor) root.setProperty("--progresscolor", cfg.progresscolor);
+if (cfg.trackcolor) root.setProperty("--trackcolor", cfg.trackcolor);
+
+var artEl = document.getElementById("art");
+var titleEl = document.getElementById("title");
+var artistEl = document.getElementById("artist");
+var barEl = document.getElementById("bar");
+var fillEl = document.getElementById("fill");
+var tElapsed = document.getElementById("t-elapsed");
+var tTotal = document.getElementById("t-total");
+if (!cfg.art) artEl.classList.add("hidden");
+if (!cfg.progress) barEl.classList.add("hidden");
+
+/* ---- state ------------------------------------------------------------------- */
+var track = null;          /* {title, artist, artUrl, url, progressMs, durationMs, playing, stamp} */
+var lastTrackKey = "";
+
+function fmt(ms) {
+  var s = Math.max(0, Math.round(ms / 1000));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function showIdle() {
+  track = null;
+  w.classList.add("idle");
+  w.href = "https://open.spotify.com/";
+  titleEl.textContent = cfg.idle;   /* honest — never a fake track */
+}
+
+function showTrack(t) {
+  w.classList.remove("idle");
+  var key = t.title + "|" + t.artist + "|" + t.durationMs;
+  if (key !== lastTrackKey) {
+    lastTrackKey = key;
+    titleEl.textContent = t.title;
+    artistEl.textContent = t.artist;
+    if (cfg.art && t.artUrl) { artEl.src = t.artUrl; artEl.alt = "Cover art — " + t.title; }
+    w.href = t.url || "https://open.spotify.com/";   /* compliance: link back */
+    document.title = t.title + " — " + t.artist;
+  }
+  track = t;
+  track.stamp = Date.now();
+  renderProgress();   /* paint immediately — don't wait for the first tick */
+}
+
+function renderProgress() {
+  if (!track) return;
+  var elapsed = track.progressMs;
+  if (track.playing) {
+    if (!reducedMotion) elapsed += Date.now() - track.stamp;   /* smooth between polls */
+    else elapsed = track.progressMs;                            /* step per poll only */
+  }
+  elapsed = Math.min(elapsed, track.durationMs);
+  fillEl.style.width = (track.durationMs ? (elapsed / track.durationMs) * 100 : 0) + "%";
+  tElapsed.textContent = fmt(elapsed);
+  tTotal.textContent = fmt(track.durationMs);
+}
+setInterval(renderProgress, reducedMotion ? 1000 : 250);
+
+/* ---- Spotify polling --------------------------------------------------------- */
+async function poll() {
+  if (!cfg.token) { showIdle(); titleEl.textContent = cfg.idle + " — no token"; return; }
+  try {
+    var res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
+      headers: { Authorization: "Bearer " + cfg.token }
+    });
+    if (res.status === 204) { showIdle(); return; }                 /* nothing playing */
+    if (res.status === 401) {                                       /* token expired */
+      showIdle();
+      titleEl.textContent = cfg.idle + " — token expired";
+      return;
+    }
+    if (!res.ok) { showIdle(); return; }
+    var d = await res.json();
+    if (!d || !d.item) { showIdle(); return; }
+    var item = d.item;
+    var images = (item.album && item.album.images) || [];
+    showTrack({
+      title: item.name || "Unknown track",
+      artist: (item.artists || []).map(function (a) { return a.name; }).join(", ") || "Unknown artist",
+      artUrl: (images[1] || images[0] || {}).url || "",
+      url: item.external_urls && item.external_urls.spotify,
+      progressMs: d.progress_ms || 0,
+      durationMs: item.duration_ms || 0,
+      playing: !!d.is_playing
+    });
+  } catch (e) {
+    showIdle();   /* network hiccup — show idle rather than stale data */
+  }
+}
+
+/* ---- token via postMessage (from spotify-auth.html / SSN) --------------------- */
+window.addEventListener("message", function (ev) {
+  /* SECURITY: verify the sender BEFORE touching any token material.
+     Messages from origins outside ?trustOrigin= are ignored outright. */
+  if (trustedOrigins.indexOf(ev.origin) === -1) return;
+  var d = ev.data || {};
+  if (d.type === "spotifyAuthCallback" && d.accessToken) {
+    cfg.token = d.accessToken;
+    poll();
+  } else if (d.type === "spotify-token" && d.token) {
+    cfg.token = d.token;
+    poll();
+  }
+});
+
+/* ---- demo mode: fake track, zero network, for screenshots/standalone -------- */
+function demoArt() {
+  var svg =
+    "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'>" +
+    "<rect width='300' height='300' fill='#161a22'/>" +
+    "<rect x='24' y='24' width='252' height='252' rx='12' fill='none' stroke='#2a3040' stroke-width='4'/>" +
+    "<circle cx='150' cy='132' r='56' fill='none' stroke='#ff4fd8' stroke-width='6'/>" +
+    "<rect x='96' y='204' width='108' height='10' rx='5' fill='#39ff6a'/>" +
+    "<rect x='116' y='224' width='68' height='8' rx='4' fill='#33d6ff'/>" +
+    "</svg>";
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+if (cfg.demo) {
+  showTrack({
+    title: "Insert Coin (Demo Mode)",
+    artist: "The House Band",
+    artUrl: demoArt(),
+    url: "https://open.spotify.com/",
+    progressMs: 42000,
+    durationMs: 187000,
+    playing: true
+  });
+  if (!reducedMotion) {
+    setInterval(function () {
+      if (!track) return;
+      track.progressMs += 1000;
+      if (track.progressMs >= track.durationMs) track.progressMs = 0;
+      track.stamp = Date.now();
+    }, 1000);
+  }
+} else {
+  poll();
+  setInterval(poll, cfg.poll);
+}
+</script>
+</body>
+</html>
