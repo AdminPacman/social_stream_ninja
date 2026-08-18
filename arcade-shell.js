@@ -1100,6 +1100,16 @@
     var THEME_OVERRIDE_PREFIX = 'arcadeThemeCss_';
     var themeOverrides = {}; // slug -> raw saved css blob (populated by loadStyleSettings from the SAME getSettings response the dock profiles/My Presets already read — no extra IPC round trip)
     function themeSlug(entry) { return String(entry.file).replace(/[^a-zA-Z0-9]+/g, '_').toLowerCase(); }
+    // Resolves a My Library entry's stored baseTheme (a THEME_PAGES `file`
+    // value) back to its full entry — needed to reuse the existing v3
+    // preview/cssb64 machinery (previewLibraryEntry, Copy URL) rather than
+    // inventing a parallel one.
+    function findThemePageByFile(file) {
+        for (var i = 0; i < THEME_PAGES.length; i++) {
+            if (THEME_PAGES[i].file === file) return THEME_PAGES[i];
+        }
+        return null;
+    }
     // Confirm-on-second-click arming for the shared clear-override button —
     // same shape as My Presets' delete/apply arms (armPresetDelete etc.).
     var pendingClearOverrideSlug = null;
@@ -1137,6 +1147,22 @@
     var pendingApplyId = null;
     var pendingApplyBtn = null;
     var pendingApplyTimer = null;
+
+    // My Library (theme-library-spec.md §B) — named user variants forked
+    // from a Steve's-template preview. SAME shape/plumbing as My Presets
+    // (own top-level saveSetting key, cap, confirm-on-second-click delete),
+    // but scoped to theme mode and carrying a baseTheme reference so a
+    // library entry can rebuild its base theme's preview + compiled cssb64.
+    // Independent of v3's per-theme default override (arcadeThemeCss_<slug>,
+    // themeOverrides above) — that stays "the default override for that
+    // theme", unchanged; library entries are separate named forks.
+    var MY_LIBRARY_KEY = 'arcadeThemeLibrary';
+    var MY_LIBRARY_CAP = 24;
+    var myThemeLibrary = []; // [{id, name, baseTheme: '<file>', state, userCss}]
+    var activeLibraryEntry = null; // the library entry currently loaded into the canvas, or null
+    var pendingLibraryDeleteId = null;
+    var pendingLibraryDeleteBtn = null;
+    var pendingLibraryDeleteTimer = null;
 
     var STYLE_CONTROLS = [
         { group: 'COLORS' },
@@ -1210,13 +1236,32 @@
     //   seedable — recentHistory|loadlast|getRecentHistory, PLUS a check for
     //             any exposed processInput (dock.html's exact recentHistory-
     //             batch ingest shape).
-    // RESULT: cssb64:false and seedable:false on EVERY entry below — grep
-    // hit ZERO matches for both patterns across all 41 files, with one single
-    // exception worth naming: pretty.html contains a "b64css" literal, but on
-    // READING it (not just grepping) that line BUILDS an outbound b64css
-    // param for the dock.html iframe it embeds internally — pretty.html does
-    // not read a cssb64/b64css param from ITS OWN url, so it does not qualify
-    // (an external override into pretty.html itself has nowhere to land).
+    // ORIGINAL RESULT (0018.05.26): cssb64:false and seedable:false on EVERY
+    // entry — grep hit ZERO matches for both patterns across all 41 files,
+    // with one single exception worth naming: pretty.html contained a
+    // "b64css" literal, but on READING it (not just grepping) that line
+    // BUILT an outbound b64css param for the dock.html iframe it embeds
+    // internally — pretty.html did not read a cssb64/b64css param from ITS
+    // OWN url, so it did not qualify (an external override into pretty.html
+    // itself had nowhere to land).
+    //
+    // CURATED-8 CSS UNLOCK (0018.05.28, theme-library-spec.md §A) — 8 of the
+    // 41 pages above now carry a hand-inserted port of featured.html's own
+    // &css (~:1554) / &b64css|base64css|cssbase64|cssb64 (~:1573-1590)
+    // blocks (verbatim-faithful, same pattern as multi-alerts.js's
+    // applyCustomCss(), Alert Stage 1) — a source-citation comment sits at
+    // each insertion point in the theme file itself. `cssb64:true` below is
+    // grep-verified per the same method as the original sweep, not a guess:
+    // compact-clean.html, compact-glass.html, horizontal.html,
+    // overlay-bubbles.html, overlay-cards.html, overlay-neon-cyberpunk.html,
+    // pretty.html, Neutron/chatOnly.html. pretty.html and Neutron/chatOnly.html
+    // are the iframe-wrapper family (embed dock.html) — the ported block
+    // applies to THEIR OWN <head>, independent of the outbound b64css they
+    // already forward into the embedded dock.html iframe (unrelated
+    // mechanism, still present, still not what this flag describes).
+    // seedable remains false on all 8 (no recentHistory/loadlast ingest was
+    // added — out of scope for the Curated-8 css unlock). Every other entry
+    // below is unchanged from the original sweep.
     // Every page DOES join its OWN P2P session (urlParams "session"/"room"/
     // "roomid") the same way a real OBS browser source would — that's why
     // Part A still passes session+loadlast on the preview URL and lets real
@@ -1232,22 +1277,22 @@
     // preview hint — never guessed, never claimed without this evidence.
     var THEME_PAGES = [
         { name: 'Compact Classic', file: 'compact-classic.html', cssb64: false, seedable: false },
-        { name: 'Compact Clean', file: 'compact-clean.html', cssb64: false, seedable: false },
-        { name: 'Compact Glass', file: 'compact-glass.html', cssb64: false, seedable: false },
-        { name: 'Horizontal', file: 'horizontal.html', cssb64: false, seedable: false },
+        { name: 'Compact Clean', file: 'compact-clean.html', cssb64: true, seedable: false },
+        { name: 'Compact Glass', file: 'compact-glass.html', cssb64: true, seedable: false },
+        { name: 'Horizontal', file: 'horizontal.html', cssb64: true, seedable: false },
         { name: 'No Timeout Messages', file: 'notimeoutmessages.html', cssb64: false, seedable: false },
-        { name: 'Bubbles', file: 'overlay-bubbles.html', cssb64: false, seedable: false },
-        { name: 'Cards', file: 'overlay-cards.html', cssb64: false, seedable: false },
+        { name: 'Bubbles', file: 'overlay-bubbles.html', cssb64: true, seedable: false },
+        { name: 'Cards', file: 'overlay-cards.html', cssb64: true, seedable: false },
         { name: 'Comic Classic', file: 'overlay-comic-classic.html', cssb64: false, seedable: false },
         { name: 'Comic Pop', file: 'overlay-comic-pop.html', cssb64: false, seedable: false },
         { name: 'Credits', file: 'overlay-credits.html', cssb64: false, seedable: false },
         { name: 'Danmaku', file: 'overlay-danmaku.html', cssb64: false, seedable: false },
-        { name: 'Neon Cyberpunk', file: 'overlay-neon-cyberpunk.html', cssb64: false, seedable: false },
+        { name: 'Neon Cyberpunk', file: 'overlay-neon-cyberpunk.html', cssb64: true, seedable: false },
         { name: 'Particles', file: 'overlay-particles.html', cssb64: false, seedable: false },
         { name: 'Ticker News', file: 'overlay-ticker-news.html', cssb64: false, seedable: false },
         { name: 'Typewriter', file: 'overlay-typewriter.html', cssb64: false, seedable: false },
         { name: 'X-acception', file: 'overlay-xacception.html', cssb64: false, seedable: false },
-        { name: 'Pretty', file: 'pretty.html', cssb64: false, seedable: false },
+        { name: 'Pretty', file: 'pretty.html', cssb64: true, seedable: false },
         { name: 'Sample Overlay (Reverse)', file: 'sampleoverlay_reverse.html', cssb64: false, seedable: false },
         { name: 'Spirit Overlay', file: 'spiritoverlay.html', cssb64: false, seedable: false },
         { name: 'Featured — 3D', file: 'featured-styles/featured-3d.html', cssb64: false, seedable: false },
@@ -1263,7 +1308,7 @@
         { name: 'Featured — Particles', file: 'featured-styles/featured-particles.html', cssb64: false, seedable: false },
         { name: 'Featured — Retro', file: 'featured-styles/featured-retro.html', cssb64: false, seedable: false },
         { name: 'Featured — Slide', file: 'featured-styles/featured-slide.html', cssb64: false, seedable: false },
-        { name: 'Neutron — Chat Only', file: 'Neutron/chatOnly.html', cssb64: false, seedable: false },
+        { name: 'Neutron — Chat Only', file: 'Neutron/chatOnly.html', cssb64: true, seedable: false },
         { name: 'Neutron — Stream', file: 'Neutron/stream.html', cssb64: false, seedable: false },
         { name: 'Deuks Overlay 1', file: 'deuks_overlay/overlay1.html', cssb64: false, seedable: false },
         { name: 'Deuks Overlay 2', file: 'deuks_overlay/overlay2.html', cssb64: false, seedable: false },
@@ -1365,6 +1410,14 @@
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mypreset-save">Save</button>' +
             '</div>' +
             '</div>' +
+            '<div class="arcade-style-mylibrary-save" id="arcade-style-mylibrary-save" hidden>' +
+            '<span class="arcade-k">MY LIBRARY</span>' +
+            '<span class="arcade-style-hint">Steve\'s theme is a starting point — save your edits as your own, forkable copy (separate from this theme\'s default override).</span>' +
+            '<div class="arcade-style-mypresets-save">' +
+            '<input type="text" id="arcade-style-mylibrary-name" class="arcade-style-mypreset-name" placeholder="Save to My Library…" maxlength="40">' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-mylibrary-save-btn">Save</button>' +
+            '</div>' +
+            '</div>' +
             '<div class="arcade-style-cols">' +
             '<div class="arcade-style-controls-col">' +
             '<div class="arcade-style-controls" id="arcade-style-controls"></div>' +
@@ -1399,6 +1452,7 @@
         renderStylePresets(panel);
         renderStyleControls(panel);
         renderMyPresetsSection(panel);
+        renderMyLibrarySaveRow(panel);
         renderThemeRail(panel);
         initThemeRailFilter(panel);
         initThemePreviewBarActions(panel);
@@ -1665,6 +1719,128 @@
     }
 
     // --------------------------------------------------------------------
+    // My Library (theme-library-spec.md §B) — save-as from Steve's
+    // templates. SAME shape as My Presets above (name-matched overwrite,
+    // cap, fire-and-honestly-confirm save, confirm-on-second-click delete),
+    // scoped to theme mode: an entry additionally carries `baseTheme` (a
+    // THEME_PAGES `file`) so previewLibraryEntry can rebuild the canvas.
+    // --------------------------------------------------------------------
+    function renderMyLibrarySaveRow(panel) {
+        var input = panel.querySelector('#arcade-style-mylibrary-name');
+        var saveBtn = panel.querySelector('#arcade-style-mylibrary-save-btn');
+        if (!input || !saveBtn) return;
+        // Deliberately does NOT clear input.value after saving (unlike My
+        // Presets' save row) — spec §B.4: "re-saving under the same name
+        // updates it, new name forks it". Leaving the name in place is what
+        // makes that iterate-then-Save-again workflow work; the name only
+        // needs to change when the user actually wants a fork.
+        saveBtn.addEventListener('click', function () { saveCurrentToMyLibrary(input.value); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); saveCurrentToMyLibrary(input.value); }
+        });
+    }
+
+    function saveCurrentToMyLibrary(rawName) {
+        if (activePreviewMode !== 'theme' || !activeThemeEntry || !activeThemeEntry.cssb64) {
+            setStyleStatus('Preview a stylable theme before saving to My Library', true);
+            return;
+        }
+        var name = String(rawName || '').trim();
+        if (!name) { setStyleStatus('Name your library entry before saving', true); return; }
+        var existingIdx = -1;
+        for (var i = 0; i < myThemeLibrary.length; i++) {
+            if (myThemeLibrary[i].name === name) { existingIdx = i; break; }
+        }
+        if (existingIdx === -1 && myThemeLibrary.length >= MY_LIBRARY_CAP) {
+            setStyleStatus('Library limit reached (' + MY_LIBRARY_CAP + ') — delete one to save more', true);
+            return;
+        }
+        var entry = {
+            id: existingIdx !== -1 ? myThemeLibrary[existingIdx].id : ('lib' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)),
+            name: name,
+            baseTheme: activeThemeEntry.file,
+            state: JSON.parse(JSON.stringify(styleState)),
+            userCss: styleUserCss
+        };
+        var overwrote = existingIdx !== -1;
+        if (overwrote) myThemeLibrary[existingIdx] = entry; else myThemeLibrary.push(entry);
+        activeLibraryEntry = entry;
+        setStyleStatus('Saving…', false);
+        renderThemeRailPills();
+        syncCanvasModeUI();
+        saveMyLibrary(function () {
+            setStyleStatus((overwrote ? 'Saved ✓ — overwrote "' : 'Saved ✓ — "') + name + '"', false);
+            setTimeout(function () { setStyleStatus('', false); }, 4000);
+        });
+    }
+
+    // Same fire-and-honestly-confirm shape as saveMyPresets.
+    function saveMyLibrary(onDone) {
+        try {
+            if (!(window.ninjafy && typeof window.ninjafy.sendMessage === 'function')) {
+                setStyleStatus('settings bridge unavailable — could not save library entry', true);
+                return;
+            }
+            var value = JSON.stringify(myThemeLibrary);
+            var confirmed = false;
+            window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: 'textparam1', setting: MY_LIBRARY_KEY, value: value }, function () {
+                confirmed = true;
+                if (onDone) onDone();
+            });
+            setTimeout(function () {
+                if (!confirmed) setStyleStatus('Save sent — no confirmation received', false);
+            }, 3000);
+        } catch (e) {
+            console.error('[arcade-shell] my-library save failed:', e);
+            setStyleStatus('Save failed — see console', true);
+        }
+    }
+
+    // Confirm-on-second-click delete — SAME shape/danger-red token as
+    // armPresetDelete (own state, since a library pill and a preset pill are
+    // never the same element, but the behavior must match exactly).
+    function resetPendingLibraryDelete() {
+        if (pendingLibraryDeleteBtn) {
+            pendingLibraryDeleteBtn.textContent = '×';
+            pendingLibraryDeleteBtn.classList.remove('is-confirm');
+        }
+        pendingLibraryDeleteId = null;
+        pendingLibraryDeleteBtn = null;
+        clearTimeout(pendingLibraryDeleteTimer);
+    }
+
+    function armLibraryDelete(id, name, btn) {
+        if (pendingLibraryDeleteId === id) {
+            resetPendingLibraryDelete();
+            deleteLibraryEntry(id, name);
+            return;
+        }
+        resetPendingLibraryDelete();
+        pendingLibraryDeleteId = id;
+        pendingLibraryDeleteBtn = btn;
+        btn.textContent = '✓';
+        btn.classList.add('is-confirm');
+        btn.title = 'Click again to delete "' + name + '"';
+        pendingLibraryDeleteTimer = setTimeout(resetPendingLibraryDelete, 2800);
+    }
+
+    function deleteLibraryEntry(id, name) {
+        myThemeLibrary = myThemeLibrary.filter(function (e) { return e.id !== id; });
+        if (activeLibraryEntry && activeLibraryEntry.id === id) {
+            activeLibraryEntry = null;
+            var libNameInput = document.getElementById('arcade-style-mylibrary-name');
+            if (libNameInput) libNameInput.value = '';
+        }
+        renderThemeRailPills();
+        syncCanvasModeUI();
+        setStyleStatus('Saving…', false);
+        saveMyLibrary(function () {
+            setStyleStatus('Deleted "' + name + '"', false);
+            setTimeout(function () { setStyleStatus('', false); }, 4000);
+        });
+    }
+
+    // --------------------------------------------------------------------
     // Theme rail (v3, part A — style-builder-v3-theme-preview-spec.md,
     // amended live 0018.05.26 by Pac: "the preview/canvas is the hero" —
     // REPLACES v1.1's bottom collapsible THEME PAGES strip entirely. Theme
@@ -1682,9 +1858,34 @@
     // any object with overlayPage+params).
     // --------------------------------------------------------------------
     function renderThemeRail(panel) {
-        var host = panel.querySelector('#arcade-style-theme-rail-pills');
+        renderThemeRailPills();
+    }
+
+    // Rebuilds the rail's pill list — called at panel construction (empty
+    // My Library at that point) AND again once loadStyleSettings() actually
+    // has myThemeLibrary, plus after every library save/delete. Decoupled
+    // from a `panel` argument (like renderMyPresetPills) since those later
+    // calls happen well after buildStylePanel() returns.
+    function renderThemeRailPills() {
+        var host = document.getElementById('arcade-style-theme-rail-pills');
         if (!host) return;
         host.innerHTML = '';
+        resetPendingLibraryDelete();
+        // MY LIBRARY group listed FIRST (spec §B.3) — inline labels, not
+        // extra rows, so the rail stays the one slim horizontal scroller
+        // ("canvas-first… rail stays slim; library group adds no vertical
+        // sprawl"). Only shown when there's actually something in it.
+        if (myThemeLibrary.length) {
+            var libLabel = document.createElement('span');
+            libLabel.className = 'arcade-style-rail-group-label';
+            libLabel.textContent = 'MY LIBRARY';
+            host.appendChild(libLabel);
+            myThemeLibrary.forEach(function (entry) { host.appendChild(buildLibraryRailPill(entry)); });
+            var stockLabel = document.createElement('span');
+            stockLabel.className = 'arcade-style-rail-group-label';
+            stockLabel.textContent = "STEVE'S THEMES";
+            host.appendChild(stockLabel);
+        }
         THEME_PAGES.forEach(function (entry) { host.appendChild(buildThemeRailPill(entry)); });
     }
 
@@ -1715,6 +1916,41 @@
         return pill;
     }
 
+    // Library pills are a <span> wrapper around TWO siblings (preview button
+    // + delete button) — NOT a delete button nested inside the preview
+    // button (invalid HTML), same shape buildMyPresetPill uses for its
+    // apply/delete pair.
+    function buildLibraryRailPill(entry) {
+        var wrap = document.createElement('span');
+        wrap.className = 'arcade-style-rail-pill-wrap';
+        var pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'arcade-style-rail-pill arcade-style-rail-pill--library';
+        pill.dataset.libraryId = entry.id;
+        pill.dataset.themeName = entry.name; // reuses the same filter lookup as Steve's pills
+        var name = document.createElement('span');
+        name.className = 'arcade-style-rail-pill__name';
+        name.textContent = entry.name;
+        pill.appendChild(name);
+        var yoursChip = document.createElement('span');
+        yoursChip.className = 'arcade-style-theme-chip arcade-style-theme-chip--yours';
+        yoursChip.textContent = 'yours';
+        pill.appendChild(yoursChip);
+        var baseEntry = findThemePageByFile(entry.baseTheme);
+        pill.title = 'Preview "' + entry.name + '"' + (baseEntry ? ' — yours, based on ' + baseEntry.name : ' — yours (base theme missing)');
+        pill.addEventListener('click', function () { previewLibraryEntry(entry); });
+        wrap.appendChild(pill);
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-style-preset-del';
+        del.title = 'Delete "' + entry.name + '"';
+        del.setAttribute('aria-label', 'Delete ' + entry.name);
+        del.textContent = '×';
+        del.addEventListener('click', function () { armLibraryDelete(entry.id, entry.name, del); });
+        wrap.appendChild(del);
+        return wrap;
+    }
+
     function initThemeRailFilter(panel) {
         var input = panel.querySelector('#arcade-style-theme-filter');
         var host = panel.querySelector('#arcade-style-theme-rail-pills');
@@ -1723,7 +1959,8 @@
             var q = input.value.trim().toLowerCase();
             host.querySelectorAll('.arcade-style-rail-pill').forEach(function (p) {
                 var name = (p.dataset.themeName || '').toLowerCase();
-                p.hidden = !!q && name.indexOf(q) === -1;
+                var target = p.closest('.arcade-style-rail-pill-wrap') || p; // library pills hide their wrapper (name + delete together)
+                target.hidden = !!q && name.indexOf(q) === -1;
             });
         });
     }
@@ -1739,7 +1976,16 @@
                 if (!activeThemeEntry) return;
                 var slug = themeSlug(activeThemeEntry);
                 var params = [];
-                if (activeThemeEntry.cssb64 && themeOverrides[slug]) params.push('cssb64=' + encodeCssB64(themeOverrides[slug]));
+                // Spec §B.3: "Copy URL → base theme URL + compiled cssb64" for
+                // a library entry — uses the CURRENT scratch state (so
+                // in-progress edits are included, not just the last save),
+                // same buildStyleCss()/encodeCssB64() the dock profiles use.
+                // Falls back to the theme's own default override otherwise
+                // (v3, unchanged).
+                if (activeThemeEntry.cssb64) {
+                    if (activeLibraryEntry) params.push('cssb64=' + encodeCssB64(buildStyleCss()));
+                    else if (themeOverrides[slug]) params.push('cssb64=' + encodeCssB64(themeOverrides[slug]));
+                }
                 copyElementOverlayUrl({ overlayPage: 'themes/' + activeThemeEntry.file, params: params }, copyBtn);
             });
         }
@@ -1875,6 +2121,12 @@
                             var presetsRaw = (presetsEntry && typeof presetsEntry.textparam1 === 'string') ? presetsEntry.textparam1 : '';
                             var parsedPresets = presetsRaw ? JSON.parse(presetsRaw) : [];
                             myStylePresets = Array.isArray(parsedPresets) ? parsedPresets : [];
+                            // My Library (theme-library-spec.md §B.1) — rides the
+                            // SAME consolidated getSettings response, own top-level key.
+                            var libraryEntry = settings[MY_LIBRARY_KEY];
+                            var libraryRaw = (libraryEntry && typeof libraryEntry.textparam1 === 'string') ? libraryEntry.textparam1 : '';
+                            var parsedLibrary = libraryRaw ? JSON.parse(libraryRaw) : [];
+                            myThemeLibrary = Array.isArray(parsedLibrary) ? parsedLibrary : [];
                             // v3 — per-theme overrides ride the SAME getSettings response
                             // (one key per theme, arcadeThemeCss_<slug>/textparam1); no
                             // extra IPC round trip needed to know which of the 41 have one.
@@ -1887,6 +2139,7 @@
                         } catch (e) { console.error('[arcade-shell] style settings load parse failed:', e); }
                         loadActiveProfileIntoControls();
                         renderMyPresetPills();
+                        renderThemeRailPills(); // My Library was empty at panel construction — reflect the real loaded list now
                         refreshAllThemeCustomChips();
                         resolve();
                     });
@@ -2278,8 +2531,17 @@
         }
         var clearBtn = document.getElementById('arcade-style-preview-clear-override');
         if (clearBtn) clearBtn.hidden = !(inTheme && activeThemeEntry && activeThemeEntry.cssb64 && themeOverrides[themeSlug(activeThemeEntry)]);
+        // My Library save row (spec §B.2) — only while previewing a
+        // STYLABLE theme, mirrors themeStylable exactly (dock-profile mode
+        // has its own PRESETS/MY PRESETS rows for the same job).
+        var mylibrarySaveRow = document.getElementById('arcade-style-mylibrary-save');
+        if (mylibrarySaveRow) mylibrarySaveRow.hidden = !themeStylable;
         document.querySelectorAll('.arcade-style-rail-pill').forEach(function (p) {
-            p.classList.toggle('is-active', !!(inTheme && activeThemeEntry && p.dataset.themeSlug === themeSlug(activeThemeEntry)));
+            var isLibraryPill = !!p.dataset.libraryId;
+            var active = isLibraryPill
+                ? (inTheme && !!activeLibraryEntry && p.dataset.libraryId === activeLibraryEntry.id)
+                : (inTheme && !activeLibraryEntry && !!activeThemeEntry && p.dataset.themeSlug === themeSlug(activeThemeEntry));
+            p.classList.toggle('is-active', active);
         });
         updateStyleEditorAvailability();
     }
@@ -2314,16 +2576,51 @@
 
     function previewThemePage(entry) {
         resetPendingThemeClear(); // a stale arm from the PREVIOUS theme must never carry over
+        resetPendingLibraryDelete();
         activePreviewMode = 'theme';
         activeThemeEntry = entry;
+        activeLibraryEntry = null; // Steve's template, unforked — the Pac ruling's "starting point"
         if (entry.cssb64) loadThemeOverrideIntoControls(entry);
+        var libNameInput = document.getElementById('arcade-style-mylibrary-name');
+        if (libNameInput) libNameInput.value = '';
         syncCanvasModeUI();
         loadThemePreviewFrame(entry);
     }
 
+    // My Library (spec §B.3/§B.4) — previews the entry's BASE theme via the
+    // exact same v3 machinery previewThemePage uses (loadThemePreviewFrame,
+    // cssb64), but loads the library entry's OWN saved state/userCss into
+    // the scratch controls instead of the base theme's default override.
+    // Prefills the save-name input with this entry's name so hitting Save
+    // again (unchanged name) updates it — typing a different name forks a
+    // new entry, per the spec's "start from Steve, fork endlessly" workflow.
+    function previewLibraryEntry(entry) {
+        var baseEntry = findThemePageByFile(entry.baseTheme);
+        if (!baseEntry) {
+            setStyleStatus('Base theme for "' + entry.name + '" no longer exists in THEME_PAGES', true);
+            return;
+        }
+        resetPendingThemeClear();
+        resetPendingLibraryDelete();
+        activePreviewMode = 'theme';
+        activeThemeEntry = baseEntry;
+        activeLibraryEntry = entry;
+        styleState = JSON.parse(JSON.stringify(entry.state || {}));
+        styleUserCss = entry.userCss || '';
+        var ta = document.getElementById('arcade-style-usercss');
+        if (ta) ta.value = styleUserCss;
+        syncStyleControlsFromState();
+        var libNameInput = document.getElementById('arcade-style-mylibrary-name');
+        if (libNameInput) libNameInput.value = entry.name;
+        syncCanvasModeUI();
+        loadThemePreviewFrame(baseEntry);
+    }
+
     function backToDockPreview() {
         resetPendingThemeClear();
+        resetPendingLibraryDelete();
         activePreviewMode = 'dock';
+        activeLibraryEntry = null;
         syncCanvasModeUI();
         loadActiveProfileIntoControls(); // undo any theme-mode scratch edits from view
         initStylePreviewFrame();

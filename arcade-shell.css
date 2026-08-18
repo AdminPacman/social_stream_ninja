@@ -822,6 +822,27 @@ body.arcade-shell .arcade-style-theme-chip {
 }
 body.arcade-shell .arcade-style-theme-chip--stylable { background: rgba(53, 208, 255, 0.16); color: var(--arc-info); }
 body.arcade-shell .arcade-style-theme-chip--custom { background: rgba(247, 201, 72, 0.16); color: var(--arc-warning); }
+/* My Library (theme-library-spec.md §B) — "yours" chip on a rail pill,
+   deliberately off both the stylable/info and custom/warning hues so a
+   forked library entry always reads as visually distinct from Steve's
+   originals at a glance. --arc-flair is the house's own personalization
+   token elsewhere in this file. */
+body.arcade-shell .arcade-style-theme-chip--yours { background: rgba(255, 92, 203, 0.16); color: var(--arc-flair); }
+body.arcade-shell .arcade-style-rail-pill--library { border-color: rgba(255, 92, 203, 0.35); }
+body.arcade-shell .arcade-style-rail-pill--library:hover { border-color: var(--arc-flair); }
+body.arcade-shell .arcade-style-rail-pill--library.is-active {
+  color: var(--arc-ink); border-color: var(--arc-flair); background: rgba(255, 92, 203, 0.12);
+}
+/* Library pill = a wrapper around TWO siblings (preview button + delete
+   button) — see buildLibraryRailPill; Steve's plain pills have no wrapper. */
+body.arcade-shell .arcade-style-rail-pill-wrap { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+/* Inline group labels inside the SAME horizontal scroller — never a new
+   row, so "MY LIBRARY" costs zero vertical sprawl (canvas-first law). */
+body.arcade-shell .arcade-style-rail-group-label {
+  flex-shrink: 0; padding: 0 2px; font: 700 9px/1 var(--arc-font-ui);
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--arc-faint);
+  white-space: nowrap;
+}
 /* v3 — controls column now wraps STYLE_CONTROLS + the honest "no editor
    here" note (mutually exclusive, see updateStyleEditorAvailability). */
 body.arcade-shell .arcade-style-controls-col { display: flex; flex-direction: column; min-height: 0; }
@@ -888,6 +909,18 @@ body.arcade-shell .arcade-style-mypreset-name {
   background: var(--arc-panel-2); color: var(--arc-ink);
   font: 400 11px/1 var(--arc-font-ui);
 }
+
+/* theme-library-spec.md §B — My Library save row. Same row shape as
+   .arcade-style-mypresets above (reuses .arcade-style-mypresets-save /
+   .arcade-style-mypreset-name for the input+button pair); only shown while
+   previewing a stylable theme (syncCanvasModeUI), hidden the rest of the
+   time — hidden attribute wins over this flex display. */
+body.arcade-shell .arcade-style-mylibrary-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+body.arcade-shell .arcade-style-mylibrary-save[hidden] { display: none; }
+body.arcade-shell .arcade-style-mylibrary-save .arcade-k {
+  font: 700 10px/1 var(--arc-font-ui); letter-spacing: 0.12em; color: var(--arc-muted);
+}
+body.arcade-shell .arcade-style-mylibrary-save .arcade-style-hint { color: var(--arc-faint); }
 
 /* v3 (0018.05.26, Pac live-testing amendment): the v1.1 bottom collapsible
    THEME PAGES strip (.arcade-style-themes*/.arcade-style-theme-pill*) is
