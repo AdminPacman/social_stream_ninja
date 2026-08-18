@@ -25,6 +25,7 @@
     var TABS = [
         { id: 'main', label: 'Main' },
         { id: 'games', label: 'Games' },
+        { id: 'elements', label: 'Elements' },
         { id: 'vdo', label: 'VDO' },
         { id: 'eventflow', label: 'Event Flow' },
         { id: 'settings', label: 'Settings' }
@@ -34,6 +35,36 @@
         { page: 'dashboard', label: 'Status and Logs' },
         { page: 'streamdeck', label: 'Stream Deck Setup' },
         { page: 'sessions', label: 'Sessions' }
+    ];
+
+    // --------------------------------------------------------------------
+    // Element registry — the ONE source of truth for selectable overlay
+    // ELEMENTS (music / tip jar / hype / map). Adding an element is one entry
+    // here (plus its overlay page, when built). See pacsarcade design-briefs/
+    // ssn-ui-overhaul/element-registry-spec.md. status 'ready' = the overlay
+    // page ships and the card is live (Copy overlay URL); 'planned' = an
+    // honest SOON stub with no actions. Only music ships ready this pass;
+    // tip/hype/map pages are follow-on tasks that clone the music card.
+    // --------------------------------------------------------------------
+    var ELEMENTS = [
+        {
+            id: 'music', name: 'Now Playing', category: 'music', status: 'ready',
+            overlayPage: 'music-widget.html',
+            params: ['layout=horizontal'],
+            blurb: 'Spotify now-playing overlay — transparent, Tuna-grade.'
+        },
+        {
+            id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'planned',
+            blurb: 'Lightning / zap tip jar with a configurable goal.'
+        },
+        {
+            id: 'hype', name: 'Hype Train', category: 'hype', status: 'planned',
+            blurb: 'Community hype meter that fills from chat energy.'
+        },
+        {
+            id: 'map', name: 'Fren Map', category: 'community', status: 'planned',
+            blurb: 'Where the frens are — a live viewer map.'
+        }
     ];
 
     // --------------------------------------------------------------------
@@ -321,6 +352,12 @@
         eventflow: 'event-flow-editor',
         settings: 'streams'
     };
+    // Custom tabs render their OWN in-shell panel (no ARCADE_TAB_PAGE entry) —
+    // navigateArcadeTab skips the stock-nav click for these, and CSS reveals
+    // the panel + hides #content-pane while data-arcade-tab matches. The boot
+    // guard is naturally a no-op for them (expected = ARCADE_TAB_PAGE[custom]
+    // is undefined, so it never fights). See buildElementsPanel().
+    var CUSTOM_TABS = { elements: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -329,6 +366,14 @@
     }
 
     function navigateArcadeTab(tabId) {
+        if (CUSTOM_TABS[tabId]) {
+            // Custom in-shell panel (e.g. Elements): no stock page to drive —
+            // remember the tab we're leaving and flip the tab state; CSS
+            // reveals the panel and covers #content-pane. No clickStockNav.
+            savePopupScroll(document.body.dataset.arcadeTab);
+            setArcadeTab(tabId);
+            return;
+        }
         var pageId = ARCADE_TAB_PAGE[tabId];
         if (!pageId) return;
         savePopupScroll(document.body.dataset.arcadeTab); // capture the tab we're LEAVING
@@ -407,6 +452,175 @@
         side.innerHTML = buildAnalyticsPaneMarkup();
         document.body.appendChild(side);
         initAnalyticsPeriodSelector(side);
+    }
+
+    // --------------------------------------------------------------------
+    // Elements registry — the custom "Elements" tab. A full-width in-shell
+    // panel over the content area, built once at boot and CSS-hidden until
+    // its tab is on (body.arcade-shell[data-arcade-tab="elements"]). 'ready'
+    // cards expose Copy overlay URL (built via the app's own resolver — see
+    // buildElementOverlayUrl); 'planned' cards are honest, non-interactive
+    // SOON stubs. Spec: pacsarcade design-briefs/ssn-ui-overhaul/
+    // element-registry-spec.md.
+    //
+    // No "Send to OBS" button by design: the Electron StreamDeck bridge has
+    // no add-browser-source action, and the fleet's real OBS paths live
+    // elsewhere — TouchPortal's OBS link, the Event Flow editor's OBS
+    // actions, and VDO's OBS camera-join scene. The house workflow is
+    // Copy overlay URL -> paste as an OBS browser source.
+    // --------------------------------------------------------------------
+    function buildElementsPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-elements';
+        panel.setAttribute('aria-label', 'Overlay elements');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">ELEMENTS</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-el-hint">Overlay add-ons — copy a URL into OBS as a browser source</span>' +
+            '</div>' +
+            '<div class="arcade-el-body"><div class="arcade-el-grid" id="arcade-el-grid"></div></div>';
+        document.body.appendChild(panel);
+
+        var grid = panel.querySelector('#arcade-el-grid');
+        ELEMENTS.forEach(function (el) {
+            grid.appendChild(buildElementCard(el));
+        });
+    }
+
+    function elementCategoryLabel(cat) {
+        switch (cat) {
+            case 'music': return 'MUSIC';
+            case 'tips': return 'TIPS';
+            case 'hype': return 'HYPE';
+            case 'community': return 'COMMUNITY';
+            default: return String(cat || '').toUpperCase();
+        }
+    }
+
+    function buildElementCard(el) {
+        var ready = el.status === 'ready';
+        var card = document.createElement('article');
+        card.className = 'arcade-el-card' + (ready ? '' : ' arcade-el-card--planned');
+        card.dataset.arcadeElement = el.id;
+        card.dataset.arcadeElementCategory = el.category || '';
+
+        var head = document.createElement('div');
+        head.className = 'arcade-el-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-el-card__name';
+        name.textContent = el.name;
+        head.appendChild(name);
+        var cat = document.createElement('span');
+        cat.className = 'arcade-pill arcade-el-cat arcade-el-cat--' + (el.category || 'default');
+        cat.textContent = elementCategoryLabel(el.category);
+        head.appendChild(cat);
+        var status = document.createElement('span');
+        status.className = 'arcade-pill arcade-el-status arcade-el-status--' + (ready ? 'ready' : 'planned');
+        status.textContent = ready ? 'READY' : 'SOON';
+        head.appendChild(status);
+        card.appendChild(head);
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-el-card__blurb';
+        blurb.textContent = el.blurb || '';
+        card.appendChild(blurb);
+
+        if (ready && el.params && el.params.length) {
+            var params = document.createElement('p');
+            params.className = 'arcade-el-card__params';
+            params.textContent = el.params.join(' · ');
+            card.appendChild(params);
+        }
+
+        if (ready) {
+            var actions = document.createElement('div');
+            actions.className = 'arcade-el-card__actions';
+            var copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'arcade-btn arcade-btn--primary';
+            copyBtn.textContent = 'Copy overlay URL';
+            copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
+            actions.appendChild(copyBtn);
+            card.appendChild(actions);
+        }
+
+        return card;
+    }
+
+    // Build the copyable OBS overlay URL for an element via the app's OWN
+    // resolver + session helpers. index.html's inline script is a classic
+    // (non-module) script, so its top-level helpers are window globals — but
+    // we feature-detect defensively so a future build change degrades to an
+    // honest error rather than throwing. Returns a Promise<string url>.
+    function buildElementOverlayUrl(el) {
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') {
+            return Promise.reject(new Error('overlay resolver unavailable'));
+        }
+        var extra = (el.params || []).slice();
+        var langParams = (typeof window.getLanguageExtraParams === 'function') ? window.getLanguageExtraParams() : [];
+
+        function withSession(sessionId) {
+            var params = [];
+            if (sessionId) params.push('session=' + encodeURIComponent(sessionId));
+            params = params.concat(extra).concat(langParams);
+            return resolver(el.overlayPage, { extraParams: params }).then(function (resolved) {
+                return resolved && resolved.url;
+            });
+        }
+
+        if (typeof window.getChatDockSessionId === 'function') {
+            try {
+                // getChatDockSessionId may be sync-returning-a-promise; normalize.
+                return Promise.resolve(window.getChatDockSessionId()).then(withSession, function () { return withSession(null); });
+            } catch (e) {
+                return withSession(null);
+            }
+        }
+        return withSession(null);
+    }
+
+    function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        return new Promise(function (resolve, reject) {
+            try {
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                document.body.appendChild(ta);
+                ta.select();
+                var ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                ok ? resolve() : reject(new Error('execCommand copy failed'));
+            } catch (e) { reject(e); }
+        });
+    }
+
+    function flashButton(btn, text, ms) {
+        var original = btn.dataset.arcadeLabel || btn.textContent;
+        btn.dataset.arcadeLabel = original;
+        btn.textContent = text;
+        clearTimeout(btn._arcadeFlash);
+        btn._arcadeFlash = setTimeout(function () { btn.textContent = original; }, ms || 1600);
+    }
+
+    // The copied URL carries the session id — that's REQUIRED for a working
+    // OBS browser source (same as the app's own dock/overlay copy), and it's
+    // only ever placed on the clipboard by explicit click, never displayed in
+    // the shell (masking law is about on-screen display, honored here).
+    function copyElementOverlayUrl(el, btn) {
+        buildElementOverlayUrl(el).then(function (url) {
+            if (!url) throw new Error('empty overlay url');
+            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
+        }).catch(function (e) {
+            console.error('[arcade-shell] copy overlay url failed:', e);
+            flashButton(btn, 'Open from Settings', 2200);
+        });
     }
 
     // --------------------------------------------------------------------
@@ -944,6 +1158,7 @@
     function init() {
         buildTopbar();
         buildRailAndSide();
+        buildElementsPanel();
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }

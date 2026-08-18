@@ -57,6 +57,7 @@ body.arcade-shell #content-pane { padding-top: var(--arc-topbar-h) !important; }
 body.arcade-shell .arcade-topbar :focus-visible,
 body.arcade-shell .arcade-rail :focus-visible,
 body.arcade-shell .arcade-side :focus-visible,
+body.arcade-shell .arcade-elements :focus-visible,
 body.arcade-shell .arcade-pop :focus-visible {
   outline: 2px solid var(--arc-info);
   outline-offset: 2px;
@@ -535,3 +536,82 @@ body.arcade-shell[data-arcade-tab="main"] #chat-empty-hint {
 
 /* mask.js-style safety: nothing sensitive renders in the alpha rail (no
    session id, no keys) — masking law is honored by omission, not display */
+
+/* --------------------------------------------------------------------------
+   Elements registry — custom "Elements" tab. A full-width in-shell panel
+   over the content area, shown only while data-arcade-tab="elements" (the
+   stock content pane sits behind it, covered by the opaque ground). Card
+   grid of overlay add-ons; 'ready' cards copy an OBS overlay URL, 'planned'
+   cards are honest, non-interactive SOON stubs.
+   Spec: pacsarcade design-briefs/ssn-ui-overhaul/element-registry-spec.md
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-elements {
+  display: none;
+  position: fixed;
+  top: var(--arc-topbar-h);
+  left: 0; right: 0; bottom: 0;
+  z-index: 1500;
+  background: var(--arc-void);
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+body.arcade-shell[data-arcade-tab="elements"] .arcade-elements { display: flex; }
+
+body.arcade-shell .arcade-elements .arcade-el-hint {
+  font: 400 11px/1.4 var(--arc-font-ui);
+  color: var(--arc-faint);
+}
+body.arcade-shell .arcade-el-body {
+  padding: 18px; overflow-y: auto; flex: 1; min-height: 0;
+}
+body.arcade-shell .arcade-el-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  max-width: 1120px;
+}
+body.arcade-shell .arcade-el-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 16px;
+  background: var(--arc-panel);
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r-lg);
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-el-card--planned { opacity: 0.72; }
+body.arcade-shell .arcade-el-card__head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+body.arcade-shell .arcade-el-card__name {
+  margin: 0; flex: 1 1 auto; min-width: 0;
+  font: 700 14px/1.2 var(--arc-font-ui); color: var(--arc-ink);
+}
+body.arcade-shell .arcade-el-card__blurb {
+  margin: 0; font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted);
+}
+body.arcade-shell .arcade-el-card__params {
+  margin: 0; font: 400 11px/1.4 var(--arc-font-mono); color: var(--arc-faint);
+}
+body.arcade-shell .arcade-el-card__actions {
+  display: flex; gap: 8px; margin-top: 4px;
+}
+
+/* Category badge — semantic: tips reads MONEY-gold (a tip jar genuinely IS
+   money, semantic lock honored), music=info/cyan, hype=flair/pink,
+   community=neutral. */
+body.arcade-shell .arcade-el-cat { color: var(--arc-muted); }
+body.arcade-shell .arcade-el-cat--music { color: var(--arc-info); border-color: rgba(53, 208, 255, 0.35); background: rgba(53, 208, 255, 0.07); }
+body.arcade-shell .arcade-el-cat--tips { color: var(--arc-money); border-color: rgba(247, 201, 72, 0.35); background: rgba(247, 201, 72, 0.07); }
+body.arcade-shell .arcade-el-cat--hype { color: var(--arc-flair); border-color: rgba(255, 92, 203, 0.35); background: rgba(255, 92, 203, 0.07); }
+body.arcade-shell .arcade-el-cat--community { color: var(--arc-muted); }
+
+/* Status pill — READY reads INFO/cyan (available), never LIVE/neon
+   (neon = a source is actually live). SOON is faint. */
+body.arcade-shell .arcade-el-status--ready { color: var(--arc-info); border-color: rgba(53, 208, 255, 0.35); background: rgba(53, 208, 255, 0.07); }
+body.arcade-shell .arcade-el-status--planned { color: var(--arc-faint); }
+
+@media (max-width: 760px) {
+  body.arcade-shell .arcade-el-body { padding: 12px; }
+  body.arcade-shell .arcade-el-grid { grid-template-columns: 1fr; }
+}
