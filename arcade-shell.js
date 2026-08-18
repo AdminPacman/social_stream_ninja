@@ -82,6 +82,10 @@
         viewerCounts: {},     // { twitch: 42, kick: 5, ... } from buildViewerCountsFromMetaStore()
         viewersReady: false,
         peakViewers: 0,       // running max of the summed viewerCounts, since THIS shell boot only
+        watchViewerMs: 0,     // Σ (concurrent viewers × elapsed ms) since boot — the "hours watched" integral
+        watchLastSampleAt: null, // ms timestamp of the previous viewer sample (left-Riemann step)
+        watchLastTotal: 0,    // viewer total carried across the interval since watchLastSampleAt
+        watchReady: false,    // true once the first viewer sample lands (honest dash until then)
         followerCounts: {},   // { twitch: 1234, kick: 88, ... } from buildFollowerCountsFromMetaStore()
         followerBaseline: {}, // first reading per platform this boot — delta is measured against this
         followersReady: false
@@ -656,9 +660,23 @@
     //     zero" apart from "tracking is off", so a 0 is never shown where
     //     the honest label is "not tracked".
     //
-    // WATCH TIME has no source anywhere in the pipeline (grepped background.js
-    // /db.js/points.js/pointsactions.js — no duration/session-length tracking
-    // exists at all) — stays an honest "—", not fabricated, not derived.
+    // HOURS WATCHED (viewer-hours) is the honest watch-time metric: the
+    // integral of concurrent viewers over airtime, accumulated from the same
+    // real buildViewerCountsFromMetaStore() samples PEAK VIEWERS uses (~20s
+    // step, left-Riemann — the previous sample's viewer total is credited for
+    // the interval up to the next sample). Genuinely derived, never fabricated,
+    // and — like peak viewers — SINCE BOOT only (no viewer history predates
+    // this shell), so its sub says "since boot · est" and it does NOT honor the
+    // period selector. Confirmed by a points.js trace (0018.05.25): SSN has NO
+    // native per-user watch-time — the points system (enablePointsSystem) is
+    // message-engagement-based (points per ~15min engagement window on chat
+    // activity; no presence timer, no watchtime field, no importer). Documented
+    // follow-ups, not faked here: (a) per-user watchtimeMinutes accrual in the
+    // points store, seedable from the rescued Botrix loyalty export
+    // (pacsarcade overlays-import/botrix/loyalty-export-2026-08-17.json,
+    // top-100 Kick, watchtimeMinutes per user); (b) an external stream-data
+    // source (streamscharts-style) for pre-boot aggregate history.
+    // Stays an honest "—" until the first sample.
     //
     // FOLLOWER DELTA and PEAK VIEWERS are real numbers but NOT period-windowed
     // (metaDataStore only ever holds the latest snapshot, no history before
@@ -680,8 +698,8 @@
             '<button type="button" data-arcade-period="30d" aria-pressed="false">30d</button>' +
             '</div></div>' +
             '<div class="arcade-statgrid">' +
-            '<div class="arcade-stat"><span class="arcade-stat__label">WATCH TIME</span>' +
-            '<span class="arcade-stat__value is-dash">—</span><span class="arcade-stat__sub">not tracked yet</span></div>' +
+            '<div class="arcade-stat"><span class="arcade-stat__label">HOURS WATCHED</span>' +
+            '<span class="arcade-stat__value is-dash" id="arcade-stat-watch-value">—</span><span class="arcade-stat__sub" id="arcade-stat-watch-sub">connecting…</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">PEAK VIEWERS</span>' +
             '<span class="arcade-stat__value is-dash" id="arcade-stat-peak-value">—</span><span class="arcade-stat__sub" id="arcade-stat-live-sub">now — · 0 live</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">FIRST-TIME CHATTERS</span>' +
@@ -794,7 +812,42 @@
     function renderArcadeAnalytics() {
         renderAnalyticsMessagesDerived();
         renderAnalyticsPeakViewers();
+        renderWatchTime();
         renderFollowerTotals();
+    }
+
+    // Hours watched — viewer-hours (∫ concurrent viewers dt), the honest
+    // watch-time metric (see the big comment above buildAnalyticsPaneMarkup).
+    // accumulateHoursWatched credits the PREVIOUS sample's viewer total for the
+    // interval since it was taken (left-Riemann over the ~20s poll); it accrues
+    // nothing while viewers are 0. renderWatchTime shows viewer-hours, honest
+    // dash until the first sample. SINCE BOOT only — no period windowing.
+    function accumulateHoursWatched(total) {
+        var now = Date.now();
+        if (arcadeAnalytics.watchLastSampleAt != null) {
+            var dt = now - arcadeAnalytics.watchLastSampleAt;
+            if (dt > 0) arcadeAnalytics.watchViewerMs += arcadeAnalytics.watchLastTotal * dt;
+        }
+        arcadeAnalytics.watchLastSampleAt = now;
+        arcadeAnalytics.watchLastTotal = total;
+        arcadeAnalytics.watchReady = true;
+    }
+
+    function formatViewerHours(h) {
+        if (h <= 0) return '0';
+        if (h < 10) return h.toFixed(1);           // 0.0–9.9 viewer-hours
+        if (h < 1000) return String(Math.round(h));
+        return (h / 1000).toFixed(1) + 'k';
+    }
+
+    function renderWatchTime() {
+        var valEl = document.getElementById('arcade-stat-watch-value');
+        var subEl = document.getElementById('arcade-stat-watch-sub');
+        if (!valEl) return;
+        if (!arcadeAnalytics.watchReady) return; // honest dash / "connecting…" until first sample
+        valEl.textContent = formatViewerHours(arcadeAnalytics.watchViewerMs / 3600000);
+        valEl.classList.remove('is-dash');
+        if (subEl) subEl.textContent = 'since boot · est';
     }
 
     function renderAnalyticsMessagesDerived() {
@@ -956,7 +1009,9 @@
                 var total = 0;
                 Object.keys(vc).forEach(function (k) { total += parseInt(vc[k], 10) || 0; });
                 if (total > arcadeAnalytics.peakViewers) arcadeAnalytics.peakViewers = total;
+                accumulateHoursWatched(total);
                 renderAnalyticsPeakViewers();
+                renderWatchTime();
             }
         } catch (e) { console.error('[arcade-shell] viewer-count bridge failed:', e); }
 
