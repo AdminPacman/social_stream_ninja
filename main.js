@@ -5312,6 +5312,35 @@ try {
                 } catch (e) { }
             });
         }
+    } else if (process.platform == "linux") {
+        // Linux parity for the extension scanner (gate round, 0018.06.01 a₿):
+        // win32/darwin scan Chrome's profile Extensions dir; Linux never had a
+        // branch, so window.nostr signers (nos2x/Alby) could never load on the
+        // frenship deployment. Scan the common Chromium-family profile dirs.
+        var linuxDirs = [
+            process.env.HOME + "/.config/google-chrome/Default/Extensions",
+            process.env.HOME + "/.config/BraveSoftware/Brave-Browser/Default/Extensions",
+            process.env.HOME + "/.config/chromium/Default/Extensions",
+        ];
+        linuxDirs.forEach((ldir) => {
+            try {
+                if (!fs.existsSync(ldir)) { return; }
+                var getDirL = getDirectories(ldir);
+                getDirL.forEach((d) => {
+                    try {
+                        var ddd = getDirectories(ldir + "/" + d);
+                        if (!ddd.length) { return; }
+                        var fd = fs.readFileSync(ldir + "/" + d + "/" + ddd[0] + "/manifest.json", "utf8");
+                        var json = JSON.parse(fd);
+                        if (json.name.startsWith("_")) { return; }
+                        extensions.push({
+                            name: json.name,
+                            location: ldir + "/" + d + "/" + ddd[0],
+                        });
+                    } catch (e) { }
+                });
+            } catch (e) { }
+        });
     } else if (process.platform == "darwin") {
         dir = process.env.HOME + "/Library/Application Support/Google/Chrome/Default/Extensions";
         log(dir);
