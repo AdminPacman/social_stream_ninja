@@ -132,6 +132,7 @@
     var bftRescheduleTick = null;           // set inside startBftClock(); re-picks the 30s/60s height-poll cadence
     var bftRescheduleSecondsTimer = null;   // set inside startBftClock(); starts/stops the 1s display-only ticker
     var bftMaybeFetchTimestamp = null;      // set inside startBftClock(); cold-start timestamp-anchor fetch (0018.05.26 b)
+    var bftBroadcastAnchor = null;          // set inside startBftClock(); pushes the real height to #chat-dock-frame (per-message BFT stamp follow-up, 0018.08.23)
 
     // --------------------------------------------------------------------
     // Topbar
@@ -437,6 +438,23 @@
         }
         bftRenderDisplay = renderDisplay;
 
+        // Per-message BFT stamp follow-up (0018.08.23): the dock (a SEPARATE
+        // #chat-dock-frame iframe, its own window) has no access to this
+        // closure's lastRealHeight. Broadcast is the reuse mechanism the
+        // house doc calls for — push the SAME real height this clock already
+        // fetched, dock.html never fetches its own copy or estimates one.
+        // Height only (not the seconds anchor): the dock stamp is coarse-only
+        // by design, so it doesn't need blockObservedAt/blockTimestampMs.
+        function broadcastBftAnchor() {
+            try {
+                var frame = document.getElementById('chat-dock-frame');
+                if (frame && frame.contentWindow) {
+                    frame.contentWindow.postMessage({ type: 'arcadeBftAnchor', height: lastRealHeight }, '*');
+                }
+            } catch (e) { /* dock frame not present/loaded yet — next observeHeight()/tick() retries */ }
+        }
+        bftBroadcastAnchor = broadcastBftAnchor;
+
         function observeHeight(h) {
             if (lastRealHeight === null || h !== lastRealHeight) {
                 // null→number = first real height this boot (or since a wipe):
@@ -447,6 +465,7 @@
                 blockTimestampMs = null; // new height invalidates any prior timestamp anchor
             }
             renderDisplay();
+            broadcastBftAnchor();
             maybeFetchBlockTimestamp(); // no-op unless seconds-on + no anchor yet — see below
         }
 
@@ -560,6 +579,7 @@
                             blockObservedAt = null;
                             blockTimestampMs = null;
                             renderDisplay();
+                            broadcastBftAnchor(); // wipe the dock's copy too — dash-face, not a stale height
                         });
                 });
         }
@@ -765,6 +785,14 @@
         setArcadeTab(tabId);
     }
     window.arcadeNavigateTab = navigateArcadeTab; // exposed for debugging/CDP verification
+    // Per-message BFT stamp follow-up (0018.08.23): index.html calls this once
+    // the #chat-dock-frame iframe finishes (re)loading, so a fresh/reloaded
+    // dock gets the shell's ALREADY-KNOWN real height immediately instead of
+    // sitting dash-faced until the next 30s/60s clock tick. Still push-only —
+    // the dock never fetches its own copy.
+    window.arcadeBroadcastBftAnchor = function () {
+        if (typeof bftBroadcastAnchor === 'function') bftBroadcastAnchor();
+    };
 
     // index.html's own boot sequence ALSO restores the last-open page —
     // asynchronously, from inside its DOMContentLoaded handler, timing
