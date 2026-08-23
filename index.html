@@ -13215,6 +13215,7 @@
                     'font=opendyslexic',
                     'color',
                     'notime',
+                    'bfttime', // per-message BFT stamp (Arcade shell follow-up) — independent of notime above, see dock.html's arcadeMsgBftEnabled gate
                     'badkarma',
                     'hidecommands',
                     'quietcommands',
@@ -13242,6 +13243,13 @@
                     extraParams: dockParams.concat(getLanguageExtraParams())
                 });
                 if (!resolved || !resolved.url) throw new Error('Chat dock page unavailable');
+                // Push the shell's already-known real BFT height into the fresh
+                // frame the moment it finishes loading, so the per-message stamp
+                // doesn't sit dash-faced until the clock's next poll tick.
+                // {once:true}: this listener is per-load, a reload gets its own.
+                frame.addEventListener('load', function () {
+                    if (typeof window.arcadeBroadcastBftAnchor === 'function') window.arcadeBroadcastBftAnchor();
+                }, { once: true });
                 frame.src = resolved.url;
                 frame.dataset.ssappOrigin = resolved.origin || '';
                 frame.classList.add('loading');
