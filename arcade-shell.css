@@ -134,6 +134,16 @@ body.arcade-shell .arcade-nav button.is-on {
   background: rgba(53, 208, 255, 0.1);
   box-shadow: inset 0 -2px 0 rgba(53, 208, 255, 0.5);
 }
+/* AI area rail berth — deliberately off the cyan is-on accent every other
+   tab shares: gold marks it as the gated/admin seat (design doc colors,
+   0018.06.01). Only ever rendered at all when hasNostrSigner() passed at
+   boot (arcade-shell.js), so this rule is inert on every other seat. */
+body.arcade-shell .arcade-nav button[data-arcade-tab-btn="ai"] { color: #D9B24E; }
+body.arcade-shell .arcade-nav button[data-arcade-tab-btn="ai"].is-on {
+  color: #D9B24E;
+  background: rgba(217, 178, 78, 0.12);
+  box-shadow: inset 0 -2px 0 rgba(217, 178, 78, 0.55);
+}
 body.arcade-shell .arcade-topbar .arcade-spacer { flex: 1; }
 
 body.arcade-shell .arcade-pill {
@@ -672,6 +682,58 @@ body.arcade-shell .arcade-el-status--planned { color: var(--arc-faint); }
 @media (max-width: 760px) {
   body.arcade-shell .arcade-el-body { padding: 12px; }
   body.arcade-shell .arcade-el-grid { grid-template-columns: 1fr; }
+}
+
+/* --------------------------------------------------------------------------
+   AI area — custom "AI" tab (Phase 1, pacsarcade briefings/
+   ssn-ai-area-design.md). Same full-panel custom-tab pattern as
+   .arcade-elements/.arcade-alerts, but its own ground: gate ink on a
+   dedicated dark-violet panel (design doc colors, 0018.06.01) rather than
+   the shared --arc-void, so the gated DevChat berth reads visually distinct
+   from the rest of the shell. Only ever built at all when hasNostrSigner()
+   passed at boot — see buildAiPanel() in arcade-shell.js.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-ai {
+  display: none;
+  position: fixed;
+  top: var(--arc-topbar-h);
+  left: 0; right: 0; bottom: 0;
+  z-index: 1500;
+  background: #1b1530;
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+body.arcade-shell[data-arcade-tab="ai"] .arcade-ai { display: flex; }
+
+body.arcade-shell .arcade-ai .arcade-panel-title { color: #D9B24E; }
+body.arcade-shell .arcade-ai-status {
+  font: 400 11px/1.4 var(--arc-font-ui);
+  color: rgba(244, 236, 255, 0.6);
+}
+body.arcade-shell .arcade-ai-body {
+  flex: 1; min-height: 0;
+  display: flex;
+  padding: 0;
+}
+body.arcade-shell .arcade-ai-body[data-ai-state="checking"],
+body.arcade-shell .arcade-ai-body[data-ai-state="refused"],
+body.arcade-shell .arcade-ai-body[data-ai-state="unreachable"] {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+body.arcade-shell .arcade-ai-hint {
+  font: 400 13px/1.5 var(--arc-font-ui);
+  color: #F4ECFF;
+  text-align: center;
+  max-width: 480px;
+}
+body.arcade-shell .arcade-ai-hint.is-error { color: var(--arc-warning); }
+body.arcade-shell #arcade-ai-frame {
+  flex: 1; min-height: 0; width: 100%;
+  border: 0;
+  background: #1b1530;
 }
 
 /* --------------------------------------------------------------------------

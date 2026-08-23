@@ -40,6 +40,49 @@
     ];
 
     // --------------------------------------------------------------------
+    // AI area — rail berth for the DevChat console, gated to a single ruled
+    // npub. Ruling: the Admiral, 0018.06.01 — "gate the devchat behind the
+    // admin npub g2x3 ... the natural point for that admin devchat area is
+    // inside of the ssn app ... it should go in the ai area." Design doc:
+    // pacsarcade briefings/ssn-ai-area-design.md, Phase 1.
+    //
+    // ONLY this pubkey opens the berth. One named const, no env sprawl (v1).
+    // Decoded from
+    // npub1ugzge9n0qtw9xydcynpm80vytq5wfd207lt842jje2zwuz56t33scrg2x3 via
+    // bech32 (cross-checked against two independent decoder implementations,
+    // 0018.06.01 a₿) — this app has no nostr/bech32 library of its own
+    // (none found anywhere in the repo), so the hex is baked in here rather
+    // than decoded live in the renderer.
+    // --------------------------------------------------------------------
+    var AI_AREA_ALLOWED_PUBKEY_HEX = 'e2048c966f02dc5311b824c3b3bd845828e4b54ff7d67aaa52ca84ee0a9a5c63'; // g2x3, Admiral ruling 0018.06.01
+    var AI_AREA_DEVCHAT_URL = 'http://localhost:5173';
+    var AI_AREA_PROBE_TIMEOUT_MS = 2500;
+
+    // Cheap pre-check, run once at boot: is ANY NIP-07 signer present at
+    // all? This Electron window has no browser-extension host wired up on
+    // Linux — the ONLY extension-loading path in the app (main.js's
+    // "Enable Chrome Extension" right-click item, session.loadExtension)
+    // only scans the Chrome profile's Extensions directory on win32/darwin;
+    // there is no Linux branch. So on this deployment window.nostr is never
+    // populated and this always returns false, hiding the berth entirely —
+    // an honest fail-closed default, not a workaround. See the build report
+    // for the precise finding and what would need to change to light it up.
+    // If a signer IS present we still can't know WHICH identity it holds
+    // without prompting it (not cheap, and prompting every seat on every
+    // boot is exactly the "a gate that advertises itself" trap the design
+    // doc warns against) — so presence-only is the full extent of the
+    // pre-check; identity is only resolved inside the real gate, on click.
+    function hasNostrSigner() {
+        try {
+            return !!(window.nostr &&
+                typeof window.nostr.getPublicKey === 'function' &&
+                typeof window.nostr.signEvent === 'function');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // --------------------------------------------------------------------
     // Element registry — the ONE source of truth for selectable overlay
     // ELEMENTS (music / tip jar / hype / map). Adding an element is one entry
     // here (plus its overlay page, when built). See pacsarcade design-briefs/
@@ -758,6 +801,11 @@
     // the panel + hides #content-pane while data-arcade-tab matches. The boot
     // guard is naturally a no-op for them (expected = ARCADE_TAB_PAGE[custom]
     // is undefined, so it never fights). See buildElementsPanel().
+    // 'ai' is deliberately NOT a static member here — it's added (along with
+    // the TABS entry and the panel DOM itself) only when hasNostrSigner()
+    // passes at boot, in init(). No signer on this seat => 'ai' stays
+    // unknown to both maps => navigateArcadeTab('ai') is a silent no-op,
+    // same as any other unrecognized tab id.
     var CUSTOM_TABS = { elements: true, style: true, alerts: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
@@ -775,6 +823,7 @@
             setArcadeTab(tabId);
             if (tabId === 'style') ensureStylePanelLive(); // lazy: load saved blob + first preview on first visit
             if (tabId === 'alerts') ensureAlertsPanelLive(); // lazy: load saved param25 settings + first preview on first visit
+            if (tabId === 'ai') runAiAreaGate(); // NOT lazy-once — a fresh challenge every open, no stored grants (design doc, 0018.06.01)
             return;
         }
         var pageId = ARCADE_TAB_PAGE[tabId];
@@ -1132,6 +1181,166 @@
     function setAlertsPreviewHint(text) {
         var el = document.getElementById('arcade-alerts-preview-hint');
         if (el) el.textContent = text || '';
+    }
+
+    // --------------------------------------------------------------------
+    // AI area panel — the DevChat berth. Same custom-tab pattern as
+    // .arcade-elements/.arcade-alerts (full-width in-shell panel, CSS-shown
+    // only while data-arcade-tab="ai"). Only built at all when
+    // hasNostrSigner() passed at boot (see init()) — no signer, no DOM, no
+    // nav entry: the berth doesn't exist for that seat, full stop.
+    //
+    // The gate itself re-runs EVERY time the tab is opened (runAiAreaGate,
+    // called from navigateArcadeTab) — no stored grants in v1, per the
+    // design doc ("opening the AI area is rare and deliberate"). States:
+    // 'checking' (asking the signer / probing DevChat) -> 'refused' (wrong
+    // key, signer declined, or vanished) -> 'unreachable' (right key, but
+    // DevChat isn't up) -> 'live' (iframe). Never a spinner on the
+    // not-running case — one honest line, per the design doc.
+    // --------------------------------------------------------------------
+    function setAiAreaStatus(text) {
+        var el = document.getElementById('arcade-ai-status');
+        if (el) el.textContent = text || '';
+    }
+
+    function setAiAreaState(state, message) {
+        var body = document.getElementById('arcade-ai-body');
+        if (!body) return;
+        body.dataset.aiState = state; // 'checking' | 'refused' | 'unreachable' | 'live'
+        if (state === 'live') return; // renderAiAreaFrame() owns the body in this state
+        body.innerHTML = '';
+        var hint = document.createElement('div');
+        hint.className = 'arcade-ai-hint' + (state === 'checking' ? '' : ' is-error');
+        hint.textContent = message || '';
+        body.appendChild(hint);
+    }
+
+    // HEAD probe with a short deadline — reuses index.html's own
+    // fetchWithDeadline (top-level helper in its classic inline script, so
+    // it's a window global; see buildElementOverlayUrl's comment on the
+    // same convention) when present, with a local AbortController fallback
+    // so this degrades honestly rather than throwing if that ever changes.
+    // mode:'no-cors' matters here: index.html itself runs with webSecurity
+    // disabled (it's a file:// window), but DevChat's dev server won't send
+    // CORS headers for a cross-origin probe either way — no-cors still lets
+    // the browser attempt the connection and resolve on success (opaque
+    // response) vs reject on a real connection failure, which is exactly
+    // the reachable/unreachable signal this needs, without caring about the
+    // response body.
+    function probeDevChatReachable() {
+        var opts = { method: 'HEAD', mode: 'no-cors', cache: 'no-store', timeoutMs: AI_AREA_PROBE_TIMEOUT_MS };
+        var runner = typeof window.fetchWithDeadline === 'function'
+            ? window.fetchWithDeadline(AI_AREA_DEVCHAT_URL, opts)
+            : (function () {
+                var controller = new AbortController();
+                var timer = setTimeout(function () { controller.abort(); }, AI_AREA_PROBE_TIMEOUT_MS);
+                return fetch(AI_AREA_DEVCHAT_URL, { method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: controller.signal })
+                    .then(function (r) { clearTimeout(timer); return r; })
+                    .catch(function (e) { clearTimeout(timer); throw e; });
+            })();
+        return runner.then(function () { return true; }).catch(function () { return false; });
+    }
+
+    function renderAiAreaFrame() {
+        var body = document.getElementById('arcade-ai-body');
+        if (!body) return;
+        body.dataset.aiState = 'live';
+        body.innerHTML = '';
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-ai-frame';
+        frame.title = 'DevChat';
+        frame.setAttribute('allow', 'clipboard-write *');
+        frame.src = AI_AREA_DEVCHAT_URL;
+        body.appendChild(frame);
+        setAiAreaStatus('DevChat · localhost:5173');
+    }
+
+    function openAiAreaAfterGate() {
+        setAiAreaState('checking', 'Checking for DevChat at localhost:5173…');
+        probeDevChatReachable().then(function (reachable) {
+            // Re-check we're still ON the ai tab — a fast tab-away shouldn't
+            // race a stale probe into painting over whatever's showing now.
+            if (document.body.dataset.arcadeTab !== 'ai') return;
+            if (!reachable) {
+                setAiAreaState('unreachable', "DevChat isn't running — `make dev` in ~/dev/chatdev");
+                return;
+            }
+            renderAiAreaFrame();
+        });
+    }
+
+    // The gate — asks the signer for a FRESH challenge every open, admits
+    // only AI_AREA_ALLOWED_PUBKEY_HEX. See the security note in the build
+    // report: signEvent()'s returned signature is checked for shape (sig +
+    // pubkey present, pubkey matches the ruled key) but not cryptographically
+    // verified against secp256k1/schnorr — this app has no crypto library,
+    // and vendoring one is out of scope for a static-file, localhost-only,
+    // single-operator v1 door. The trust boundary is "the NIP-07 provider
+    // bound to THIS browser context claims to control the g2x3 key," which
+    // matches the design doc's own framing of this as the shell's door, not
+    // a hardened auth story (that's Phase 3, if the AI area ever leaves
+    // localhost).
+    function runAiAreaGate() {
+        setAiAreaStatus('');
+        setAiAreaState('checking', 'Asking the signer to confirm…');
+
+        if (!hasNostrSigner()) {
+            // Re-checked here (not just at boot) in case the signer vanished
+            // mid-session — never trust a stale render for an admit/deny call.
+            setAiAreaState('refused', 'No nostr signer available — the AI area stays closed.');
+            return;
+        }
+
+        var challenge = 'ssn-ai-area:' + Date.now() + ':' + Math.random().toString(36).slice(2);
+        // Ephemeral NIP-42-shaped auth draft (kind 22242) — never published
+        // anywhere; its only job is to carry `challenge` through signEvent()
+        // so the signature proves control of the key for THIS specific ask.
+        var draft = {
+            kind: 22242,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [['challenge', challenge], ['relay', 'ssn-arcade-shell-ai-area']],
+            content: 'Pac’s Arcade — AI area gate'
+        };
+
+        Promise.resolve()
+            .then(function () { return window.nostr.getPublicKey(); })
+            .then(function (pubkey) {
+                if (!pubkey || String(pubkey).toLowerCase() !== AI_AREA_ALLOWED_PUBKEY_HEX) {
+                    throw new Error('not-authorized');
+                }
+                draft.pubkey = pubkey;
+                return window.nostr.signEvent(draft);
+            })
+            .then(function (signed) {
+                if (document.body.dataset.arcadeTab !== 'ai') return; // tabbed away mid-sign
+                var okShape = signed && signed.sig && signed.pubkey &&
+                    String(signed.pubkey).toLowerCase() === AI_AREA_ALLOWED_PUBKEY_HEX;
+                if (!okShape) throw new Error('not-authorized');
+                openAiAreaAfterGate();
+            })
+            .catch(function () {
+                if (document.body.dataset.arcadeTab !== 'ai') return;
+                setAiAreaState('refused', 'This seat isn’t the ruled admin key — the AI area stays closed.');
+            });
+    }
+
+    function buildAiPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-ai';
+        panel.setAttribute('aria-label', 'AI area');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">AI</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-ai-status" id="arcade-ai-status"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon" id="arcade-ai-close" aria-label="Close">×</button>' +
+            '</div>' +
+            '<div class="arcade-ai-body" id="arcade-ai-body"></div>';
+        document.body.appendChild(panel);
+
+        panel.querySelector('#arcade-ai-close').addEventListener('click', function () {
+            navigateArcadeTab('main');
+        });
     }
 
     function buildAlertsPanel() {
@@ -4124,11 +4333,22 @@
     // Boot
     // --------------------------------------------------------------------
     function init() {
+        // AI area gate pre-check, before buildTopbar() renders the nav: no
+        // signer on this seat -> the berth never enters TABS/CUSTOM_TABS and
+        // its panel DOM never gets built at all. Hidden entirely, not
+        // disabled — see hasNostrSigner()'s comment for exactly why this is
+        // the only cheap pre-check available.
+        if (hasNostrSigner()) {
+            TABS.push({ id: 'ai', label: 'AI' });
+            CUSTOM_TABS.ai = true;
+        }
+
         buildTopbar();
         buildRailAndSide();
         buildElementsPanel();
         buildStylePanel();
         buildAlertsPanel();
+        if (CUSTOM_TABS.ai) buildAiPanel();
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }
