@@ -72,6 +72,19 @@
     // boot is exactly the "a gate that advertises itself" trap the design
     // doc warns against) — so presence-only is the full extent of the
     // pre-check; identity is only resolved inside the real gate, on click.
+    function aiGateOpen() {
+        // Local-dev override (Admiral, 0018.06.02): no house signer ships yet
+        // (the Arcade Sidecar is queued), so SSN_AI_GATE=open bypasses the
+        // g2x3 signer gate ON THIS MACHINE ONLY — the env exists only where
+        // the operator's own launcher sets it. The g2x3 door returns with the
+        // Arcade Sidecar; this override is a berth key left under the mat on
+        // the operator's own boat, not a hole in the hull (DevChat itself is
+        // localhost-only either way).
+        try {
+            return typeof process !== 'undefined' && process.env && process.env.SSN_AI_GATE === 'open';
+        } catch (e) { return false; }
+    }
+
     function hasNostrSigner() {
         try {
             return !!(window.nostr &&
@@ -1282,6 +1295,11 @@
     // localhost).
     function runAiAreaGate() {
         setAiAreaStatus('');
+        if (aiGateOpen()) {
+            setAiAreaStatus('gate open — SSN_AI_GATE=open · the g2x3 door returns with the Arcade Sidecar');
+            openAiAreaAfterGate();
+            return;
+        }
         setAiAreaState('checking', 'Asking the signer to confirm…');
 
         if (!hasNostrSigner()) {
@@ -4533,7 +4551,7 @@
         // its panel DOM never gets built at all. Hidden entirely, not
         // disabled — see hasNostrSigner()'s comment for exactly why this is
         // the only cheap pre-check available.
-        if (hasNostrSigner()) {
+        if (aiGateOpen() || hasNostrSigner()) {
             TABS.push({ id: 'ai', label: 'AI' });
             CUSTOM_TABS.ai = true;
         }
