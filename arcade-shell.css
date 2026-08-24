@@ -736,6 +736,93 @@ body.arcade-shell #arcade-ai-frame {
   background: #1b1530;
 }
 
+/* Collapse control ("← Console") — only visible while expanded (checking/
+   unreachable/live past the gate); toggled by setAiCollapseVisible(). Sits
+   in the same persistent panel head as the × close button, but the two are
+   NOT the same action: × exits the AI tab entirely (navigateArcadeTab
+   ('main')), collapse only tears the iframe down and returns to the
+   console, staying on the tab. */
+body.arcade-shell #arcade-ai-collapse[hidden] { display: none; }
+
+/* --------------------------------------------------------------------------
+   AI console (V2) — the tab's default post-gate view. Body text/pills sit
+   on --arc-panel (#14161b) rather than the outer .arcade-ai violet ground
+   (#1b1530), following the SAME "card floats on a darker ground" pattern
+   .arcade-el-card already uses on --arc-void — contrast measured against
+   --arc-panel, not the violet ground, since that's the surface the text
+   actually paints on. Contrast table (WCAG, measured 2026-08-23):
+     arc-ink f2f0ea    / arc-panel 14161b : 15.88:1  (body text, needs 4.5)
+     arc-muted 9ba1ad  / arc-panel 14161b :  6.98:1  (secondary text, needs 4.5)
+     arc-faint 646b78  / arc-panel 14161b :  3.38:1  (meta-only, UI 3:1, never body)
+     arc-info 35d0ff   / arc-panel 14161b : 10.01:1  (reachable label, needs 3)
+     arc-warning f59e0b/ arc-panel 14161b :  8.43:1  (unreachable/error label, needs 3)
+     gold D9B24E       / violet 1b1530    :  8.72:1  (inherited from v1's panel title)
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-ai-console {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  gap: 20px;
+  padding: 18px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  max-width: 1120px;
+}
+
+/* Check-in card — same card shell as .arcade-el-card (padding/bg/border/
+   radius), its own class because the body is a probe-populated line list,
+   not a blurb+params pair. */
+body.arcade-shell .arcade-ai-checkin {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px;
+  background: var(--arc-panel);
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r-lg);
+  box-sizing: border-box;
+  max-width: 420px;
+}
+body.arcade-shell .arcade-ai-checkin__head {
+  display: flex; align-items: center; gap: 8px;
+}
+body.arcade-shell .arcade-ai-checkin__name {
+  margin: 0; flex: 1 1 auto;
+  font: 700 14px/1.2 var(--arc-font-ui); color: var(--arc-ink);
+}
+/* Pill states reuse the shell's own semantic tokens — info/cyan for
+   "reachable" (the SAME "available, not literally live" meaning
+   .arcade-el-status--ready already uses; --arc-live/neon stays reserved for
+   an actual live source per that rule's own comment), warning/amber for
+   "not running" (never money-gold, never neon). */
+body.arcade-shell .arcade-ai-checkin__pill--up { color: var(--arc-info); border-color: rgba(53, 208, 255, 0.35); background: rgba(53, 208, 255, 0.07); }
+body.arcade-shell .arcade-ai-checkin__pill--down { color: var(--arc-warning); border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.07); }
+body.arcade-shell .arcade-ai-checkin__body { display: flex; flex-direction: column; gap: 4px; min-height: 20px; }
+body.arcade-shell .arcade-ai-checkin__line {
+  margin: 0; font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted);
+}
+body.arcade-shell .arcade-ai-checkin__line.is-error { color: var(--arc-warning); }
+body.arcade-shell .arcade-ai-checkin__actions { display: flex; gap: 8px; margin-top: 2px; }
+
+/* SSN AI items section — MOVE blocks reuse .arcade-alert-card/
+   .arcade-alert-row/.arcade-alert-card__body byte-for-byte (same classes,
+   same file — see buildAiMoveCard/buildAiMoveRow in arcade-shell.js), laid
+   out in the SAME .arcade-alerts-rail grid the Alerts tab uses; LINK cards
+   reuse .arcade-el-card/.arcade-el-grid byte-for-byte, same as the Elements
+   tab (buildAiLinkCard). No new color tokens introduced — every hex in this
+   section is already in the contrast table above (arc-ink/arc-muted on
+   arc-panel) or the Elements tab's own precedent. */
+body.arcade-shell .arcade-ai-items { display: flex; flex-direction: column; gap: 12px; }
+body.arcade-shell .arcade-ai-items__head { display: flex; align-items: center; gap: 8px; }
+body.arcade-shell .arcade-ai-items__head--sub { margin-top: 6px; }
+body.arcade-shell .arcade-ai-items__title {
+  margin: 0;
+  font: 700 11px/1.4 var(--arc-font-ui); letter-spacing: 0.08em;
+  color: var(--arc-muted);
+}
+
+@media (max-width: 760px) {
+  body.arcade-shell .arcade-ai-console { padding: 12px; }
+  body.arcade-shell .arcade-ai-checkin { max-width: none; }
+}
+
 /* --------------------------------------------------------------------------
    Alerts Builder — custom "Alerts" tab (Stage 2 shell surface). Same
    custom-tab pattern as .arcade-elements/.arcade-style: canvas-first, a live
