@@ -4543,6 +4543,268 @@
     }
 
     // --------------------------------------------------------------------
+    // S32 — dashboard finalization (lanes 1+2): stock-frame dressing.
+    //
+    // The shell's nav still hosts STOCK pages whose interiors read as the old
+    // dashboard: frame1 (popup.html — Settings/Games right pane), frame2
+    // (background.html — the More▾ "Status and Logs" dashboard AND the Event
+    // Flow editor view), frame3 (vdo.html — VDO tab), and the welcomeFrame
+    // (docs/ssapp.html — the no-sources welcome hero inside #streams-page).
+    // Those are fallback-bundle files; editing them would pull in the
+    // ssn-custom mirror law and upstream contamination. Instead we do exactly
+    // what the Style tab's live-restyle already does (see the comment above
+    // STYLE_MARKER): inject ONE <style> into the frame's contentDocument,
+    // gated on the same LOCAL_ORIGIN_FAMILY same-origin check. Zero bundle
+    // bytes change; hosted/remote frames (no ssappOrigin, cross-origin) are
+    // skipped untouched; stock mode never runs this file at all.
+    //
+    // Every color below is a literal copy of an arcade-shell.css:16-47 token
+    // (frames can't see the parent's CSS vars across the document boundary).
+    // Pure styling — no IDs, classes, scripts, or behavior in the frames are
+    // added, removed, or rewired. One deliberate display treatment: the
+    // Status-and-Logs dashboard prints the session ID in plaintext
+    // (#session-id, background.html:642-644) — under the masking law that
+    // value stays blurred until hovered, like the Admiral's MASK toggle.
+    // --------------------------------------------------------------------
+    var DRESS_POPUP_CSS = [
+        '/* pacs-arcade S32 dress — popup.html. Token literals from arcade-shell.css:16-47. */',
+        ':root {',
+        '  --body-background-enabled: #0a0b0d;',
+        '  --body-background-disabled: rgba(229, 104, 107, 0.10);',
+        '  --default-text-color: #f2f0ea;',
+        '  --section-title-color: #9ba1ad;',
+        '  --color-accent: #35d0ff;',
+        '  --color-accent-subtle: rgba(53, 208, 255, 0.10);',
+        '  --collapsible-label-color: #14161b;',
+        '  --collapsible-border-color: #2a2e37;',
+        '  --color-wrapper-background: #0a0b0d;',
+        '  --button-background: #191c22;',
+        '  --text-button-text: #f2f0ea;',
+        '  --h2-color: #f2f0ea;',
+        '  --h3-color: #f2f0ea;',
+        '  --link-color: #35d0ff;',
+        '  --new-version-banner-background: rgba(53, 208, 255, 0.12);',
+        '  --new-version-banner-text: #f2f0ea;',
+        '  --new-version-banner-border: 1px solid rgba(53, 208, 255, 0.45);',
+        '  --new-version-link-color: #35d0ff;',
+        '  --new-version-installed-color: #9ba1ad;',
+        '  --important-changes-background: rgba(245, 158, 11, 0.10);',
+        '  --important-changes-text: #f2f0ea;',
+        '  --important-changes-border: 1px solid rgba(245, 158, 11, 0.45);',
+        '  --important-changes-link: #f59e0b;',
+        '  --options-group-background-color: #14161b;',
+        '  --options-group-text-color: #f2f0ea;',
+        '  --extension-enabled-background-color: rgba(57, 255, 20, 0.14);',
+        '  --extension-disabled-background-color: rgba(229, 104, 107, 0.16);',
+        '  --extension-disabled-text-color: #f2f0ea;',
+        '  --download-link: #35d0ff;',
+        '}',
+        /* the "Service Active" strip genuinely reports the capture service
+           being live — the one place neon green is the honest token. */
+        '.extension-enabled #disableButton { color: #39ff14; }',
+        /* toggle tracks were hardcoded #ccc/#2196f3 (popup.html:1243-1273) */
+        '.slider { background-color: #2a2e37; }',
+        'input:checked + .slider { background-color: #35d0ff; }',
+        'input:focus + .slider { box-shadow: 0 0 1px #35d0ff; }',
+        /* glowingButton's neon gradient edges (#00ccff/#ff075b) → one quiet
+           info-tint hover; button body gets the shared panel-2 ground. */
+        '.glowingButton { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; color: #f2f0ea; }',
+        '.glowingButton:before, .glowingButton:after { background: rgba(53, 208, 255, 0.16); border-radius: 6px; }',
+        '#searchInput { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; color: #f2f0ea; }',
+        '#searchInput::placeholder { color: #9ba1ad; }'
+    ].join('\n');
+
+    var DRESS_DASHBOARD_CSS = [
+        '/* pacs-arcade S32 dress — background.html: the More▾ "Status and Logs"',
+        '   dashboard (#dash) AND the Event Flow editor view (#editor, vars from',
+        '   actions/styles.css:4-75). Token literals from arcade-shell.css:16-47. */',
+        ':root {',
+        '  --primary-color: #35d0ff;',
+        '  --secondary-color: #1f232b;',
+        '  --background-light: #0a0b0d;',
+        '  --background-dark: #0a0b0d;',
+        '  --text-light: #f2f0ea;',
+        '  --text-dark: #f2f0ea;',
+        '  --alert-color: #e5686b;',
+        '  --success-color: #39ff14;',
+        '  --card-bg-light: #14161b;',
+        '  --card-bg-dark: #14161b;',
+        '  --shadow-light: none;',
+        '  --shadow-dark: none;',
+        '  --primary-light: #35d0ff;',
+        '  --primary-dark: #35d0ff;',
+        '  --text-primary: #f2f0ea;',
+        '  --text-secondary: #9ba1ad;',
+        /* btn-primary is SOLID primary + --text-on-primary (styles.css:156-160) —
+           white on info-cyan would measure ~1.9:1; dark void ink on cyan
+           clears 9:1. secondary becomes a quiet panel-3 button with ink text. */
+        '  --text-on-primary: #0a0b0d;',
+        '  --secondary-light: #2a2e37;',
+        '  --secondary-dark: #191c22;',
+        '  --text-on-secondary: #f2f0ea;',
+        '  --background-base: #0a0b0d;',
+        '  --background-surface: #14161b;',
+        '  --background-dialog: #1f232b;',
+        '  --background-hover: #191c22;',
+        '  --background-selected: #2a2e37;',
+        '  --border-color: #2a2e37;',
+        '  --border-interactive: #363b46;',
+        '  --error-color: #e5686b;',
+        '  --warning-color: #f59e0b;',
+        '  --info-color: #35d0ff;',
+        '  /* editor node categories are CATEGORICAL, not status — so: no live',
+        '     neon (reserved: actually-live), no gold (reserved: money). */',
+        '  --trigger-color: #35d0ff;',
+        '  --trigger-bg: rgba(53, 208, 255, 0.15);',
+        '  --action-color: #ff5ccb;',
+        '  --action-bg: rgba(255, 92, 203, 0.15);',
+        '  --logic-color: #f59e0b;',
+        '  --logic-bg: rgba(245, 158, 11, 0.15);',
+        '  --state-color: #f7931a;',
+        '  --state-bg: rgba(247, 147, 26, 0.15);',
+        '}',
+        'body { background: #0a0b0d; color: #f2f0ea; }',
+        '.card { border: 1px solid #2a2e37; border-radius: 10px; }',
+        '.card h3 { color: #9ba1ad; letter-spacing: 0.08em; }',
+        '.stat-value { color: #f2f0ea; }',
+        '.stat-label { color: #9ba1ad; }',
+        /* two .status-item notes carry inline color:#777/#555 (background.html
+           :645-650) — inline styles only yield to !important. Muted, not faint:
+           real text, 4.5:1 law. */
+        '#connection-status .status-item[style] { color: #9ba1ad !important; }',
+        '.status-warning { background-color: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }',
+        '#session-id { filter: blur(6px); border-radius: 3px; }',
+        '#session-id:hover { filter: none; }',
+        '#debugOutput { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; }',
+        '.log-message { color: #9ba1ad; }',
+        '.error-message { background: rgba(229, 104, 107, 0.10); color: #e5686b; border-left-color: #e5686b; }',
+        '.message { background: #191c22; border-left-color: #35d0ff; }',
+        '.message-time { color: #9ba1ad; }',
+        '.badge { background: #1f232b; color: #9ba1ad; }',
+        '.view-btn { border-color: rgba(53, 208, 255, 0.45); color: #35d0ff; }',
+        '.view-btn.active { background: rgba(53, 208, 255, 0.12); color: #35d0ff; }',
+        '.view-btn:hover:not(.active) { background: rgba(53, 208, 255, 0.07); }',
+        '.footer { color: #9ba1ad; border-top-color: #2a2e37; }',
+        '.footer a { color: #35d0ff; }',
+        '.footer a:hover { color: #35d0ff; text-decoration: underline; }',
+        /* the editor's "New to Event Flow?" banner is hardcoded violet
+           (rgba(99,102,241,…), styles.css:636-648) — info-cyan tints instead. */
+        '.flow-help-banner { border-color: rgba(53, 208, 255, 0.35); background: rgba(53, 208, 255, 0.08); }',
+        /* .node-item/.node-header text is hardcoded #FFFFFF (background.html
+           :94,:164-178) — white on the tokened category grounds (info-cyan
+           above all) would read ~1.9:1; void ink clears 7:1 on all three. */
+        '#editor .node-item, #editor .node-header { color: #0a0b0d; }'
+    ].join('\n');
+
+    var DRESS_VDO_CSS = [
+        '/* pacs-arcade S32 dress — vdo.html (VDO tab). Token literals from',
+        '   arcade-shell.css:16-47. Stock\'s #e9c46a heading gold is OFF the',
+        '   semantic lock (gold = money only; these are labels, not sats) —',
+        '   remapped to muted/ink. The white QR ground stays white: scannability',
+        '   is functional, not styling. */',
+        'body { background-color: #0a0b0d; color: #f2f0ea; }',
+        '.app-header { background-color: #14161b; border-bottom-color: #2a2e37; }',
+        '.app-header h1 { color: #f2f0ea; }',
+        '.links-section, .instructions-panel, .qr-code-panel, .instructions-pane {',
+        '  background-color: #14161b; border: 1px solid #2a2e37; border-radius: 10px; box-shadow: none;',
+        '}',
+        '.instructions-pane { padding: 20px; }',
+        '.links-header h2 { color: #f2f0ea; }',
+        '.instructions-panel h3, .qr-code-panel h3 { color: #9ba1ad; }',
+        '.link-box label { color: #9ba1ad; }',
+        '.link-box input { background-color: #191c22; border-color: #2a2e37; color: #f2f0ea; border-radius: 6px; }',
+        '.copy-btn { background: rgba(53, 208, 255, 0.12); border: 1px solid rgba(53, 208, 255, 0.45); color: #35d0ff; border-radius: 6px; }',
+        '.copy-btn:hover { background: rgba(53, 208, 255, 0.2); }',
+        '.reset-btn { background: rgba(229, 104, 107, 0.10); border: 1px solid rgba(229, 104, 107, 0.45); color: #e5686b; border-radius: 6px; }',
+        '.reset-btn:hover { background: rgba(229, 104, 107, 0.18); }',
+        '.instructions-panel .note { background-color: #191c22; border-left-color: #f59e0b; color: #9ba1ad; }',
+        '.instructions-panel .note strong { color: #f59e0b; }',
+        '.links-section .note { color: #9ba1ad; }',
+        /* the stock hero art (media/vdo.png) ships with an invalid inline style
+           (`style="calc(50vw - 40px)"`, ignored) and renders at natural size —
+           cap it to its panel. */
+        '.qr-code-panel img { max-width: 100%; height: auto; border-radius: 6px; }'
+    ].join('\n');
+
+    var DRESS_WELCOME_CSS = [
+        '/* pacs-arcade S32 dress — docs/ssapp.html (no-sources welcome hero inside',
+        '   #streams-page). Token literals from arcade-shell.css:16-47. The .warning',
+        '   treatment matches the shell\'s own #chat-empty-hint (arcade-shell.css',
+        '   :598-603): amber warning token, never the money gold. */',
+        'body { background: #0a0b0d; color: #f2f0ea; }',
+        '.container { background-color: #14161b; border: 1px solid #2a2e37; box-shadow: none; }',
+        'h1 { color: #f2f0ea; text-shadow: none; }',
+        'h2 { color: #9ba1ad; border-bottom-color: #2a2e37; }',
+        'p, li { color: #9ba1ad; }',
+        'strong { color: #f2f0ea; }',
+        'a, .lightblue { color: #35d0ff; }',
+        'code { background-color: #1f232b; color: #f2f0ea; }',
+        '.note { background-color: #191c22; border-left-color: #35d0ff; color: #9ba1ad; }',
+        '.warning { background-color: rgba(245, 158, 11, 0.08); border-left-color: #f59e0b; color: #f0b45c; }',
+        '.footer { border-top-color: #2a2e37; color: #9ba1ad; }'
+    ].join('\n');
+
+    // Injects (or refreshes) one <style> in a frame's document. Returns true
+    // when the style is in place. All same-origin touches feature-detected;
+    // any failure is a silent skip — a missed dress is cosmetic, never fatal.
+    function injectDressIntoFrame(frame, styleId, css) {
+        if (!frame) return false;
+        try {
+            var origin = frame.dataset ? (frame.dataset.ssappOrigin || '') : '';
+            // welcomeFrame has no ssappOrigin (libs.js builds it) — its dress
+            // caller passes styleId 'arcade-dress-welcome' and we gate it on
+            // plain same-origin reachability instead (hosted remote frames
+            // throw on contentDocument and skip here).
+            if (styleId !== 'arcade-dress-welcome' && !LOCAL_ORIGIN_FAMILY[origin]) return false;
+            var doc = frame.contentDocument;
+            if (!doc || !doc.head) return false;
+            var el = doc.getElementById(styleId);
+            if (!el) {
+                el = doc.createElement('style');
+                el.id = styleId;
+                doc.head.appendChild(el);
+            }
+            if (el.textContent !== css) el.textContent = css;
+            return true;
+        } catch (e) {
+            return false; // cross-origin / mid-navigation — skip
+        }
+    }
+
+    function dressStockFrame(frameId, styleId, css) {
+        var frame = document.getElementById(frameId);
+        if (!frame) return;
+        injectDressIntoFrame(frame, styleId, css); // already-loaded case
+        frame.addEventListener('load', function () {
+            injectDressIntoFrame(frame, styleId, css);
+        });
+    }
+
+    function installStockFrameDressing() {
+        dressStockFrame('frame1', 'arcade-dress-popup', DRESS_POPUP_CSS);
+        dressStockFrame('frame2', 'arcade-dress-dashboard', DRESS_DASHBOARD_CSS);
+        dressStockFrame('frame3', 'arcade-dress-vdo', DRESS_VDO_CSS);
+
+        // welcomeFrame is created/destroyed on demand by libs.js's
+        // manageWelcomePage() (only while zero sources are configured) — watch
+        // #sources for it arriving, then dress its document once it loads.
+        var sourcesEl = document.getElementById('sources');
+        if (!sourcesEl || typeof MutationObserver !== 'function') return;
+        var welcomeHooked = null;
+        var hookWelcome = function () {
+            var wf = document.getElementById('welcomeFrame');
+            if (!wf || wf === welcomeHooked) return;
+            welcomeHooked = wf;
+            injectDressIntoFrame(wf, 'arcade-dress-welcome', DRESS_WELCOME_CSS);
+            wf.addEventListener('load', function () {
+                injectDressIntoFrame(wf, 'arcade-dress-welcome', DRESS_WELCOME_CSS);
+            });
+        };
+        hookWelcome();
+        new MutationObserver(hookWelcome).observe(sourcesEl, { childList: true, subtree: true });
+    }
+
+    // --------------------------------------------------------------------
     // Boot
     // --------------------------------------------------------------------
     function init() {
@@ -4562,6 +4824,7 @@
         buildStylePanel();
         buildAlertsPanel();
         if (CUSTOM_TABS.ai) buildAiPanel();
+        installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }

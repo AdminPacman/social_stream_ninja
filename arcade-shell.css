@@ -1138,3 +1138,125 @@ body.arcade-shell .arcade-style-mypreset-name {
   background: var(--arc-panel-2); color: var(--arc-ink);
   font: 400 11px/1 var(--arc-font-ui);
 }
+
+/* --------------------------------------------------------------------------
+   S32 — dashboard finalization (task S32, lanes 1+2): dress the STOCK chrome
+   that still shows through under the shell. Two mechanisms, both token-only:
+
+   1) main.css's own :root custom properties (main.css:4-43) are rebound to
+      the arcade tokens below — one block re-grounds every var-driven stock
+      surface the shell still hosts (#streams-page left column + source
+      entries, #sessions-page, #link-overlay-page chrome) without touching
+      main.css itself. arcade-shell.css loads after main.css
+      (index.html:11,14) and body.arcade-shell out-scopes :root anyway, so
+      stock mode stays byte-for-byte itself.
+   2) The hardcoded leftovers (important-flagged .addnew buttons, sessions
+      greens, the running-source entry marker) get explicit overrides here.
+
+   Iframe INTERIORS (popup.html / background.html / vdo.html / docs/ssapp.html)
+   are dressed from arcade-shell.js's installStockFrameDressing() — same token
+   values, injected into the frame document; nothing in the fallback bundle is
+   modified, so the ssn-custom mirror law has nothing to mirror.
+   -------------------------------------------------------------------------- */
+body.arcade-shell {
+  --bg-deep: var(--arc-void);
+  --bg-base: var(--arc-panel);
+  --bg-surface: var(--arc-panel-2);
+  --bg-raised: var(--arc-panel-3);
+  --accent: var(--arc-info);
+  --accent-hover: var(--arc-info);
+  /* stock uses --accent-green for "capturing/enabled" markers — that IS the
+     shell's live semantic, so it maps to --arc-live, not to info-cyan. */
+  --accent-green: var(--arc-live);
+  --accent-green-dim: rgba(57, 255, 20, 0.15);
+  --accent-red: var(--arc-danger);
+  --accent-amber: var(--arc-warning);
+  --text-primary: var(--arc-ink);
+  /* --text-muted deliberately maps to --arc-muted, not --arc-faint: faint
+     (#646b78) measures ~3.1-3.7:1 on the shell grounds — fine for the shell's
+     own dash-faces (UI floor 3:1) but main.css uses --text-muted for real
+     label text, which must clear 4.5:1 (same ruling as the S30 contrast
+     pass, arcade-shell.css:935-942). */
+  --text-secondary: var(--arc-muted);
+  --text-muted: var(--arc-muted);
+  --border-subtle: var(--arc-edge-soft);
+  --border-default: var(--arc-edge);
+  --border-accent: rgba(53, 208, 255, 0.45);
+  --radius-md: var(--arc-r);
+  --radius-lg: var(--arc-r-lg);
+}
+
+/* #streams-page left rail — .addnew buttons are !important-flagged in
+   main.css:1755-1773, so the dress has to answer in kind (higher-specificity
+   !important wins). */
+body.arcade-shell .addnew p { color: var(--arc-muted) !important; text-shadow: none; }
+body.arcade-shell .addnew button {
+  background: var(--arc-panel-2) !important;
+  border: 1px solid var(--arc-edge) !important;
+  color: var(--arc-ink) !important;
+  box-shadow: none !important;
+  border-radius: var(--arc-r);
+}
+body.arcade-shell .addnew button:hover {
+  background: var(--arc-panel-3) !important;
+  border-color: #363b46 !important; /* the shell's own hover edge (arcade-shell.css:247) */
+  box-shadow: none !important;
+}
+
+/* running-source marker — stock's #27ae60 green (main.css:1779-1783) is a
+   genuinely-live semantic, so it maps to the live token, not cyan. */
+body.arcade-shell .entry:has(i.la-stop:not(.hidden)) {
+  background: rgba(57, 255, 20, 0.06) !important;
+  border-left: 3px solid var(--arc-live) !important;
+}
+
+body.arcade-shell .fallback-indicator { color: var(--arc-danger); }
+
+/* #sessions-page — stock's hardcoded greens (main.css:2456-2483, 2622-2640)
+   read "selected/current", which in the shell is the info-cyan semantic
+   (same as .arcade-el-status--ready). */
+body.arcade-shell .current-session-info {
+  background: rgba(53, 208, 255, 0.06);
+  border: 1px solid rgba(53, 208, 255, 0.35);
+}
+body.arcade-shell .session-label {
+  background: rgba(53, 208, 255, 0.12);
+  border: 1px solid rgba(53, 208, 255, 0.45);
+  color: var(--arc-info);
+}
+body.arcade-shell .session-item.selected {
+  background: rgba(53, 208, 255, 0.1);
+  border: 1px solid rgba(53, 208, 255, 0.45);
+}
+/* the session LIST's current row is a second, separate marker —
+   .session-item.current (main.css:2516-2519), same green, same remap. */
+body.arcade-shell .session-item.current {
+  background: rgba(53, 208, 255, 0.08);
+  border-color: rgba(53, 208, 255, 0.45);
+}
+body.arcade-shell .session-item .active-label { color: var(--arc-info); }
+/* no bg tint on the default-label chip: muted on a 15%-muted tint over the
+   item ground measures 4.46:1 — a hair under the 4.5:1 body law; muted on the
+   bare item ground clears 5.77:1. */
+body.arcade-shell .session-item .default-label { color: var(--arc-muted); background: transparent; }
+body.arcade-shell .session-item .session-date,
+body.arcade-shell .session-item .session-description { color: var(--arc-muted); }
+body.arcade-shell .session-item .switch-btn {
+  background: var(--arc-panel-2); border-color: var(--arc-edge); color: var(--arc-ink);
+}
+body.arcade-shell .session-item .switch-btn:hover { background: var(--arc-panel-3); box-shadow: none; }
+body.arcade-shell .session-item .delete-btn:hover {
+  background: rgba(229, 104, 107, 0.14); color: var(--arc-danger); border-color: var(--arc-danger);
+}
+body.arcade-shell .new-session-btn {
+  background: rgba(53, 208, 255, 0.12);
+  border: 1px solid rgba(53, 208, 255, 0.45);
+  color: var(--arc-info);
+}
+body.arcade-shell .new-session-btn:hover {
+  background: rgba(53, 208, 255, 0.2);
+  border-color: var(--arc-info);
+  box-shadow: none;
+}
+body.arcade-shell .session-remove-btn { color: var(--arc-danger); }
+body.arcade-shell .sessions-list { background: var(--arc-panel-2); border: 1px solid var(--arc-edge-soft); }
