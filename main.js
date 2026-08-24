@@ -5282,6 +5282,24 @@ let storageSavePending = false;
 let storageSavePendingAllowSettingsDowngrade = false;
 
 var mainWindow = null;
+// Persisted Chrome extensions (gate round, 0018.06.01 a₿): the Enable Chrome
+// Extension menu was session-only — every launch needed a re-enable, and the
+// freshly-loaded extension only injected into pages loaded afterwards. Now the
+// choice persists (electron-store key 'enabledChromeExtensions') and every new
+// window session auto-loads it at creation, so a signer like Sidecar/nos2x is
+// simply THERE after one enable. Errors (already loaded, path gone) are quiet.
+function loadPersistedChromeExtensions(sess) {
+    try {
+        var persisted = store.get('enabledChromeExtensions') || [];
+        persisted.forEach((loc) => {
+            try {
+                if (!fs.existsSync(loc)) { return; }
+                sess.loadExtension(loc).catch(() => {});
+            } catch (e) { }
+        });
+    } catch (e) { }
+}
+
 let ttt = {
     width: 1280,
     height: 800
@@ -7815,6 +7833,7 @@ async function createWindow(args, reuse = false, mainApp = false) {
         }
     });
 
+    loadPersistedChromeExtensions(mainWindow.webContents.session);
     mainWindow.args = args; // storing settings
     if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -13624,6 +13643,16 @@ contextMenu({
                     id
                 }) => {
                     log("loadExtension");
+                    try {
+                        var persisted = store.get('enabledChromeExtensions') || [];
+                        if (!persisted.includes(extensions[idx].location)) {
+                            persisted.push(extensions[idx].location);
+                            store.set('enabledChromeExtensions', persisted);
+                        }
+                    } catch (e) { }
+                    // content scripts only inject into pages loaded after the
+                    // extension — reload so window.nostr appears right now
+                    browserWindow.webContents.reload();
                 });
                 // extensions
             }
