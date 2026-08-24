@@ -39,21 +39,20 @@ This overlay works by:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comic Pop Dock Overlay</title>
+    <title>Chat Overlay</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <script src="https://socialstream.ninja/libs/colours.js" type="text/javascript"></script>
-    <!-- Links to Social Stream Ninja resources -->
     <link rel="canonical" href="https://socialstream.ninja/">
     <meta name="generator" content="Social Stream Ninja - https://github.com/steveseguin/social_stream">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Rubik:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap');
 
 body, html {
     margin: 0;
     padding: 0;
     width: 100%;
     height: 100%;
-    font-family: 'Rubik', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
     background-color: #0000; /* Transparent background for overlay */
     overflow: hidden; /* Prevent body scrollbars */
     box-sizing: border-box;
@@ -68,13 +67,12 @@ body, html {
 #chat-container {
     position: absolute;
     bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 25px;
     width: 100%;
-    max-width: 440px;
-    height: 100vh;
-    overflow: hidden;
-    padding: 0 32px 32px;
+    max-width: 350px;
+    height: 100vh; /* Or your desired fixed height for the chat box */
+    overflow: visible; /* Crucial: Allows avatar to be visible outside the container */
+    padding: 0;
     box-sizing: border-box;
 }
 
@@ -84,121 +82,58 @@ body, html {
 }
 
 .message {
-    background: linear-gradient(135deg, #fff6a8 0%, #ffe066 40%, #ffc860 100%);
-    color: #111;
-    padding: 22px 28px 26px 28px;
-    margin-bottom: 34px;
-    border-radius: 32px;
-    border: 5px solid #111;
-    box-shadow: 10px 10px 0 #111;
+    background: #0009;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 15px;
+    border: 1px solid #333;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    color: #e4e6eb;
+    display: flex;
+    align-items: flex-start;
     opacity: 0;
-    transform: translateY(48px) scale(0.85);
-    transition: opacity 0.45s ease-out, transform 0.45s ease-out,
-                max-height 0.5s ease, margin-bottom 0.5s ease, padding-top 0.5s ease, padding-bottom 0.5s ease, border-width 0.5s ease;
-    flex-shrink: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out,
+                max-height 0.5s ease-in-out, margin-bottom 0.5s ease-in-out, padding-top 0.5s ease-in-out, padding-bottom 0.5s ease-in-out, border-width 0.5s ease-in-out;
     overflow: visible;
-    max-height: 520px;
+    max-height: 500px; 
     box-sizing: border-box;
     position: relative;
-    isolation: isolate;
-}
-
-.message::before {
-    content: '';
-    position: absolute;
-    inset: -20px;
-    background: radial-gradient(circle at 12px 12px, rgba(247, 40, 106, 0.8) 0, rgba(247, 40, 106, 0.8) 22%, transparent 23%, transparent 100%);
-    background-size: 28px 28px;
-    border-radius: 40px;
-    opacity: 0.3;
-    transform: rotate(-4deg);
-    z-index: -2;
-    pointer-events: none;
-}
-
-.message::after {
-    content: '';
-    position: absolute;
-    top: 18px;
-    left: -26px;
-    width: 96px;
-    height: 96px;
-    background: linear-gradient(135deg, #00d1ff 0%, #00ffa3 80%);
-    border: 4px solid #111;
-    box-shadow: 6px 6px 0 #111;
-    clip-path: polygon(50% 0%, 62% 35%, 98% 35%, 68% 57%, 80% 100%, 50% 73%, 20% 100%, 32% 57%, 2% 35%, 38% 35%);
-    transform: rotate(-6deg);
-    z-index: -3;
-    opacity: 0.9;
-    pointer-events: none;
-}
-
-.message-with-edge {
-    box-shadow: 10px 10px 0 #111, inset 0 0 0 4px rgba(255, 255, 255, 0.6);
+	margin-left: 60px;
 }
 
 .message.visible {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    animation: comicPopIn 0.48s cubic-bezier(0.25, 1.25, 0.35, 1) forwards;
+    transform: translateY(0);
 }
 
 .message.fading {
     opacity: 0;
-    transform: translateY(-24px) scale(0.8);
-    filter: blur(2px);
-    transition: opacity 0.4s ease, transform 0.4s ease, filter 0.4s ease;
+    transition: opacity 1.5s ease-out;
 }
 
 .message.hidden {
     opacity: 0;
-    transform: translateY(-48px) scale(0.7);
-    max-height: 0 !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    margin-bottom: 0 !important;
-    border-width: 0 !important;
-}
-
-@keyframes comicPopIn {
-    0% {
-        opacity: 0;
-        transform: translateY(70px) scale(0.5) rotate(-12deg);
-        filter: blur(6px);
-    }
-    60% {
-        transform: translateY(-8px) scale(1.05) rotate(3deg);
-        filter: blur(0);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1) rotate(0);
-    }
+    transform: translateY(-30px);	
+    max-height: 0px !important;
+    padding-top: 0px !important;
+    padding-bottom: 0px !important;
+	margin-bottom: 0px !important;
+	border-width: 0px !important;
 }
 
 .avatar-wrapper {
-    width: 58px;
-    height: 58px;
-    border-radius: 18px;
-    display: inline-flex;
-    margin-right: 16px;
-    position: relative;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: inline-block;
+    position: absolute;
+	left: -65px;
+    top: 0;
     overflow: hidden;
-    background: linear-gradient(135deg, #ff4d6d 0%, #ff9f1c 100%);
-    padding: 4px;
+    background: linear-gradient(45deg, #4ab8f9, #4cd137);
+    padding: 2px;
     flex-shrink: 0;
-    border: 4px solid #111;
-    box-shadow: 6px 6px 0 #111;
-    transform: rotate(-4deg);
-}
-
-.avatar {
-    width: 100%;
-    height: 100%;
-    border-radius: 12px;
-    background-size: cover;
-    background-position: center;
-    border: 2px solid rgba(255, 255, 255, 0.75);
 }
 
 #spacer {
@@ -213,157 +148,101 @@ body, html {
     transition: none;
 }
 
-.name {
-    color: #111;
-    font-size: 1.35em;
-    font-family: 'Bangers', cursive;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    text-shadow: -2px -2px 0 #fff, 3px 3px 0 rgba(0, 0, 0, 0.85);
-    /* v4 wrap fix (style-tab-v4-scout.md §4): text-overflow: ellipsis does
-       not apply on a flex container, so a long username silently lost its
-       ellipsis and got hard-clipped mid-word inside the fixed badge instead
-       — display: inline-block lets the same min-width/overflow/ellipsis
-       recipe actually render (badge still sizes honestly to short names). */
-    min-width: 40px;
-    max-width: 240px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    display: inline-block;
-    vertical-align: middle;
-}
-
-.text {
-    font-size: 1.05em;
-    line-height: 1.5;
-    margin: 10px 0 6px;
-    word-wrap: break-word;
-    color: #1c1c1c;
-}
-
-.text img,
-.text svg {
-    max-width: 120px;
-    max-height: 32px;
-    vertical-align: middle;
-}
-
-.donation {
-    color: #fff;
-    background: #ff3366;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border-radius: 999px;
-    border: 3px solid #111;
-    box-shadow: 4px 4px 0 #111;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-family: 'Bangers', cursive;
-    letter-spacing: 0.05em;
-}
-
-.name-bg {
-    background: #05d9ff;
-    padding: 4px 10px;
-    border-radius: 12px;
-    display: inline-flex;
-    align-items: center;
-    border: 3px solid #111;
-    box-shadow: 4px 4px 0 #111;
-}
-
-.membership-status {
-    color: #111;
-    font-weight: 700;
-    font-size: 0.9em;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    background: #fff;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    border: 3px solid #111;
-    box-shadow: 4px 4px 0 #111;
-}
-
-.large-image {
-    max-width: 100%;
-    height: auto;
-    margin-top: 14px;
-    border-radius: 18px;
-    border: 4px solid #111;
-    box-shadow: 8px 8px 0 rgba(17, 17, 17, 0.75);
-}
-
-.source-icon {
-    width: 20px;
-    height: 20px;
-    margin-left: 6px;
-    filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.35));
-}
-
-.badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    margin-left: 6px;
-    border: 2px solid #111;
-    border-radius: 999px;
-    background: #fff;
-    box-shadow: 4px 4px 0 rgba(17, 17, 17, 0.5);
-}
-
-.message-content-wrapper {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-}
-
 .message-text-meta {
     flex-grow: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 
-.content-image {
-    max-width: 320px;
-    max-height: 320px;
-    margin-top: 12px;
-    border-radius: 16px;
-    border: 4px solid #111;
-    box-shadow: 6px 6px 0 rgba(17, 17, 17, 0.75);
+.user-info {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
-.message small {
-    font-size: 0.8em;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+.name { 
+    color: white; 
+    font-size: 1.1em; 
+    font-weight: 700; 
+    margin-right: 5px;
 }
 
-@media (max-width: 768px) {
-    #chat-container {
-        max-width: 92vw;
-        padding: 0 12px 24px;
-    }
+.text { 
+    font-size: 0.9em; 
+    line-height: 1.4; 
+    margin-top: 4px; 
+    word-wrap: break-word; 
+}
 
-    .message {
-        margin-bottom: 20px;
-        padding: 20px;
-    }
+.text img { 
+    max-width:100px; 
+    max-height: 24px; 
+    vertical-align: bottom; 
+}
 
-    .text {
-        font-size: 1em;
-    }
+/* Hide empty text elements */
+.text:empty {
+    display: none;
+}
 
-    .name {
-        font-size: 1.1em;
-    }
+.text svg {
+    max-width: 100px;
+    max-height: 24px;
+    vertical-align: middle;
+    margin: 0 3px;
+    display: inline-block;
+}
+
+.donation { 
+    color: #4cd137; 
+    font-weight: 600; 
+}
+
+.name-bg {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    display: inline;
+    vertical-align: baseline;
+    margin-right: 0;
+}
+
+.membership-status { 
+    color: #ffd700; 
+    font-weight: 700; 
+    font-size: 0.85em; 
+    margin-bottom: 5px; 
+}
+
+.large-image { 
+    max-width: 100%; 
+    height: auto; 
+    margin-top: 10px; 
+    border-radius: 10px; 
+    display: block; 
+}
+
+.avatar { 
+    width: 100%; 
+    height: 100%; 
+    border-radius: 50%; 
+    background-size: cover; 
+    background-position: center; 
+}
+
+.source-icon { 
+    width: 18px; 
+    height: 18px; 
+    vertical-align: middle; 
+    margin-left: 5px; 
+}
+
+.badge { 
+    display: inline-block; 
+    height: 0.9em; 
+    margin-left: 4px; 
+    vertical-align: middle; 
 }
 
 .badge.svg { overflow: hidden; }
@@ -427,12 +306,14 @@ body, html {
     // Use showtime=0 to disable auto-hiding
     var showtime = urlParams.has("showtime") ? parseInt(urlParams.get("showtime")) : 30000;
 
+    // chroma: if set via URL, use as background color (e.g., &chroma=00FF00 for green)
+    if (urlParams.has("chroma")) {
+        var chroma = urlParams.get("chroma") || "0F0";
+        document.body.style.backgroundColor = chroma.charAt(0) === "#" ? chroma : "#" + chroma;
+    }
+
     // --- Common overlay tweaks (shared across themes) ---
     var hideBots = urlParams.has("hidebots");
-    if (urlParams.has("chroma")) {
-        var _c = urlParams.get("chroma") || "";
-        document.body.style.background = _c.charAt(0) === "#" ? _c : "#" + _c;
-    }
     if (urlParams.has("font")) {
         var _fs = parseInt(urlParams.get("font"), 10);
         if (!isNaN(_fs) && _fs > 0) {
@@ -488,7 +369,7 @@ body, html {
 
     const chatContainer = document.getElementById('chat-container');
     const messageListWrapper = document.getElementById('message-list-wrapper');
-    const MAX_MESSAGES = urlParams.has("limit") ? parseInt(urlParams.get("limit")) : 20; // Adjust as needed
+    const MAX_MESSAGES = 20; // Adjust as needed
     const topSpacer = document.getElementById('spacer');
 	const messageTimestamps = new Map();
     const MAX_SPACER_HEIGHT_BEFORE_RESET = 18000000; 
@@ -580,11 +461,10 @@ body, html {
 		if (!data.chatname && data.meta) {
 			return;
 		}
-		
+
 		const messageDiv = document.createElement('div');
 		messageDiv.classList.add('message');
 		
-		// Generate unique ID and track timestamp for aging
 		const messageId = data.mid || 'msg-' + Date.now();
 		messageDiv.id = messageId;
 		messageTimestamps.set(messageId, Date.now());
@@ -609,18 +489,17 @@ body, html {
 			avatarBorderColor = `linear-gradient(45deg, ${data.nameColor}, ${data.nameColor}88)`;
 		}
 		
-		let leftEdgeColor = null;
+		let coloredBorder = null;
 		if (typeof getColorFromType === 'function' && data.type) {
 			try {
-				leftEdgeColor = getColorFromType(data.type);
+				coloredBorder = getColorFromType(data.type);
 			} catch (e) {
 				console.error("Error getting color from type:", e);
 			}
 		}
 		
-		if (leftEdgeColor) {
-			messageDiv.style.borderLeft = `4px solid ${leftEdgeColor}`;
-			messageDiv.style.paddingLeft = '12px';
+		if (coloredBorder) {
+			messageDiv.style.border = `2px solid ${coloredBorder}`;
 		}
 		
 		const sourceIconHtml = data.type ? `<img src="https://socialstream.ninja/sources/images/${data.type}.png" alt="Source" class="source-icon">` : '';
@@ -628,7 +507,9 @@ body, html {
 			`<div class="avatar-wrapper" style="background: ${avatarBorderColor}"><div class="avatar" style="background-image: url('${data.chatimg}');"></div></div>` : '';
 		const nameHtml = data.chatname ? `<div class="name-bg"><div class="name" ${data.nameColor ? `style="text-shadow: 0 0 3px ${data.nameColor}"` : ''}>${data.chatname}</div></div>` : '';
 		const membershipHtml = data.membership ? `<div class="membership-status">${data.membership}</div>` : '';
-		const messageTextHtml = `<div class="text" ${data.event ? 'style="font-style: italic;"' : ''}>${data.chatmessage ? data.chatmessage : ''}</div>`;
+		const messageTextHtml = data.textonly ? 
+			`<div class="text" ${data.event ? 'style="font-style: italic;"' : ''}>${data.chatmessage ? data.chatmessage.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</div>` :
+			`<div class="text" ${data.event ? 'style="font-style: italic;"' : ''}>${data.chatmessage ? data.chatmessage : ''}</div>`;
 		const donationHtml = data.hasDonation ? `<div class="donation">${data.hasDonation}</div>` : '';
 		
 		const contentImgHtml = data.contentimg ? 
@@ -637,20 +518,18 @@ body, html {
 			 </div>` : '';
 
 		messageDiv.innerHTML = `
-			<div class="message-content-wrapper">
-				${avatarHtml}
-				<div class="message-text-meta">
-					<div>
-						${nameHtml}
-						${sourceIconHtml}
-						${chatbadgesHtml}
-					</div>
-					${membershipHtml}
-					${messageTextHtml}
-					${donationHtml}
+			${avatarHtml}
+			<div class="message-text-meta">
+				<div class="user-info">
+					${nameHtml}
+					${chatbadgesHtml}
+					${sourceIconHtml}
 				</div>
+				${membershipHtml}
+				${messageTextHtml}
+				${donationHtml}
+				${contentImgHtml}
 			</div>
-			${contentImgHtml}
 		`;
 
 		messageListWrapper.appendChild(messageDiv);
@@ -674,7 +553,7 @@ body, html {
 
 				if (newPotentialSpacerHeight > MAX_SPACER_HEIGHT_BEFORE_RESET) {
 					console.log(`Spacer height (${newPotentialSpacerHeight}px) exceeded threshold (${MAX_SPACER_HEIGHT_BEFORE_RESET}px). Resetting to 0px.`);
-					newPotentialSpacerHeight = 0; // Reset the height
+					newPotentialSpacerHeight = 0;
 				}
 				
 				topSpacer.style.height = newPotentialSpacerHeight + 'px';

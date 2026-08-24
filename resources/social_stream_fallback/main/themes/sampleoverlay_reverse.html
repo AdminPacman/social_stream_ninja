@@ -11,9 +11,9 @@ If editing this file, please note:
    - "type" field indicates source platform (youtube, twitch, x, kick, etc.)
 
 2. SCROLLING MECHANISM:
-   - New messages are added at the bottom
-   - Page scrolls upward using CSS transforms on #message-list-wrapper
-   - The spacer element manages scroll position as older messages are removed
+   - New messages are inserted at the top
+   - Message stack pushes downward so older chats stay visible until trimmed
+   - Auto-alignment keeps the newest message pinned to the top; no spacer element needed
    - DO NOT modify the scroll logic without thorough testing
 
 3. STYLING GUIDELINES:
@@ -39,21 +39,21 @@ This overlay works by:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comic Pop Dock Overlay</title>
+    <title>Chat Overlay (Reverse Scroll)</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <script src="https://socialstream.ninja/libs/colours.js" type="text/javascript"></script>
     <!-- Links to Social Stream Ninja resources -->
     <link rel="canonical" href="https://socialstream.ninja/">
     <meta name="generator" content="Social Stream Ninja - https://github.com/steveseguin/social_stream">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Rubik:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap');
 
 body, html {
     margin: 0;
     padding: 0;
     width: 100%;
     height: 100%;
-    font-family: 'Rubik', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
     background-color: #0000; /* Transparent background for overlay */
     overflow: hidden; /* Prevent body scrollbars */
     box-sizing: border-box;
@@ -69,301 +69,99 @@ body, html {
     position: absolute;
     bottom: 0;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%); /* Center horizontally */
     width: 100%;
-    max-width: 440px;
-    height: 100vh;
-    overflow: hidden;
-    padding: 0 32px 32px;
+    max-width: 350px;
+    height: 100vh; /* Or your desired fixed height for the chat box */
+    overflow: hidden; /* Crucial: content exceeding this will be hidden */
+    padding: 0 25px; /* Horizontal padding only on the main container */
     box-sizing: border-box;
 }
 
 #message-list-wrapper {
     width: 100%;
-    transition: transform 0.5s ease-out;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    transform: none !important;
 }
 
 .message {
-    background: linear-gradient(135deg, #fff6a8 0%, #ffe066 40%, #ffc860 100%);
-    color: #111;
-    padding: 22px 28px 26px 28px;
-    margin-bottom: 34px;
-    border-radius: 32px;
-    border: 5px solid #111;
-    box-shadow: 10px 10px 0 #111;
+    background: linear-gradient(145deg, #1a2a48, #162238);
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 15px;
+    border: 1px solid #2e3b55;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    color: #e4e6eb;
     opacity: 0;
-    transform: translateY(48px) scale(0.85);
-    transition: opacity 0.45s ease-out, transform 0.45s ease-out,
-                max-height 0.5s ease, margin-bottom 0.5s ease, padding-top 0.5s ease, padding-bottom 0.5s ease, border-width 0.5s ease;
+    transform: translateY(-30px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out,
+                max-height 0.5s ease-in-out, margin-bottom 0.5s ease-in-out, padding-top 0.5s ease-in-out, padding-bottom 0.5s ease-in-out, border-width 0.5s ease-in-out;
     flex-shrink: 0;
-    overflow: visible;
-    max-height: 520px;
+    overflow: hidden;
+    max-height: 500px; 
     box-sizing: border-box;
     position: relative;
-    isolation: isolate;
-}
-
-.message::before {
-    content: '';
-    position: absolute;
-    inset: -20px;
-    background: radial-gradient(circle at 12px 12px, rgba(247, 40, 106, 0.8) 0, rgba(247, 40, 106, 0.8) 22%, transparent 23%, transparent 100%);
-    background-size: 28px 28px;
-    border-radius: 40px;
-    opacity: 0.3;
-    transform: rotate(-4deg);
-    z-index: -2;
-    pointer-events: none;
-}
-
-.message::after {
-    content: '';
-    position: absolute;
-    top: 18px;
-    left: -26px;
-    width: 96px;
-    height: 96px;
-    background: linear-gradient(135deg, #00d1ff 0%, #00ffa3 80%);
-    border: 4px solid #111;
-    box-shadow: 6px 6px 0 #111;
-    clip-path: polygon(50% 0%, 62% 35%, 98% 35%, 68% 57%, 80% 100%, 50% 73%, 20% 100%, 32% 57%, 2% 35%, 38% 35%);
-    transform: rotate(-6deg);
-    z-index: -3;
-    opacity: 0.9;
-    pointer-events: none;
 }
 
 .message-with-edge {
-    box-shadow: 10px 10px 0 #111, inset 0 0 0 4px rgba(255, 255, 255, 0.6);
+    border-left: 4px solid; /* Width will be consistent but color will be set dynamically */
+    padding-left: 11px; /* Reduce left padding to account for the border */
 }
 
 .message.visible {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    animation: comicPopIn 0.48s cubic-bezier(0.25, 1.25, 0.35, 1) forwards;
+    transform: translateY(0);
 }
 
 .message.fading {
     opacity: 0;
-    transform: translateY(-24px) scale(0.8);
-    filter: blur(2px);
-    transition: opacity 0.4s ease, transform 0.4s ease, filter 0.4s ease;
+    transition: opacity 1.5s ease-out;
 }
 
 .message.hidden {
     opacity: 0;
-    transform: translateY(-48px) scale(0.7);
-    max-height: 0 !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    margin-bottom: 0 !important;
-    border-width: 0 !important;
+    transform: translateY(30px);	
+    max-height: 0px !important;
+    padding-top: 0px !important;
+    padding-bottom: 0px !important;
+	margin-bottom: 0px !important; /* This is important for accurate height calculation if we were animating out */
+	border-width: 0px !important;
 }
-
-@keyframes comicPopIn {
-    0% {
-        opacity: 0;
-        transform: translateY(70px) scale(0.5) rotate(-12deg);
-        filter: blur(6px);
-    }
-    60% {
-        transform: translateY(-8px) scale(1.05) rotate(3deg);
-        filter: blur(0);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1) rotate(0);
-    }
-}
-
 .avatar-wrapper {
-    width: 58px;
-    height: 58px;
-    border-radius: 18px;
-    display: inline-flex;
-    margin-right: 16px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 10px;
     position: relative;
     overflow: hidden;
-    background: linear-gradient(135deg, #ff4d6d 0%, #ff9f1c 100%);
-    padding: 4px;
+    background: linear-gradient(45deg, #4ab8f9, #4cd137);
+    padding: 2px;
+    vertical-align: middle;
     flex-shrink: 0;
-    border: 4px solid #111;
-    box-shadow: 6px 6px 0 #111;
-    transform: rotate(-4deg);
 }
-
-.avatar {
-    width: 100%;
-    height: 100%;
-    border-radius: 12px;
-    background-size: cover;
-    background-position: center;
-    border: 2px solid rgba(255, 255, 255, 0.75);
-}
-
-#spacer {
-    width: 100%;
-    padding: 0;
-    margin: 0;
-    border: none;
-    box-sizing: border-box;
-    background: transparent;
-    opacity: 1;
-    transform: none;
-    transition: none;
-}
-
-.name {
-    color: #111;
-    font-size: 1.35em;
-    font-family: 'Bangers', cursive;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    text-shadow: -2px -2px 0 #fff, 3px 3px 0 rgba(0, 0, 0, 0.85);
-    /* v4 wrap fix (style-tab-v4-scout.md §4): text-overflow: ellipsis does
-       not apply on a flex container, so a long username silently lost its
-       ellipsis and got hard-clipped mid-word inside the fixed badge instead
-       — display: inline-block lets the same min-width/overflow/ellipsis
-       recipe actually render (badge still sizes honestly to short names). */
-    min-width: 40px;
-    max-width: 240px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    display: inline-block;
-    vertical-align: middle;
-}
-
-.text {
-    font-size: 1.05em;
-    line-height: 1.5;
-    margin: 10px 0 6px;
-    word-wrap: break-word;
-    color: #1c1c1c;
-}
-
-.text img,
-.text svg {
-    max-width: 120px;
-    max-height: 32px;
-    vertical-align: middle;
-}
-
-.donation {
-    color: #fff;
-    background: #ff3366;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border-radius: 999px;
-    border: 3px solid #111;
-    box-shadow: 4px 4px 0 #111;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-family: 'Bangers', cursive;
-    letter-spacing: 0.05em;
-}
-
-.name-bg {
-    background: #05d9ff;
-    padding: 4px 10px;
-    border-radius: 12px;
-    display: inline-flex;
-    align-items: center;
-    border: 3px solid #111;
-    box-shadow: 4px 4px 0 #111;
-}
-
-.membership-status {
-    color: #111;
-    font-weight: 700;
-    font-size: 0.9em;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    background: #fff;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    border: 3px solid #111;
-    box-shadow: 4px 4px 0 #111;
-}
-
-.large-image {
-    max-width: 100%;
-    height: auto;
-    margin-top: 14px;
-    border-radius: 18px;
-    border: 4px solid #111;
-    box-shadow: 8px 8px 0 rgba(17, 17, 17, 0.75);
-}
-
-.source-icon {
-    width: 20px;
-    height: 20px;
-    margin-left: 6px;
-    filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.35));
-}
-
-.badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    margin-left: 6px;
-    border: 2px solid #111;
-    border-radius: 999px;
-    background: #fff;
-    box-shadow: 4px 4px 0 rgba(17, 17, 17, 0.5);
-}
+.name { color: white; font-size: 1.1em; font-weight: 700; max-width: 200px; overflow: hidden;}
+.text { font-size: 0.9em; line-height: 1.4; margin: 8px 0; word-wrap: break-word; }
+.text img, .text svg { max-width:100px; max-height: 24px; vertical-align: bottom; }
+.donation { color: #4cd137; font-weight: 600; }
+.name-bg { background-color: #4a6fa5; padding: 4px 8px; border-radius: 5px; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.membership-status { color: #ffd700; font-weight: 700; font-size: 0.85em; margin-bottom: 5px; }
+.large-image { max-width: 100%; height: auto; margin-top: 10px; border-radius: 10px; display: block; }
+.avatar { width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }
+.source-icon { width: 18px; height: 18px; vertical-align: middle; margin-left: 5px; }
+.badge { display: inline-block; height: 0.9em; margin-left: 4px; vertical-align: middle; }
 
 .message-content-wrapper {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
+    display: flex; 
+    align-items: flex-start;    
+    border-radius: 8px;
 }
 
 .message-text-meta {
-    flex-grow: 1;
-    min-width: 0;
-}
-
-.content-image {
-    max-width: 320px;
-    max-height: 320px;
-    margin-top: 12px;
-    border-radius: 16px;
-    border: 4px solid #111;
-    box-shadow: 6px 6px 0 rgba(17, 17, 17, 0.75);
-}
-
-.message small {
-    font-size: 0.8em;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-
-@media (max-width: 768px) {
-    #chat-container {
-        max-width: 92vw;
-        padding: 0 12px 24px;
-    }
-
-    .message {
-        margin-bottom: 20px;
-        padding: 20px;
-    }
-
-    .text {
-        font-size: 1em;
-    }
-
-    .name {
-        font-size: 1.1em;
-    }
+	flex-grow: 1;
+	min-width: 0;
 }
 
 .badge.svg { overflow: hidden; }
@@ -372,9 +170,7 @@ body, html {
 </head>
 <body>
 <div id="chat-container">
-    <div id="message-list-wrapper">
-		<div id="spacer" style="height: 2200px; width: 100%;"></div>
-    </div>
+    <div id="message-list-wrapper"></div>
 </div>
 <script>
     var urlParams = new URLSearchParams(window.location.search);
@@ -422,36 +218,7 @@ body, html {
     }
     var password = urlParams.get("password") || urlParams.get("pass") || urlParams.get("pw") || "false";
     var featuredMode = false;
-
-    // showtime: if set via URL, override default. Otherwise keep current default (30000ms)
-    // Use showtime=0 to disable auto-hiding
-    var showtime = urlParams.has("showtime") ? parseInt(urlParams.get("showtime")) : 30000;
-
-    // --- Common overlay tweaks (shared across themes) ---
-    var hideBots = urlParams.has("hidebots");
-    if (urlParams.has("chroma")) {
-        var _c = urlParams.get("chroma") || "";
-        document.body.style.background = _c.charAt(0) === "#" ? _c : "#" + _c;
-    }
-    if (urlParams.has("font")) {
-        var _fs = parseInt(urlParams.get("font"), 10);
-        if (!isNaN(_fs) && _fs > 0) {
-            document.documentElement.style.fontSize = _fs + "px";
-            document.body.style.fontSize = _fs + "px";
-        }
-    }
-    if (urlParams.has("fontfamily")) {
-        var _ff = (urlParams.get("fontfamily") || "").trim();
-        if (_ff) {
-            var _safe = _ff.replace(/['"\\;{}<>]/g, "");
-            var _gf = document.createElement("link");
-            _gf.rel = "stylesheet";
-            _gf.href = "https://fonts.googleapis.com/css2?family=" +
-                encodeURIComponent(_safe).replace(/%20/g, "+") + ":wght@400;500;600;700&display=swap";
-            document.head.appendChild(_gf);
-            document.body.style.fontFamily = "'" + _safe + "', sans-serif";
-        }
-    }
+    var deleteOnlyLast = urlParams.has("deleteonlylast");
 
     // Ported VERBATIM-faithful from featured.html's &css (~:1554) and
     // &b64css|base64css|cssbase64|cssb64 (~:1573-1590) blocks — same port
@@ -486,40 +253,229 @@ body, html {
         }
     }
 
-    const chatContainer = document.getElementById('chat-container');
     const messageListWrapper = document.getElementById('message-list-wrapper');
     const MAX_MESSAGES = urlParams.has("limit") ? parseInt(urlParams.get("limit")) : 20; // Adjust as needed
-    const topSpacer = document.getElementById('spacer');
+	const showtime = urlParams.has("showtime") ? parseInt(urlParams.get("showtime")) : 30000;
 	const messageTimestamps = new Map();
-    const MAX_SPACER_HEIGHT_BEFORE_RESET = 18000000; 
+	var overlayMessageCounter = 0;
+	var localBlockUserList = {};
+	var timedOutUsers = {};
 
     function adjustMessageWrapperScroll() {
         requestAnimationFrame(() => {
-            const wrapperScrollHeight = messageListWrapper.scrollHeight;
-            const containerClientHeight = chatContainer.clientHeight;
-            
-            let translateY = 0;
-            if (wrapperScrollHeight > containerClientHeight) {
-                translateY = -(wrapperScrollHeight - containerClientHeight);
-            }
-            translateY = Math.min(0, translateY);
-
-            messageListWrapper.style.transform = `translateY(${translateY}px)`;
+            messageListWrapper.style.transform = 'translateY(0)';
         });
     }
-    
+
+    function getOverlayMessages() {
+        return Array.from(messageListWrapper.querySelectorAll('.message'));
+    }
+
+    function getPayloadMessageId(data) {
+        if (data.mid !== undefined && data.mid !== null && data.mid !== "") {
+            return String(data.mid);
+        }
+        if (data.id !== undefined && data.id !== null && data.id !== "") {
+            return String(data.id);
+        }
+        if (data.messageId !== undefined && data.messageId !== null && data.messageId !== "") {
+            return String(data.messageId);
+        }
+        if (data.message_id !== undefined && data.message_id !== null && data.message_id !== "") {
+            return String(data.message_id);
+        }
+        if (data.meta && data.meta.messageId !== undefined && data.meta.messageId !== null && data.meta.messageId !== "") {
+            return String(data.meta.messageId);
+        }
+        if (data.meta && data.meta.message_id !== undefined && data.meta.message_id !== null && data.meta.message_id !== "") {
+            return String(data.meta.message_id);
+        }
+        overlayMessageCounter += 1;
+        return 'msg-' + Date.now() + '-' + overlayMessageCounter;
+    }
+
+    function removeOverlayMessage(message) {
+        if (!message) {
+            return;
+        }
+        messageTimestamps.delete(message.id);
+        if (message.parentNode) {
+            message.parentNode.removeChild(message);
+        }
+    }
+
+    function getNewestMessage(messages) {
+        return messages.reduce(function(newest, message) {
+            const newestNumber = Number(newest.dataset.mid);
+            const messageNumber = Number(message.dataset.mid);
+            if (!Number.isNaN(newestNumber) && !Number.isNaN(messageNumber)) {
+                return newestNumber > messageNumber ? newest : message;
+            }
+            return (messageTimestamps.get(newest.id) || 0) > (messageTimestamps.get(message.id) || 0) ? newest : message;
+        });
+    }
+
+    function removeMatchingMessages(matches, onlyLast) {
+        const messages = getOverlayMessages().filter(matches);
+        if (!messages.length) {
+            return false;
+        }
+        if (onlyLast) {
+            removeOverlayMessage(getNewestMessage(messages));
+        } else {
+            messages.forEach(removeOverlayMessage);
+        }
+        adjustMessageWrapperScroll();
+        return true;
+    }
+
+    function deleteMessageById(id) {
+        if (id === undefined || id === null || id === "") {
+            return false;
+        }
+        const idString = String(id);
+        return removeMatchingMessages(function(message) {
+            return message.dataset.mid === idString || message.id === idString;
+        }, true);
+    }
+
+    function deleteMessages(data, onlyLast) {
+        if (!data.delete || typeof data.delete !== "object") {
+            return false;
+        }
+        const deleteData = data.delete;
+        return removeMatchingMessages(function(message) {
+            if (deleteData.id !== undefined && deleteData.id !== null && deleteData.id !== "") {
+                const idString = String(deleteData.id);
+                return message.dataset.mid === idString || message.id === idString;
+            }
+            if (deleteData.chatname && message.dataset.chatname !== String(deleteData.chatname)) {
+                return false;
+            }
+            if (deleteData.type && message.dataset.sourceType !== String(deleteData.type)) {
+                return false;
+            }
+            return !!(deleteData.chatname || deleteData.type);
+        }, onlyLast || deleteData.onlyLast);
+    }
+
+    function removeUserMessages(username, type) {
+        if (!username) {
+            return false;
+        }
+        username = String(username);
+        type = type ? String(type) : "";
+        return removeMatchingMessages(function(message) {
+            if (message.dataset.chatname !== username) {
+                return false;
+            }
+            if (!type) {
+                return true;
+            }
+            return message.dataset.sourceType === type || (type === "youtube" && message.dataset.sourceType === "youtubeshorts");
+        }, false);
+    }
+
+    function addLocalBlock(username, type) {
+        if (!username) {
+            return;
+        }
+        username = String(username);
+        const types = type ? [String(type)] : ["*"];
+        if (type === "youtube") {
+            types.push("youtubeshorts");
+        }
+        if (!localBlockUserList[username]) {
+            localBlockUserList[username] = [];
+        }
+        types.forEach(function(blockType) {
+            if (!localBlockUserList[username].includes(blockType)) {
+                localBlockUserList[username].push(blockType);
+            }
+        });
+        setTimeout(function() {
+            if (!localBlockUserList[username]) {
+                return;
+            }
+            types.forEach(function(blockType) {
+                const index = localBlockUserList[username].indexOf(blockType);
+                if (index !== -1) {
+                    localBlockUserList[username].splice(index, 1);
+                }
+            });
+            if (!localBlockUserList[username].length) {
+                delete localBlockUserList[username];
+            }
+        }, 10000);
+    }
+
+    function isMessageBlocked(data) {
+        if (!data.chatname) {
+            return false;
+        }
+        const chatname = String(data.chatname);
+        const type = data.type ? String(data.type) : "";
+        if (localBlockUserList[chatname] && (localBlockUserList[chatname].includes(type) || localBlockUserList[chatname].includes("*"))) {
+            return true;
+        }
+        if (type && timedOutUsers[chatname + ":" + type]) {
+            if (timedOutUsers[chatname + ":" + type] < Date.now()) {
+                delete timedOutUsers[chatname + ":" + type];
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function clearAllMessages() {
+        getOverlayMessages().forEach(removeOverlayMessage);
+        messageListWrapper.style.transform = '';
+        adjustMessageWrapperScroll();
+    }
+
+    function handleControlPayload(data) {
+        if (!data || typeof data !== "object") {
+            return false;
+        }
+        if ("deleteMessage" in data) {
+            deleteMessageById(data.deleteMessage);
+            return true;
+        }
+        if ("clearAll" in data || data.action === "clear" || data.action === "clearAll") {
+            clearAllMessages();
+            return true;
+        }
+        if ("delete" in data) {
+            deleteMessages(data, deleteOnlyLast);
+            return true;
+        }
+        if ("timeoutUser" in data && data.timeoutUser) {
+            const timeoutName = data.timeoutUser.username || data.timeoutUser.chatname;
+            if (timeoutName && data.timeoutUser.type && data.timeoutUser.duration) {
+                timedOutUsers[String(timeoutName) + ":" + String(data.timeoutUser.type)] = Date.now() + (Number(data.timeoutUser.duration) * 1000);
+            }
+            removeUserMessages(timeoutName, data.timeoutUser.type);
+            return true;
+        }
+        if ("blockUser" in data && data.blockUser) {
+            const blockName = data.blockUser.chatname || data.blockUser.username;
+            addLocalBlock(blockName, data.blockUser.type);
+            removeUserMessages(blockName, data.blockUser.type);
+            return true;
+        }
+        return false;
+    }
+
 	setInterval(() => {
 		const now = Date.now();
-		const messages = Array.from(messageListWrapper.children).filter(
-			child => child.id !== 'spacer' && child.classList.contains('message')
-		);
+		const messages = getOverlayMessages();
 		
 		messages.forEach(message => {
 			const timestamp = messageTimestamps.get(message.id);
 			if (timestamp) {
 				const age = now - timestamp;
 				
-				// After showtime ms, start fading (showtime=0 disables auto-hiding)
 				if (showtime > 0 && age > showtime && !message.classList.contains('fading')) {
 					message.classList.add('fading');
 				}
@@ -570,23 +526,33 @@ body, html {
 		if (isDuplicateTransportDelivery(data)) {
 			return;
 		}
-
-		if (hideBots && data.bot) { return; }
-		if (!data.chatname && !data.chatmessage && !data.hasDonation && !data.donation && !data.contentimg){
+		if (handleControlPayload(data)) {
+			return;
+		}
+		if (!data || typeof data !== "object") {
+			return;
+		}
+		if (isMessageBlocked(data)) {
 			return;
 		}
 
-		// Skip meta-only messages (follower/viewer data without actual content)
-		if (!data.chatname && data.meta) {
+		if (!data.chatname && !data.chatmessage && !data.hasDonation && !data.donation && !data.contentimg){
 			return;
 		}
 		
 		const messageDiv = document.createElement('div');
 		messageDiv.classList.add('message');
-		
+
 		// Generate unique ID and track timestamp for aging
-		const messageId = data.mid || 'msg-' + Date.now();
+		const messageId = getPayloadMessageId(data);
 		messageDiv.id = messageId;
+		messageDiv.dataset.mid = messageId;
+		if (data.chatname) {
+			messageDiv.dataset.chatname = data.chatname;
+		}
+		if (data.type) {
+			messageDiv.dataset.sourceType = data.type;
+		}
 		messageTimestamps.set(messageId, Date.now());
 		
 		var chatbadgesHtml = "";
@@ -653,34 +619,21 @@ body, html {
 			${contentImgHtml}
 		`;
 
-		messageListWrapper.appendChild(messageDiv);
+		const firstMessage = messageListWrapper.querySelector('.message');
+		if (firstMessage) {
+			messageListWrapper.insertBefore(messageDiv, firstMessage);
+		} else {
+			messageListWrapper.appendChild(messageDiv);
+		}
 		void messageDiv.offsetWidth; 
 		messageDiv.classList.add('visible');
 		
-		const messages = Array.from(messageListWrapper.children).filter(
-			child => child.id !== 'spacer' && child.classList.contains('message') 
-		);
+		const messages = getOverlayMessages();
 		
 		if (messages.length > MAX_MESSAGES) {
-			const oldestMessage = messages[0]; 
-			
+			const oldestMessage = messages[messages.length - 1]; 
 			if (oldestMessage) {
-				const messageStyle = getComputedStyle(oldestMessage);
-				const marginBottom = parseFloat(messageStyle.marginBottom) || 0;
-				const spaceOccupiedByOldestMessage = oldestMessage.offsetHeight + marginBottom;
-				
-				const currentSpacerHeight = parseFloat(topSpacer.style.height) || 0;
-				let newPotentialSpacerHeight = currentSpacerHeight + spaceOccupiedByOldestMessage;
-
-				if (newPotentialSpacerHeight > MAX_SPACER_HEIGHT_BEFORE_RESET) {
-					console.log(`Spacer height (${newPotentialSpacerHeight}px) exceeded threshold (${MAX_SPACER_HEIGHT_BEFORE_RESET}px). Resetting to 0px.`);
-					newPotentialSpacerHeight = 0; // Reset the height
-				}
-				
-				topSpacer.style.height = newPotentialSpacerHeight + 'px';
-
-				messageTimestamps.delete(oldestMessage.id);
-				messageListWrapper.removeChild(oldestMessage);
+				removeOverlayMessage(oldestMessage);
 			}
 		}
 		
