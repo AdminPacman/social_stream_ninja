@@ -2128,6 +2128,7 @@
             '<span class="arcade-spacer"></span>' +
             '<span class="arcade-style-status" id="arcade-style-status"></span>' +
             '<button type="button" class="arcade-btn" id="arcade-style-browse-btn">Browse looks…</button>' +
+            '<button type="button" class="arcade-btn" id="arcade-style-export" title="Download the current look as a standalone theme HTML file">Save as theme…</button>' +
             '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-style-save">Save style</button>' +
             '</div>' +
             '<div class="arcade-style-body">' +
@@ -2170,6 +2171,7 @@
         initBackToDockButton(panel);
         syncCanvasModeUI();
         panel.querySelector('#arcade-style-browse-btn').addEventListener('click', openBrowseModal);
+        panel.querySelector('#arcade-style-export').addEventListener('click', exportStyleAsTheme);
         panel.querySelector('#arcade-style-save').addEventListener('click', saveStyleBlob);
         panel.querySelector('#arcade-style-reload').addEventListener('click', function () {
             if (activePreviewMode === 'theme' && activeThemeEntry) loadThemePreviewFrame(activeThemeEntry);
@@ -3461,6 +3463,13 @@
         }
         var clearBtn = document.getElementById('arcade-style-preview-clear-override');
         if (clearBtn) clearBtn.hidden = !(inTheme && activeThemeEntry && activeThemeEntry.cssb64 && themeOverrides[themeSlug(activeThemeEntry)]);
+        // S30 export is a DOCK-profile act (the file wraps dock.html — see
+        // exportStyleAsTheme); in theme mode the controls edit a theme page's
+        // own override, which a dock wrapper could not honor — so the button
+        // honestly hides rather than exporting a file that can't reproduce
+        // what's on the canvas.
+        var exportBtn = document.getElementById('arcade-style-export');
+        if (exportBtn) exportBtn.hidden = inTheme;
         document.querySelectorAll('.arcade-browse-card[data-theme-slug], .arcade-browse-card[data-library-id]').forEach(function (p) {
             var isLibraryCard = !!p.dataset.libraryId;
             var active = isLibraryCard
@@ -3700,6 +3709,192 @@
         }, function (sentNoConfirm) {
             setStyleStatus(sentNoConfirm ? 'Clear sent — no confirmation received' : 'settings bridge unavailable — could not clear', !sentNoConfirm);
         });
+    }
+
+    // --------------------------------------------------------------------
+    // S30 — "Save as theme…" (TASK-28, exportable themes follow-up). Turns
+    // the CURRENT style-tab state into a standalone theme HTML file in the
+    // house wrapper family (same shape as themes/pretty.html and
+    // themes/Neutron/chatOnly.html: a thin page that embeds the stock
+    // dock.html and feeds it the style as dock.html's own &b64css param).
+    //
+    // Truths honored:
+    // - The payload is buildStyleCss()'s EXACT blob — the managed
+    //   :root{…} overrides plus the operator's Custom CSS VERBATIM
+    //   (STYLE_USER_MARK section) — so the file captures the current state,
+    //   unsaved in-progress edits included, byte-identical to what Save
+    //   style would persist.
+    // - The baked display params are the SAME per-profile preview sets the
+    //   canvas uses (ARCADE_WIDGET_PREVIEW_PARAMS /
+    //   ARCADE_DOCK_APP_PREVIEW_PARAMS) — a bare dock.html would NOT
+    //   reproduce the previewed look (bubble/twolines/darkmode etc. ride
+    //   those params, not the css blob).
+    // - NO session id is ever written into the file: the wrapper reads
+    //   session from its own URL at runtime, exactly like every stock theme
+    //   (masking law — a theme file is a shareable artifact).
+    // - NO network anywhere in the export path: pure in-page string
+    //   building; the only reference inside the file is the relative
+    //   ../dock.html, the same link every wrapper theme makes.
+    // - Delivery uses the app's OWN download idiom (Blob + temporary
+    //   anchor click — index.html:13503's session export, chathistory.js:
+    //   837): under Electron this lands in the native save dialog (main.js:
+    //   8889's will-download only auto-paths autorecord/savefolder
+    //   downloads). The file is NOT auto-installed into themes/ and the
+    //   THEME_PAGES registry is NOT touched — installation is the
+    //   operator's act; the how-to rides inside the file's header comment.
+    // - Dock profiles only: hidden in theme mode (syncCanvasModeUI) — the
+    //   wrapper embeds dock.html, so it could not honor a theme page's
+    //   override, and a file that can't reproduce the canvas would be a lie.
+    // --------------------------------------------------------------------
+    var THEME_EXPORT_FILENAME = 'my-dock-theme.html';
+
+    // Builds the standalone theme page around the baked css blob. ES5 inside
+    // the generated file (the bundle's Chrome-80 law — see the fallback
+    // bundle's AGENTS.md), URLSearchParams polyfill + getById + param
+    // passthroughs verbatim in kind from pretty.html/chatOnly.html.
+    function buildThemeFileHtml(cssBlob, baseParams) {
+        // JSON.stringify is a safe JS string literal; the <\/ escape stops an
+        // operator's Custom CSS containing "</script>" from closing the
+        // generated file's own script element early.
+        var bakedLiteral = JSON.stringify(cssBlob).replace(/<\//g, '<\\/');
+        var paramString = baseParams.length ? '&' + baseParams.join('&') : '';
+        var lines = [
+            '<!DOCTYPE html>',
+            '<!--',
+            '  GENERATED THEME — exported from Pac\'s Arcade style tab ("Save as theme…").',
+            '',
+            '  Shape: the house wrapper family (same pattern as themes/pretty.html and',
+            '  themes/Neutron/chatOnly.html) — a thin standalone page that embeds the',
+            '  stock dock.html one directory up and feeds it your style as dock.html\'s',
+            '  own &b64css parameter. The baked style below is the exact blob the style',
+            '  tab held at export time (the managed :root{…} overrides + your Custom CSS,',
+            '  verbatim), and the baked display params are the style tab\'s own preview',
+            '  set for the exported profile — edit either freely, it\'s your file now.',
+            '',
+            '  INSTALL (the exporter deliberately does NOT do this for you):',
+            '    1. Move/copy this file into the bundle\'s themes/ directory',
+            '       (resources/social_stream_fallback/main/themes/).',
+            '    2. Optional — to list it in the shell\'s Browse Looks modal, add ONE',
+            '       entry to THEME_PAGES in arcade-shell.js:',
+            '         { name: \'My Theme\', file: \'' + THEME_EXPORT_FILENAME + '\', cssb64: true, seedable: false, target: \'chat\' }',
+            '       `target` convention: \'chat\' — this wrapper feeds dock.html, a',
+            '       chat-dock page. cssb64: true because an incoming override',
+            '       (b64css/cssb64/cssbase64/base64css, or raw css=) REPLACES the',
+            '       baked style whole, so the style tab can keep re-styling it.',
+            '',
+            '  URL PARAMETERS:',
+            '    session=ID          (required) your Social Stream session id — never',
+            '                        baked into this file; supplied at runtime like any',
+            '                        stock theme page',
+            '    password=PASS       optional room password (aliases: pass, pw)',
+            '    showtime=MS         auto-hide messages after MS ms',
+            '    server / server2 / server3 / localserver   websocket transports',
+            '    hidebots            hide bot-flagged messages',
+            '    chroma=HEX          solid page background for chroma keying',
+            '    b64css / cssb64 / base64css / cssbase64    style override (replaces baked)',
+            '    css=CSS             raw style override (replaces baked)',
+            '-->',
+            '<html lang="en">',
+            '<head>',
+            '<meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width,initial-scale=1" />',
+            '<title>My dock theme — Pac\'s Arcade export</title>',
+            '<style>',
+            'html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #0000; overflow: hidden; }',
+            '#chatframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; background-color: #0000; }',
+            '</style>',
+            '</head>',
+            '<body>',
+            '<iframe id="chatframe" title="Chat dock"></iframe>',
+            '<script>',
+            'function getById(id){ return document.getElementById(id) || document.createElement("span"); }',
+            '(function (w) {',
+            '    w.URLSearchParams = w.URLSearchParams || function (searchString) {',
+            '        var self = this;',
+            '        self.searchString = searchString;',
+            '        self.get = function (name) {',
+            '            var results = new RegExp(\'[\\?&]\' + name + \'=([^&#]*)\').exec(self.searchString);',
+            '            if (results == null) { return null; }',
+            '            return decodeURI(results[1]) || 0;',
+            '        };',
+            '        self.has = function (name) { return self.get(name) !== null; };',
+            '    };',
+            '})(window);',
+            'var urlParams = new URLSearchParams(window.location.search);',
+            '',
+            '// The exported style, verbatim (pacs-arcade style-builder blob).',
+            'var BAKED_STYLE_CSS = ' + bakedLiteral + ';',
+            '',
+            '// The style tab\'s preview display params for the exported profile —',
+            '// these are part of the look you saw on the canvas.',
+            'var params = "' + paramString + '";',
+            '',
+            'if (urlParams.has("showtime")){ params += "&showtime=" + urlParams.get("showtime"); }',
+            'var password = urlParams.get("password") || urlParams.get("pass") || urlParams.get("pw");',
+            'if (password){ params += "&password=" + encodeURIComponent(password); }',
+            '["server", "server2", "server3", "localserver"].forEach(function(key){',
+            '    if (!urlParams.has(key)) return;',
+            '    var value = urlParams.get(key);',
+            '    params += value ? "&" + key + "=" + encodeURIComponent(value) : "&" + key;',
+            '});',
+            'if (urlParams.has("hidebots")){ params += "&hidebots"; }',
+            'if (urlParams.has("chroma")){',
+            '    var _c = urlParams.get("chroma") || "";',
+            '    document.body.style.backgroundColor = _c.charAt(0) === "#" ? _c : "#" + _c;',
+            '}',
+            '',
+            '// Style hand-off: an incoming override (any b64css alias, or raw css=)',
+            '// REPLACES the baked style whole; otherwise the baked export wins.',
+            '// Encode order matches the popup\'s URL builder (encodeURIComponent,',
+            '// btoa, outer encodeURIComponent) — dock.html decodes atob-then-',
+            '// decodeURIComponent.',
+            'var _overrideB64 = urlParams.get("base64css") || urlParams.get("b64css") || urlParams.get("cssbase64") || urlParams.get("cssb64");',
+            'var _overrideRaw = urlParams.get("css");',
+            'if (_overrideRaw){',
+            '    params += "&css=" + encodeURIComponent(_overrideRaw);',
+            '} else if (_overrideB64){',
+            '    params += "&b64css=" + encodeURIComponent(_overrideB64);',
+            '} else {',
+            '    params += "&b64css=" + encodeURIComponent(btoa(encodeURIComponent(BAKED_STYLE_CSS)));',
+            '}',
+            '',
+            'if (urlParams.has("session")){',
+            '    getById("chatframe").src = "../dock.html?session=" + encodeURIComponent(urlParams.get("session")) + params;',
+            '}',
+            '</scr' + 'ipt>',
+            '</body>',
+            '</html>',
+            ''
+        ];
+        return lines.join('\n');
+    }
+
+    function exportStyleAsTheme() {
+        if (activePreviewMode !== 'dock') return; // button is hidden in theme mode — guard a stale click
+        var isEmpty = Object.keys(styleState).length === 0 && !styleUserCss;
+        if (isEmpty) {
+            setStyleStatus('Nothing styled yet — an exported theme of plain stock would be an empty file\'s worth of look', true);
+            return;
+        }
+        try {
+            var blob = buildStyleCss(); // current scratch state — unsaved edits included
+            var baseParams = (activeStyleProfile === 'dock' ? ARCADE_DOCK_APP_PREVIEW_PARAMS : ARCADE_WIDGET_PREVIEW_PARAMS).slice();
+            var html = buildThemeFileHtml(blob, baseParams);
+            var file = new Blob([html], { type: 'text/html' });
+            var url = URL.createObjectURL(file);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = THEME_EXPORT_FILENAME;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setStyleStatus('Theme file downloaded (' + THEME_EXPORT_FILENAME + ') — drop it into the bundle\'s themes/ dir to install; how-to is inside the file', false);
+            setTimeout(function () { setStyleStatus('', false); }, 6000);
+        } catch (e) {
+            console.error('[arcade-shell] theme export failed:', e);
+            setStyleStatus('Theme export failed — see console', true);
+        }
     }
 
     function saveStyleBlob() {
