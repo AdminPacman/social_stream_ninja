@@ -56,6 +56,14 @@
     // --------------------------------------------------------------------
     var AI_AREA_ALLOWED_PUBKEY_HEX = 'e2048c966f02dc5311b824c3b3bd845828e4b54ff7d67aaa52ca84ee0a9a5c63'; // g2x3, Admiral ruling 0018.06.01
     var AI_AREA_DEVCHAT_URL = 'http://localhost:5173';
+    // DevChat's API server (separate from the frontend above) — the check-in
+    // card's ONLY cheap-data source. Confirmed by reading chatdev's own
+    // route table (server/routes/*.py) rather than guessing: /health,
+    // /health/live, /health/ready, and /api/models are the only routes that
+    // answer with no session id already in hand. There is no build-stamp
+    // route — the stamp is baked into the frontend bundle with no API, so
+    // the check-in card links to it instead of scraping HTML for it.
+    var AI_AREA_DEVCHAT_API_URL = 'http://localhost:6400';
     var AI_AREA_PROBE_TIMEOUT_MS = 2500;
 
     // Cheap pre-check, run once at boot: is ANY NIP-07 signer present at
@@ -827,7 +835,24 @@
         if (link) link.click();
     }
 
+    // Leaving the AI tab for ANY other tab (rail click, ×, stock nav) must
+    // not leave a live DevChat iframe sitting hidden in the background
+    // still polling — the design doc's "destroy or hide on collapse" rule
+    // applies here too, not just to the explicit collapse button, since
+    // plain CSS display:none (how every other custom-tab panel hides
+    // itself) does not unload an iframe's document. aiConsoleExpanded is
+    // left untouched so re-entering the tab this session still reopens
+    // expanded — runAiAreaGate()'s re-run rebuilds the frame fresh either
+    // way (setAiAreaState('checking') already clears the body).
+    function teardownAiAreaFrameIfLeaving(nextTabId) {
+        if (nextTabId === 'ai') return;
+        if (document.body.dataset.arcadeTab !== 'ai') return;
+        var frame = document.getElementById('arcade-ai-frame');
+        if (frame) frame.remove();
+    }
+
     function navigateArcadeTab(tabId) {
+        teardownAiAreaFrameIfLeaving(tabId);
         if (CUSTOM_TABS[tabId]) {
             // Custom in-shell panel (e.g. Elements): no stock page to drive —
             // remember the tab we're leaving and flip the tab state; CSS
@@ -1197,30 +1222,49 @@
     }
 
     // --------------------------------------------------------------------
-    // AI area panel — the DevChat berth. Same custom-tab pattern as
-    // .arcade-elements/.arcade-alerts (full-width in-shell panel, CSS-shown
-    // only while data-arcade-tab="ai"). Only built at all when
+    // AI area panel — the AI CONSOLE (V2, Admiral's refinement, briefings/
+    // ssn-ai-area-design.md "V2 — the AI console"). Same custom-tab pattern
+    // as .arcade-elements/.arcade-alerts (full-width in-shell panel,
+    // CSS-shown only while data-arcade-tab="ai"). Only built at all when
     // hasNostrSigner() passed at boot (see init()) — no signer, no DOM, no
     // nav entry: the berth doesn't exist for that seat, full stop.
     //
     // The gate itself re-runs EVERY time the tab is opened (runAiAreaGate,
     // called from navigateArcadeTab) — no stored grants in v1, per the
-    // design doc ("opening the AI area is rare and deliberate"). States:
-    // 'checking' (asking the signer / probing DevChat) -> 'refused' (wrong
-    // key, signer declined, or vanished) -> 'unreachable' (right key, but
-    // DevChat isn't up) -> 'live' (iframe). Never a spinner on the
-    // not-running case — one honest line, per the design doc.
+    // design doc ("opening the AI area is rare and deliberate"). Gate
+    // states: 'checking' (asking the signer) -> 'refused' (wrong key,
+    // signer declined, or vanished). THE GATE ITSELF IS UNCHANGED FROM V1 —
+    // only what renders once it passes is new (openAiAreaAfterGate down).
+    //
+    // Past the gate, the tab has two views chosen by aiConsoleExpanded (a
+    // plain module var — SESSION-ONLY, never localStorage/saveSetting, so
+    // every fresh app boot lands back on the console per the design doc):
+    //   'console' (default) — DevChat check-in card (small) + the SSN
+    //     AI-items section (Lane A inventory: moved settings + link cards).
+    //   expanded — reuses 'checking'/'unreachable'/'live', now scoped to
+    //     just the iframe path instead of the whole tab. 'live' renders the
+    //     iframe, created fresh on expand and destroyed on collapse — it is
+    //     never kept around hidden/polling. Collapsing returns to
+    //     'console' without re-running the signer gate (already passed for
+    //     this tab visit).
     // --------------------------------------------------------------------
+    var aiConsoleExpanded = false; // session-only — see comment above
+
     function setAiAreaStatus(text) {
         var el = document.getElementById('arcade-ai-status');
         if (el) el.textContent = text || '';
     }
 
+    function setAiCollapseVisible(visible) {
+        var btn = document.getElementById('arcade-ai-collapse');
+        if (btn) btn.hidden = !visible;
+    }
+
     function setAiAreaState(state, message) {
         var body = document.getElementById('arcade-ai-body');
         if (!body) return;
-        body.dataset.aiState = state; // 'checking' | 'refused' | 'unreachable' | 'live'
-        if (state === 'live') return; // renderAiAreaFrame() owns the body in this state
+        body.dataset.aiState = state; // 'checking' | 'refused' | 'unreachable' | 'live' | 'console'
+        if (state === 'live' || state === 'console') return; // owned elsewhere (renderAiAreaFrame / renderAiConsole)
         body.innerHTML = '';
         var hint = document.createElement('div');
         hint.className = 'arcade-ai-hint' + (state === 'checking' ? '' : ' is-error');
@@ -1266,20 +1310,489 @@
         frame.src = AI_AREA_DEVCHAT_URL;
         body.appendChild(frame);
         setAiAreaStatus('DevChat · localhost:5173');
+        setAiCollapseVisible(true);
     }
 
-    function openAiAreaAfterGate() {
+    // Expanded (full-view) path — the v1 whole-tab probe-then-iframe flow,
+    // now scoped to just this path. Entered via the check-in card's "Open
+    // full view" quick action, or automatically on re-open this session if
+    // the seat left the tab expanded (aiConsoleExpanded persists per
+    // session, per the design doc).
+    function openAiAreaExpanded() {
+        aiConsoleExpanded = true;
+        setAiCollapseVisible(true);
         setAiAreaState('checking', 'Checking for DevChat at localhost:5173…');
         probeDevChatReachable().then(function (reachable) {
-            // Re-check we're still ON the ai tab — a fast tab-away shouldn't
-            // race a stale probe into painting over whatever's showing now.
-            if (document.body.dataset.arcadeTab !== 'ai') return;
+            // Re-check we're still ON the ai tab AND still expanded — a fast
+            // tab-away or collapse-click shouldn't race a stale probe into
+            // painting over whatever's showing now.
+            if (document.body.dataset.arcadeTab !== 'ai' || !aiConsoleExpanded) return;
             if (!reachable) {
                 setAiAreaState('unreachable', "DevChat isn't running — `make dev` in ~/dev/chatdev");
+                setAiCollapseVisible(true);
                 return;
             }
             renderAiAreaFrame();
         });
+    }
+
+    function collapseAiAreaToConsole() {
+        aiConsoleExpanded = false;
+        renderAiConsole();
+    }
+
+    // "Open in browser" — the OPERATOR'S SYSTEM BROWSER, not an in-app
+    // Electron window. window.open()/target=_blank (the idiom index.html
+    // itself uses elsewhere, e.g. the Euler Stream dashboard links) is the
+    // wrong tool here: mainWindow's own setWindowOpenHandler (main.js
+    // ~7934) intercepts window.open and allocates an IN-APP BrowserWindow
+    // for it — it never hands off to the OS. This window runs with
+    // nodeIntegration on for local/sourcemode loads (the same access
+    // index.html's own SSN_SHELL boot switch already relies on, and the
+    // same require('electron') the boot script's ipcRenderer pull already
+    // uses), so require('electron').shell.openExternal — the exact call the
+    // app's own menu items use from the main process (main.js ~17423 etc.)
+    // — is directly reachable from here and is the one path that actually
+    // reaches the system default browser. Falls back to window.open only if
+    // require ever comes back unavailable, so this never dead-ends into
+    // nothing happening.
+    function openDevChatInBrowser() {
+        try {
+            var electron = require('electron');
+            if (electron && electron.shell && typeof electron.shell.openExternal === 'function') {
+                electron.shell.openExternal(AI_AREA_DEVCHAT_URL);
+                return;
+            }
+        } catch (e) { /* nodeIntegration off somehow — fall through */ }
+        try { window.open(AI_AREA_DEVCHAT_URL, '_blank'); } catch (e) { /* honest no-op, never throw */ }
+    }
+
+    // Deadline-guarded GET against DevChat's API, mirroring
+    // probeDevChatReachable()'s fetchWithDeadline-with-fallback shape
+    // exactly, but WITHOUT no-cors — this window runs with webSecurity
+    // disabled for local/sourcemode loads (main.js ~7458/~7467, the same
+    // fact probeDevChatReachable()'s own comment already notes), so a plain
+    // fetch here can read the JSON body; no-cors would only ever hand back
+    // an opaque, unreadable response.
+    function fetchDevChatJson(path) {
+        var url = AI_AREA_DEVCHAT_API_URL + path;
+        var opts = { method: 'GET', cache: 'no-store', timeoutMs: AI_AREA_PROBE_TIMEOUT_MS };
+        var runner = typeof window.fetchWithDeadline === 'function'
+            ? window.fetchWithDeadline(url, opts)
+            : (function () {
+                var controller = new AbortController();
+                var timer = setTimeout(function () { controller.abort(); }, AI_AREA_PROBE_TIMEOUT_MS);
+                return fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal })
+                    .then(function (r) { clearTimeout(timer); return r; })
+                    .catch(function (e) { clearTimeout(timer); throw e; });
+            })();
+        return runner.then(function (r) {
+            if (!r || !r.ok) throw new Error('devchat api http error');
+            return r.json();
+        });
+    }
+
+    function appendCheckinLine(body, text, isError) {
+        var line = document.createElement('p');
+        line.className = 'arcade-ai-checkin__line' + (isError ? ' is-error' : '');
+        line.textContent = text;
+        body.appendChild(line);
+        return line;
+    }
+
+    // The DevChat check-in card — the console's default small pulse panel.
+    // Runs its OWN probe, independent of the signer gate above: the same
+    // honest frontend-reachable probe first, and only when reachable does
+    // it also read the API (:6400/health via reachability, :6400/api/models
+    // for the model name + Ollama-reachable flag) — exactly the "cheaply
+    // readable" scope the design doc draws. "Current/last run status" was
+    // in-scope per the design doc IF cheap — it is NOT: chatdev's only
+    // status-bearing routes (sessions/artifacts/workflows) all require a
+    // session id nobody has yet, there is no list-sessions route, so that
+    // line is honestly omitted rather than faked.
+    function refreshDevChatCheckin() {
+        var pill = document.getElementById('arcade-ai-checkin-pill');
+        var body = document.getElementById('arcade-ai-checkin-body');
+        if (!pill || !body) return;
+        pill.className = 'arcade-pill arcade-ai-checkin__pill';
+        pill.textContent = 'Checking…';
+        body.innerHTML = '';
+
+        probeDevChatReachable().then(function (reachable) {
+            // Bail if the tab moved on, or the console got collapsed-past/
+            // re-expanded, mid-probe — never paint over a state that isn't
+            // current.
+            if (document.body.dataset.arcadeTab !== 'ai' || document.body.dataset.aiState !== 'console') return;
+            var p = document.getElementById('arcade-ai-checkin-pill');
+            var b = document.getElementById('arcade-ai-checkin-body');
+            if (!p || !b) return;
+
+            if (!reachable) {
+                p.classList.add('arcade-ai-checkin__pill--down');
+                p.textContent = 'Not running';
+                appendCheckinLine(b, "DevChat isn't running — `make dev` in ~/dev/chatdev", true);
+                return;
+            }
+            p.classList.add('arcade-ai-checkin__pill--up');
+            p.textContent = 'Reachable';
+            appendCheckinLine(b, 'localhost:5173');
+
+            fetchDevChatJson('/api/models').then(function (data) {
+                if (document.body.dataset.arcadeTab !== 'ai' || document.body.dataset.aiState !== 'console') return;
+                var b2 = document.getElementById('arcade-ai-checkin-body');
+                if (!b2) return;
+                appendCheckinLine(b2, 'Model: ' + ((data && data.configured_model) || 'not configured'));
+                if (data && data.is_ollama) {
+                    appendCheckinLine(b2, 'Ollama: ' + (data.reachable ? 'reachable' : 'unreachable'), !data.reachable);
+                }
+            }).catch(function () {
+                if (document.body.dataset.arcadeTab !== 'ai' || document.body.dataset.aiState !== 'console') return;
+                var b2 = document.getElementById('arcade-ai-checkin-body');
+                if (!b2) return;
+                appendCheckinLine(b2, 'API not reachable — localhost:6400', true);
+            });
+        });
+    }
+
+    function buildDevChatCheckinCard() {
+        var card = document.createElement('article');
+        card.className = 'arcade-ai-checkin';
+
+        var head = document.createElement('div');
+        head.className = 'arcade-ai-checkin__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-ai-checkin__name';
+        name.textContent = 'DevChat';
+        head.appendChild(name);
+        var pill = document.createElement('span');
+        pill.className = 'arcade-pill arcade-ai-checkin__pill';
+        pill.id = 'arcade-ai-checkin-pill';
+        pill.textContent = 'Checking…';
+        head.appendChild(pill);
+        card.appendChild(head);
+
+        var body = document.createElement('div');
+        body.className = 'arcade-ai-checkin__body';
+        body.id = 'arcade-ai-checkin-body';
+        card.appendChild(body);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-ai-checkin__actions';
+        var expandBtn = document.createElement('button');
+        expandBtn.type = 'button';
+        expandBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        expandBtn.textContent = 'Open full view';
+        expandBtn.addEventListener('click', openAiAreaExpanded);
+        actions.appendChild(expandBtn);
+        var browserBtn = document.createElement('button');
+        browserBtn.type = 'button';
+        browserBtn.className = 'arcade-btn arcade-btn--sm';
+        browserBtn.textContent = 'Open in browser';
+        browserBtn.addEventListener('click', openDevChatInBrowser);
+        actions.appendChild(browserBtn);
+        card.appendChild(actions);
+
+        return card;
+    }
+
+    // SSN's own AI items, gathered home (Lane A inventory — grepped +
+    // read against shared/config/settingsDefinitions.js, popup.html and
+    // popup.js directly, keys and read/write shapes verified, not guessed).
+    //
+    // MOVE groups: small settings blocks, wired to the SAME keys the stock
+    // Settings screen already reads/writes via the canonical saveSetting
+    // IPC (settings-write law) — never a forked copy. Two storage shapes
+    // exist in this app; these keys use the NEWER flat one (confirmed by
+    // reading popup.js's handleSetting()/refreshPopupSettingsAfterLanguageSave()
+    // paths, not the older param25 shape the Alerts tab uses):
+    //   boolean -> {cmd:'saveSetting', type:'setting',       setting:key, value:true|false}, read response.settings[key].setting
+    //   text    -> {cmd:'saveSetting', type:'textsetting',   setting:key, value:'…'},          read response.settings[key].textsetting
+    //   select  -> {cmd:'saveSetting', type:'optionsetting', setting:key, value:'…'},           read response.settings[key].optionsetting
+    // (target is always null here — none of these are per-source overrides.)
+    //
+    // Curated to the compact, decision-relevant fields only — mirrors the
+    // Alerts tab's own curation (6 fields per card, not every param the
+    // underlying system supports). Provider CREDENTIALS (10+ providers,
+    // ~25 fields, each with popup.js's own conditional show/hide wiring
+    // keyed to the aiProvider dropdown) are LINK, not MOVE — duplicating
+    // that many provider-conditional fields here would fork the exact
+    // surface popup.js already owns, which is the LINK criterion itself.
+    // Ollama's own endpoint/model are the one exception: kept as MOVE since
+    // Ollama is the default provider and the deployment's actual local
+    // setup (pacBOT/gemma3:1b — see the SSN skill's "Local AI" section).
+    var AI_MOVE_GROUPS = [
+        {
+            id: 'bot',
+            title: 'LLM provider & chat bot',
+            blurb: 'The LLM chat-response bot (ollama toggle + aiProvider — this is pacBOT\'s home). Other providers\' API keys/endpoints and rarer bot options live in Settings — see the cards below.',
+            fields: [
+                { key: 'ollama', label: 'Bot enabled', type: 'boolean' },
+                {
+                    key: 'aiProvider', label: 'Provider', type: 'select', options: [
+                        { value: 'ollama', label: 'Ollama (local)' },
+                        { value: 'chatgpt', label: 'ChatGPT API' },
+                        { value: 'gemini', label: 'Gemini API' },
+                        { value: 'groq', label: 'Groq API' },
+                        { value: 'deepseek', label: 'DeepSeek API' },
+                        { value: 'xai', label: 'xAI API (Grok)' },
+                        { value: 'bedrock', label: 'AWS Bedrock API' },
+                        { value: 'openrouter', label: 'OpenRouter API' },
+                        { value: 'opencode', label: 'OpenCode Zen API' },
+                        { value: 'hostedllm', label: 'SSN Hosted Trial LLM' },
+                        { value: 'localgemma', label: 'Local Gemma 4 (browser)' },
+                        { value: 'localqwen', label: 'Local Qwen 3.5 0.8B (browser)' },
+                        { value: 'localqwen2b', label: 'Local Qwen 3.5 2B (browser)' },
+                        { value: 'custom', label: 'Custom (OpenAI-compatible)' }
+                    ]
+                },
+                { key: 'ollamaendpoint', label: 'Ollama endpoint', type: 'text', placeholder: 'http://localhost:11434' },
+                { key: 'ollamamodel', label: 'Ollama model', type: 'text', placeholder: 'gemma3:1b' },
+                { key: 'ollamabotname', label: 'Bot name', type: 'text', placeholder: 'e.g. pacBOT' },
+                { key: 'bottriggerwords', label: 'Trigger words', type: 'text', placeholder: 'blank = always eligible' }
+            ]
+        },
+        {
+            id: 'moderation',
+            title: 'AI moderation',
+            blurb: 'The bot reviews chat and can delete (or block-until-approved) messages it judges unfit.',
+            fields: [
+                { key: 'ollamaCensorBot', label: 'Moderation enabled', type: 'boolean' },
+                { key: 'ollamaCensorBotBlockMode', label: 'Block until approved', type: 'boolean' }
+            ]
+        },
+        {
+            id: 'translate',
+            title: 'AI translation',
+            blurb: 'Auto-translates chat through the configured AI provider — separate from the app\'s plain UI-language switcher (not an AI feature, excluded here).',
+            fields: [
+                { key: 'aiAutoTranslate', label: 'Translate incoming', type: 'boolean' },
+                { key: 'aiAutoTranslateOutgoing', label: 'Translate outgoing', type: 'boolean' },
+                { key: 'aiAutoTranslateTargetLanguage', label: 'Target language', type: 'text', placeholder: 'en-US' }
+            ]
+        },
+        {
+            id: 'summaries',
+            title: 'AI summaries',
+            blurb: 'Chat-summary context fed to the bot, and the user-triggered !summary command.',
+            fields: [
+                { key: 'llmsummary', label: 'Feed summaries to bot', type: 'boolean' },
+                { key: 'allowLLMSummary', label: 'Allow !summary command', type: 'boolean' }
+            ]
+        }
+    ];
+
+    // LINK cards — real surfaces, deliberately not duplicated here (each
+    // note says why). "Open Settings" is the same navigateArcadeTab
+    // ('settings') the sources rail's own "+ Add source" button already
+    // uses — the shell has no finer settings-category deep link, so the
+    // card names the exact heading text to look for once there.
+    var AI_LINK_ITEMS = [
+        {
+            id: 'llm-api',
+            name: 'Configure LLM API — other providers',
+            blurb: 'API keys, endpoints and models for ChatGPT, Gemini, Groq, DeepSeek, OpenRouter, xAI, AWS Bedrock, OpenCode Zen, the SSN Hosted Trial LLM, the in-browser Local Gemma/Qwen models, and custom OpenAI-compatible endpoints — each with its own show/hide wiring keyed to the Provider dropdown above.',
+            where: 'Settings → Configure LLM API 🦙'
+        },
+        {
+            id: 'chatbot-advanced',
+            name: 'Chat bot — advanced',
+            blurb: 'History length, timestamps, RAG knowledge base, rate limiting, keep-alive, mod-only replies, overlay-only replies, read-aloud via TTS, and the standalone one-on-one chat bot.',
+            where: 'Settings → Chat bot 🤖💬 / Standalone one-on-one chat bot'
+        },
+        {
+            id: 'ai-prompt-builder',
+            name: 'AI Prompt / Overlay Builder',
+            blurb: 'The standalone AI Prompt Page Builder (its own page, own localStorage-backed state — aiprompt.html) and the AI Overlay it publishes to. Moving it would fork a whole second page, not a settings block.',
+            where: 'Settings → page picker → AI Prompt Page Builder'
+        },
+        {
+            id: 'cohost',
+            name: 'AI Cohost',
+            blurb: 'The AI virtual-cohost overlay page — a large standalone surface (cohost.html), out of scope to relocate here.',
+            where: 'Settings → page picker → Cohost'
+        }
+    ];
+
+    function saveAiItemSetting(type, key, value) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: type, target: null, setting: key, value: value }, function () {});
+            }
+        } catch (e) { console.error('[arcade-shell] AI item setting save failed:', e); }
+    }
+
+    function buildAiMoveRow(field, currentValue) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = field.label;
+        row.appendChild(lbl);
+        var input;
+        if (field.type === 'boolean') {
+            input = document.createElement('input');
+            input.type = 'checkbox';
+            input.checked = !!currentValue;
+            input.addEventListener('change', function () {
+                saveAiItemSetting('setting', field.key, input.checked);
+            });
+        } else if (field.type === 'select') {
+            input = document.createElement('select');
+            (field.options || []).forEach(function (opt) {
+                var o = document.createElement('option');
+                o.value = opt.value;
+                o.textContent = opt.label;
+                input.appendChild(o);
+            });
+            input.value = currentValue || (field.options && field.options[0] && field.options[0].value) || '';
+            input.addEventListener('change', function () {
+                saveAiItemSetting('optionsetting', field.key, input.value);
+            });
+        } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.autocomplete = 'off';
+            input.placeholder = field.placeholder || '';
+            input.value = currentValue || '';
+            input.addEventListener('input', debounce(function () {
+                saveAiItemSetting('textsetting', field.key, input.value);
+            }, 300));
+        }
+        input.dataset.arcadeAiField = field.key;
+        row.appendChild(input);
+        return row;
+    }
+
+    function buildAiMoveCard(group, settings) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card arcade-ai-move-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = group.title;
+        head.appendChild(name);
+        card.appendChild(head);
+        if (group.blurb) {
+            var blurb = document.createElement('p');
+            blurb.className = 'arcade-el-card__blurb';
+            blurb.textContent = group.blurb;
+            card.appendChild(blurb);
+        }
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        group.fields.forEach(function (field) {
+            var raw = settings[field.key];
+            var current = field.type === 'boolean' ? (raw && raw.setting)
+                : field.type === 'select' ? (raw && raw.optionsetting)
+                    : (raw && raw.textsetting);
+            body.appendChild(buildAiMoveRow(field, current));
+        });
+        card.appendChild(body);
+        return card;
+    }
+
+    function buildAiLinkCard(item) {
+        var card = document.createElement('article');
+        card.className = 'arcade-el-card arcade-ai-link-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-el-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-el-card__name';
+        name.textContent = item.name;
+        head.appendChild(name);
+        card.appendChild(head);
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-el-card__blurb';
+        blurb.textContent = item.blurb;
+        card.appendChild(blurb);
+        var where = document.createElement('p');
+        where.className = 'arcade-el-card__params';
+        where.textContent = item.where;
+        card.appendChild(where);
+        var actions = document.createElement('div');
+        actions.className = 'arcade-el-card__actions';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm';
+        btn.textContent = 'Open Settings';
+        btn.addEventListener('click', function () { navigateArcadeTab('settings'); });
+        actions.appendChild(btn);
+        card.appendChild(actions);
+        return card;
+    }
+
+    // ONE getSettings read hydrates every MOVE card — same shape/IPC the
+    // Alerts/Style tabs' own loaders already use. Guarded by document
+    // .contains() rather than the dataset checks elsewhere: the console is
+    // torn down and rebuilt wholesale on every open/collapse (unlike the
+    // Alerts tab's persistent cards), so "is this exact grid node still
+    // attached" is the more precise staleness check here.
+    function loadAiItemsSettings(moveGrid) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                    if (!document.body.contains(moveGrid)) return; // console rebuilt/torn down mid-load
+                    var settings = (response && response.settings) || {};
+                    AI_MOVE_GROUPS.forEach(function (group) {
+                        moveGrid.appendChild(buildAiMoveCard(group, settings));
+                    });
+                });
+                return;
+            }
+        } catch (e) { console.error('[arcade-shell] AI items settings load failed:', e); }
+    }
+
+    function buildAiItemsSection() {
+        var section = document.createElement('section');
+        section.className = 'arcade-ai-items';
+
+        var head = document.createElement('div');
+        head.className = 'arcade-ai-items__head';
+        var title = document.createElement('h3');
+        title.className = 'arcade-ai-items__title';
+        title.textContent = 'SSN AI ITEMS';
+        head.appendChild(title);
+        section.appendChild(head);
+
+        var moveGrid = document.createElement('div');
+        moveGrid.className = 'arcade-alerts-rail arcade-ai-move-grid';
+        section.appendChild(moveGrid);
+
+        var linkHead = document.createElement('div');
+        linkHead.className = 'arcade-ai-items__head arcade-ai-items__head--sub';
+        var linkTitle = document.createElement('h4');
+        linkTitle.className = 'arcade-ai-items__title';
+        linkTitle.textContent = 'ELSEWHERE IN SETTINGS';
+        linkHead.appendChild(linkTitle);
+        section.appendChild(linkHead);
+
+        var linkGrid = document.createElement('div');
+        linkGrid.className = 'arcade-el-grid arcade-ai-link-grid';
+        AI_LINK_ITEMS.forEach(function (item) { linkGrid.appendChild(buildAiLinkCard(item)); });
+        section.appendChild(linkGrid);
+
+        loadAiItemsSettings(moveGrid);
+        return section;
+    }
+
+    function renderAiConsole() {
+        var body = document.getElementById('arcade-ai-body');
+        if (!body) return;
+        setAiCollapseVisible(false);
+        setAiAreaStatus('');
+        body.dataset.aiState = 'console';
+        body.innerHTML = '';
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-ai-console';
+        wrap.appendChild(buildDevChatCheckinCard());
+        wrap.appendChild(buildAiItemsSection());
+        body.appendChild(wrap);
+        refreshDevChatCheckin();
+    }
+
+    function openAiAreaAfterGate() {
+        if (aiConsoleExpanded) { openAiAreaExpanded(); }
+        else { renderAiConsole(); }
     }
 
     // The gate — asks the signer for a FRESH challenge every open, admits
@@ -1351,11 +1864,13 @@
             '<span class="arcade-panel-title">AI</span>' +
             '<span class="arcade-spacer"></span>' +
             '<span class="arcade-ai-status" id="arcade-ai-status"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-ai-collapse" hidden>&larr; Console</button>' +
             '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon" id="arcade-ai-close" aria-label="Close">×</button>' +
             '</div>' +
             '<div class="arcade-ai-body" id="arcade-ai-body"></div>';
         document.body.appendChild(panel);
 
+        panel.querySelector('#arcade-ai-collapse').addEventListener('click', collapseAiAreaToConsole);
         panel.querySelector('#arcade-ai-close').addEventListener('click', function () {
             navigateArcadeTab('main');
         });
