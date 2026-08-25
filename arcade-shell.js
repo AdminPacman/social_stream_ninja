@@ -4540,6 +4540,17 @@
         return (
             '<div class="arcade-panel-head"><span class="arcade-panel-title">ANALYTICS</span></div>' +
             '<div class="arcade-panel-body">' +
+            // S41 — the ON-AIR strip. Three honest states driven by REAL OBS
+            // stream events only (background.js records the last one the flow
+            // engine saw on window.__ssnObsStreamState): ON AIR / OFF AIR /
+            // UNKNOWN — the dash-face until the first event arrives, which is
+            // also what "the actions.html↔OBS link isn't up" looks like from
+            // here. Never guessed; the dash law applies to stream state too.
+            '<div class="arcade-onair" id="arcade-onair" data-onair="unknown" role="status" aria-live="polite">' +
+            '<span class="arcade-onair__dot" aria-hidden="true"></span>' +
+            '<span class="arcade-onair__label" id="arcade-onair-label">—</span>' +
+            '<span class="arcade-onair__sub" id="arcade-onair-sub">OBS link not seen — arm actions.html (&obsws=)</span>' +
+            '</div>' +
             '<div class="arcade-period-row">' +
             '<span class="arcade-k">PERIOD</span>' +
             '<div class="arcade-seg" role="group" aria-label="Analytics period" id="arcade-period-seg">' +
@@ -4700,6 +4711,53 @@
         if (subEl) subEl.textContent = 'since boot · est';
     }
 
+    // --------------------------------------------------------------------
+    // S41 — ON-AIR strip render. Reads the last REAL OBS stream event the
+    // flow engine processed (background.js's __ssnObsStreamState, written in
+    // processEventFlowBridgeEvent) off the same frame2 analytics bridge the
+    // tiles use — pure read, never a write into that frame. Three states:
+    //   live    — an obs stream_started event was seen (obsStreamStarted)
+    //   offline — an obs stream_stopped event was seen (obsStreamStopped)
+    //   unknown — no OBS event since background boot: either the actions.html
+    //             overlay isn't armed (&obsws=) or the OBS link is down.
+    //             Dash-face, never a guess — the dash law applies to stream
+    //             state too. Known honest limit: if the OBS link DIES
+    //             mid-stream no stopped event can arrive, so the strip keeps
+    //             showing the last observed state (documented in the S41
+    //             report; stream state has no stale-wipe anchor like time).
+    // --------------------------------------------------------------------
+    function formatOnAirClock(ts) {
+        var d = new Date(ts);
+        if (isNaN(d.getTime())) return '--:--';
+        var hh = String(d.getHours()).padStart(2, '0');
+        var mm = String(d.getMinutes()).padStart(2, '0');
+        return hh + ':' + mm;
+    }
+
+    function renderOnAirStrip() {
+        var strip = document.getElementById('arcade-onair');
+        var labelEl = document.getElementById('arcade-onair-label');
+        var subEl = document.getElementById('arcade-onair-sub');
+        if (!strip || !labelEl || !subEl) return;
+        var bg = getBackgroundWindow();
+        var obs = null;
+        try { obs = bg && bg.__ssnObsStreamState; } catch (e) { obs = null; }
+        var state = (obs && (obs.state === 'live' || obs.state === 'offline') && typeof obs.at === 'number')
+            ? obs.state
+            : 'unknown';
+        strip.dataset.onair = state;
+        if (state === 'live') {
+            labelEl.textContent = 'ON AIR';
+            subEl.textContent = 'since ' + formatOnAirClock(obs.at) + ' · obs-websocket';
+        } else if (state === 'offline') {
+            labelEl.textContent = 'OFF AIR';
+            subEl.textContent = 'as of ' + formatOnAirClock(obs.at) + ' · obs-websocket';
+        } else {
+            labelEl.textContent = '—';
+            subEl.textContent = 'OBS link not seen — arm actions.html (&obsws=)';
+        }
+    }
+
     function renderAnalyticsMessagesDerived() {
         var firstValueEl = document.getElementById('arcade-stat-firsttime-value');
         var firstSubEl = document.getElementById('arcade-stat-firsttime-sub');
@@ -4839,6 +4897,7 @@
 
     function pollArcadeAnalytics() {
         var bg = getBackgroundWindow();
+        renderOnAirStrip(); // S41 — OBS stream state; renders UNKNOWN honestly even when frame2 isn't up yet
         if (!bg) return;
 
         try {
