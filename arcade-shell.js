@@ -467,7 +467,19 @@
             if (dEl) dEl.textContent = pad(y, 4) + '.' + pad(m, 2) + '.' + pad(d, 2);
             if (!tEl) return;
             if (!bftClockSeconds) {
-                tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin, 2);
+                // Minute-ones fix (0018.06.03, Pac): without seconds the display
+                // used to print the raw decade minute — a multiple of 10 — so the
+                // ones column sat frozen for the whole block ("stuck in 10's").
+                // Same interpolation as the seconds path, same anchor precedence,
+                // same :M9 cap — just rendered without the :SS tail. No anchor →
+                // phase inside the block is honestly unknown → coarse HH:M0 stands.
+                var minAnchorMs = blockObservedAt != null ? blockObservedAt : blockTimestampMs;
+                if (minAnchorMs == null) {
+                    tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin, 2);
+                    return;
+                }
+                var minElapsed = Math.max(0, Math.min(Date.now() - minAnchorMs, 9 * 60000 + 59000));
+                tEl.textContent = pad(hh, 2) + ':' + pad(decadeMin + Math.floor(minElapsed / 60000), 2);
                 return;
             }
             // Precedence (0018.05.26 b): an OBSERVED height change is the freshest
@@ -603,7 +615,10 @@
         }
 
         function maybeFetchBlockTimestamp() {
-            if (!bftClockSeconds) return;          // only needed to anchor sub-block seconds
+            // (0018.06.03) no seconds-mode gate anymore: the minute ones-digit
+            // interpolates in BOTH display modes now, so the cold-start anchor
+            // is needed whenever BFT time is showing at all.
+            if (bftClockMode !== 'bft') return;    // LOCAL face needs no block anchor
             if (lastRealHeight == null) return;     // no real height to anchor against
             if (blockObservedAt != null) return;    // OBSERVED anchor already covers phase — freshest, no fetch needed
             if (blockTimestampMs != null) return;   // already timestamp-anchored for this height
@@ -658,7 +673,11 @@
         var secondsTimer = null;
         function scheduleSecondsTicker() {
             clearInterval(secondsTimer);
-            if (bftClockSeconds) secondsTimer = setInterval(renderDisplay, 1000); // display-only, never fetches
+            // (0018.06.03) always on now, not just in seconds mode: the minute
+            // ones-digit interpolates in both display modes, so the face needs a
+            // display-only re-render cadence in no-seconds mode too (1s keeps the
+            // minute flip on time; it never fetches, so the cost is one text write).
+            secondsTimer = setInterval(renderDisplay, 1000); // display-only, never fetches
         }
         bftRescheduleSecondsTimer = scheduleSecondsTicker;
 
