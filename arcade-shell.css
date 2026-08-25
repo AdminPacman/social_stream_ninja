@@ -661,9 +661,17 @@ body.arcade-shell .arcade-el-card__blurb {
 body.arcade-shell .arcade-el-card__params {
   margin: 0; font: 400 11px/1.4 var(--arc-font-mono); color: var(--arc-faint);
 }
+/* THE CARD-FOOTER LAW (the Admiral, 0018.06.03): on stretch-sibling cards the
+   CTA row — and its path caption when present — pins to the card's BOTTOM
+   edge; copy length never scatters the buttons mid-card. Mechanism: the card
+   is already a flex column, so the footer unit takes margin-top:auto; when
+   params precedes actions, ONLY params carries the auto (the pair stays
+   snug), otherwise actions carries its own. */
+body.arcade-shell .arcade-el-card__params { margin-top: auto; }
 body.arcade-shell .arcade-el-card__actions {
-  display: flex; gap: 8px; margin-top: 4px;
+  display: flex; gap: 8px; margin-top: auto;
 }
+body.arcade-shell .arcade-el-card__params + .arcade-el-card__actions { margin-top: 4px; }
 
 /* Category badge — semantic: tips reads MONEY-gold (a tip jar genuinely IS
    money, semantic lock honored), music=info/cyan, hype=flair/pink,
