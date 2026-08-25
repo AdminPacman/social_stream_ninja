@@ -1397,3 +1397,69 @@ body.arcade-shell .arcade-onair[data-onair="offline"] .arcade-onair__label { col
 @media (prefers-reduced-motion: reduce) {
   body.arcade-shell .arcade-onair[data-onair="live"] .arcade-onair__dot { animation: none; }
 }
+
+/* ==========================================================================
+   S44 — ARCADE MAGIC (M2 border beam · M3 number ticker · M5 retro grid)
+   House ports of three Magic Shelf effects (MagicUI, MIT — magicui.design;
+   no dependencies, no libraries). Portability law: each effect is ONE
+   self-contained, re-homeable class — .arcade-fx-beam / .arcade-fx-ticker /
+   .arcade-fx-grid — attached to its surface by class name only. Re-homing
+   costs one className, zero CSS edits. Every rule is scoped under
+   body.arcade-shell; every animation has a prefers-reduced-motion still.
+   ========================================================================== */
+
+/* ---- M2 — border beam (source: MagicUI "border-beam", MIT) ---------------
+   A slow conic beam orbiting the host's frame. On the ON-AIR strip it is a
+   live-truth signal, never decoration: renderOnAirStrip() attaches the class
+   only on the genuinely-live face, off the SAME `state` reading that decides
+   the strip's face — one driver, and no second pulse (the S41 dot pulse
+   stands). Token adapted from the approved block's --arcade-teal to
+   --arc-live: the beam only ever rides the live face, and that face keeps a
+   single-hue (live-green) semantic. */
+@property --arc-fx-beam-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+body.arcade-shell .arcade-fx-beam { position: relative; }
+body.arcade-shell .arcade-fx-beam::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  padding: 1.5px; pointer-events: none;
+  background: conic-gradient(from var(--arc-fx-beam-angle), transparent 0 72%, var(--arc-live) 86%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: arcade-fx-beam-spin 4s linear infinite;
+}
+@keyframes arcade-fx-beam-spin { to { --arc-fx-beam-angle: 360deg; } }
+
+/* ---- M3 — number ticker (source: MagicUI "number-ticker", MIT) -----------
+   The JS half lives in arcade-shell.js (arcadeFxSetNumber): rAF count-up,
+   cubic ease-out, real measured values only — a dash stays a dash, re-tick
+   on value change only, count-UP only, reduced-motion jumps to final. The
+   class itself only guarantees the digits don't jiggle width mid-count. */
+body.arcade-shell .arcade-fx-ticker { font-variant-numeric: tabular-nums; }
+
+/* ---- M5 — retro grid (source: MagicUI "retro-grid", MIT) -----------------
+   Scrolling perspective grid for arcade-native EMPTY-STATE backdrops (the
+   surfaces arcade-shell.js itself renders — never a stock or dressed
+   frame): repeating-linear-gradients on a rotateX plane, horizon fade at
+   the top, lines rolling toward the viewer. Low opacity (.5), house teal
+   (--arc-info hue), painted BEHIND the empty-state copy via a negative
+   z-index inside the host's own stacking context. One statement effect per
+   surface: where the grid runs, nothing else animates. */
+body.arcade-shell .arcade-fx-grid { position: relative; isolation: isolate; overflow: hidden; }
+body.arcade-shell .arcade-fx-grid::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  left: -25%; right: -25%; top: 0; height: 300%;
+  background-image:
+    repeating-linear-gradient(to right, rgba(53, 208, 255, 0.35) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(to bottom, rgba(53, 208, 255, 0.35) 0 1px, transparent 1px 34px);
+  transform: perspective(240px) rotateX(56deg);
+  transform-origin: 50% 0;
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 42px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 42px);
+  animation: arcade-fx-grid-roll 2.8s linear infinite;
+}
+@keyframes arcade-fx-grid-roll { to { background-position: 0 0, 0 34px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.arcade-shell .arcade-fx-beam::before,
+  body.arcade-shell .arcade-fx-grid::before { animation: none; }
+}

@@ -2927,7 +2927,7 @@
 
     function buildBrowseEmpty(text) {
         var empty = document.createElement('div');
-        empty.className = 'arcade-style-mypresets-empty arcade-browse-empty';
+        empty.className = 'arcade-style-mypresets-empty arcade-browse-empty arcade-fx-grid'; // S44 M5 — arcade-native empty state
         empty.textContent = text;
         return empty;
     }
@@ -4560,18 +4560,18 @@
             '</div></div>' +
             '<div class="arcade-statgrid">' +
             '<div class="arcade-stat"><span class="arcade-stat__label">HOURS WATCHED</span>' +
-            '<span class="arcade-stat__value is-dash" id="arcade-stat-watch-value">—</span><span class="arcade-stat__sub" id="arcade-stat-watch-sub">connecting…</span></div>' +
+            '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-watch-value">—</span><span class="arcade-stat__sub" id="arcade-stat-watch-sub">connecting…</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">PEAK VIEWERS</span>' +
-            '<span class="arcade-stat__value is-dash" id="arcade-stat-peak-value">—</span><span class="arcade-stat__sub" id="arcade-stat-live-sub">now — · 0 live</span></div>' +
+            '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-peak-value">—</span><span class="arcade-stat__sub" id="arcade-stat-live-sub">now — · 0 live</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">FIRST-TIME CHATTERS</span>' +
-            '<span class="arcade-stat__value is-dash" id="arcade-stat-firsttime-value">—</span><span class="arcade-stat__sub" id="arcade-stat-firsttime-sub">connecting…</span></div>' +
+            '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-firsttime-value">—</span><span class="arcade-stat__sub" id="arcade-stat-firsttime-sub">connecting…</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">RAIDS RECEIVED</span>' +
-            '<span class="arcade-stat__value is-dash" id="arcade-stat-raids-value">—</span><span class="arcade-stat__sub" id="arcade-stat-raids-sub">last: —</span></div>' +
+            '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-raids-value">—</span><span class="arcade-stat__sub" id="arcade-stat-raids-sub">last: —</span></div>' +
             '</div>' +
             '<div class="arcade-field"><label>FOLLOWER DELTA</label><span class="arcade-field__hint">Δ since this session started — no historical archive yet</span></div>' +
             '<ul class="arcade-frow-list" id="arcade-follower-rows"></ul>' +
             '<div class="arcade-field"><label>RECENT NOTIFICATIONS</label><span class="arcade-field__hint">latest from chat history, any period</span></div>' +
-            '<div id="arcade-notifications"><div class="arcade-nrow-empty" id="arcade-nrow-empty">Waiting on the background bridge — raids, follows, and ' +
+            '<div id="arcade-notifications"><div class="arcade-nrow-empty arcade-fx-grid" id="arcade-nrow-empty">Waiting on the background bridge — raids, follows, and ' +
             'donations live in the chat-history store (background.js/db.js); this reads it via frame2, not a fabricated feed.</div>' +
             '<ul class="arcade-nrow-list" id="arcade-nrow-list" hidden></ul></div>' +
             '</div>'
@@ -4610,7 +4610,7 @@
         list.innerHTML = '';
         if (!sources.length) {
             var empty = document.createElement('li');
-            empty.className = 'arcade-src-empty';
+            empty.className = 'arcade-src-empty arcade-fx-grid'; // S44 M5 — arcade-native empty state
             empty.textContent = 'No sources configured yet.';
             list.appendChild(empty);
             return;
@@ -4622,8 +4622,8 @@
             li.innerHTML =
                 '<span class="arcade-pill arcade-pill--mono">' + platformBadge(source.target) + '</span>' +
                 '<span class="arcade-frow__label"></span>' +
-                '<span class="arcade-frow__total">—</span>' +
-                '<span class="arcade-frow__delta">—</span>';
+                '<span class="arcade-frow__total arcade-fx-ticker">—</span>' +
+                '<span class="arcade-frow__delta arcade-fx-ticker">—</span>';
             li.querySelector('.arcade-frow__label').textContent = sourceDisplayName(source);
             list.appendChild(li);
         });
@@ -4701,12 +4701,71 @@
         return (h / 1000).toFixed(1) + 'k';
     }
 
+    // --------------------------------------------------------------------
+    // S44 / M3 — number ticker (house port of MagicUI's "number-ticker",
+    // MIT — magicui.design; ~15-line vanilla-JS core, no library). rAF
+    // count-up, cubic ease-out, digits kept tabular by .arcade-fx-ticker.
+    // The honest-data laws applied to motion:
+    //   * animates TO a number the app actually has, and only FROM the
+    //     previous REAL value — a dash stays a dash: the first real sample
+    //     after a dash-face lands instantly (no invented from-0 run), and
+    //     dropping back to unknown is an instant dash, never animated.
+    //   * re-ticks only on value change — same target is a no-op; nothing
+    //     here runs on an interval (the analytics poll drives it).
+    //   * count-UP only: a decrease jumps straight to the new real number
+    //     rather than running the motion backwards (the meteor lesson).
+    //   * prefers-reduced-motion: reduce -> jump to the final number.
+    // Portable: engages on any element carrying .arcade-fx-ticker, driven
+    // purely by the values the renderers hand it — re-home = one className.
+    // --------------------------------------------------------------------
+    var arcadeFxTickerState = (typeof WeakMap === 'function') ? new WeakMap() : null;
+
+    function arcadeFxReducedMotion() {
+        try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+    }
+
+    function arcadeFxFormatInt(v) { return String(Math.round(v)); }
+    function arcadeFxFormatDelta(v) { var r = Math.round(v); return (r > 0 ? '+' : '') + String(r); }
+
+    function arcadeFxSetNumber(el, target, format) {
+        if (!el) return;
+        var fmt = format || arcadeFxFormatInt;
+        if (!arcadeFxTickerState || !el.classList || !el.classList.contains('arcade-fx-ticker') || typeof requestAnimationFrame !== 'function') {
+            el.textContent = (target == null || !isFinite(target)) ? '—' : fmt(target);
+            return;
+        }
+        var st = arcadeFxTickerState.get(el) || { value: null, raf: 0 };
+        // Same committed target = pure no-op, BEFORE any cancel: the renderers
+        // legitimately call this twice per poll for one element (the messages
+        // branch's renderArcadeAnalytics + the viewer/follower branch's own
+        // render), and the second call must not kill a count already running.
+        if (target != null && isFinite(target) && st.value === target) return;
+        if (st.raf) { cancelAnimationFrame(st.raf); st.raf = 0; }
+        if (target == null || !isFinite(target)) {
+            st.value = null; // into-dash: instant, and the real anchor is forgotten
+            el.textContent = '—';
+        } else if (st.value === null || target <= st.value || arcadeFxReducedMotion()) {
+            st.value = target; // first real sample / decrease / reduced motion: instant
+            el.textContent = fmt(target);
+        } else {
+            var from = st.value, t0 = 0;
+            st.value = target; // commit the real target now — re-ticks compare against it
+            st.raf = requestAnimationFrame(function step(now) {
+                if (!t0) t0 = now;
+                var p = Math.min(1, (now - t0) / 700);
+                el.textContent = fmt(from + (target - from) * (1 - Math.pow(1 - p, 3)));
+                st.raf = p < 1 ? requestAnimationFrame(step) : 0;
+            });
+        }
+        arcadeFxTickerState.set(el, st);
+    }
+
     function renderWatchTime() {
         var valEl = document.getElementById('arcade-stat-watch-value');
         var subEl = document.getElementById('arcade-stat-watch-sub');
         if (!valEl) return;
         if (!arcadeAnalytics.watchReady) return; // honest dash / "connecting…" until first sample
-        valEl.textContent = formatViewerHours(arcadeAnalytics.watchViewerMs / 3600000);
+        arcadeFxSetNumber(valEl, arcadeAnalytics.watchViewerMs / 3600000, formatViewerHours); // S44 M3 — tick TO the real accrued value
         valEl.classList.remove('is-dash');
         if (subEl) subEl.textContent = 'since boot · est';
     }
@@ -4746,6 +4805,11 @@
             ? obs.state
             : 'unknown';
         strip.dataset.onair = state;
+        // S44 M2 — border beam. The class IS the whole effect (portability
+        // law); toggled here, off this same `state` reading — one driver,
+        // never a second read of the OBS truth. Idle/unknown: no class, no
+        // beam, nothing moves.
+        strip.classList.toggle('arcade-fx-beam', state === 'live');
         if (state === 'live') {
             labelEl.textContent = 'ON AIR';
             subEl.textContent = 'since ' + formatOnAirClock(obs.at) + ' · obs-websocket';
@@ -4783,11 +4847,11 @@
         var messages = arcadeAnalytics.messages || [];
 
         if (!dbOn) {
-            firstValueEl.textContent = '—';
+            arcadeFxSetNumber(firstValueEl, null); // S44 M3 — into-dash: instant, never animated
             firstValueEl.classList.add('is-dash');
             firstSubEl.textContent = 'chat-history store is off';
         } else if (!firsttimersOn) {
-            firstValueEl.textContent = '—';
+            arcadeFxSetNumber(firstValueEl, null);
             firstValueEl.classList.add('is-dash');
             firstSubEl.textContent = 'first-timers setting is off';
         } else {
@@ -4795,7 +4859,7 @@
             for (var i = 0; i < messages.length; i++) {
                 if (messages[i].firsttime === true && messages[i].timestamp >= cutoff) firstCount++;
             }
-            firstValueEl.textContent = String(firstCount);
+            arcadeFxSetNumber(firstValueEl, firstCount); // S44 M3 — real count from chat history
             firstValueEl.classList.remove('is-dash');
             firstSubEl.textContent = periodLabel + ' · from chat history';
         }
@@ -4806,7 +4870,7 @@
                 if (messages[j].event === 'raid' && messages[j].timestamp >= cutoff) raids.push(messages[j]);
             }
         }
-        raidsValueEl.textContent = dbOn ? String(raids.length) : '—';
+        arcadeFxSetNumber(raidsValueEl, dbOn ? raids.length : null); // S44 M3 — real raid count, or an instant honest dash
         raidsValueEl.classList.toggle('is-dash', !dbOn);
         var lastRaider = raids.length ? (raids[0].chatname || raids[0].displayName || 'unknown') : null;
         raidsSubEl.textContent = dbOn ? ('last: ' + (lastRaider || '—')) : 'chat-history store is off';
@@ -4866,7 +4930,7 @@
             total += parseInt(arcadeAnalytics.viewerCounts[k], 10) || 0;
         });
         if (peakEl) {
-            peakEl.textContent = String(arcadeAnalytics.peakViewers);
+            arcadeFxSetNumber(peakEl, arcadeAnalytics.peakViewers); // S44 M3 — real peak only
             peakEl.classList.remove('is-dash');
         }
         subEl.textContent = 'now ' + total + ' · ' + liveCount + ' live · since boot';
@@ -4881,15 +4945,15 @@
             var deltaEl = row.querySelector('.arcade-frow__delta');
             if (!totalEl || !deltaEl) return;
             if (!arcadeAnalytics.followersReady || !(target in arcadeAnalytics.followerCounts)) {
-                totalEl.textContent = '—';
-                deltaEl.textContent = '—';
+                arcadeFxSetNumber(totalEl, null); // S44 M3 — dash stays a dash
+                arcadeFxSetNumber(deltaEl, null);
                 return;
             }
             var total = arcadeAnalytics.followerCounts[target];
             var baseline = arcadeAnalytics.followerBaseline[target];
             var delta = (typeof baseline === 'number') ? (total - baseline) : 0;
-            totalEl.textContent = String(total);
-            deltaEl.textContent = (delta > 0 ? '+' : '') + String(delta);
+            arcadeFxSetNumber(totalEl, total); // S44 M3 — real metaStore readings
+            arcadeFxSetNumber(deltaEl, delta, arcadeFxFormatDelta);
             deltaEl.classList.toggle('arcade-frow__delta--up', delta > 0);
             deltaEl.classList.toggle('arcade-frow__delta--down', delta < 0);
         });
@@ -5026,7 +5090,7 @@
 
         if (!sources.length) {
             var empty = document.createElement('li');
-            empty.className = 'arcade-src-empty';
+            empty.className = 'arcade-src-empty arcade-fx-grid'; // S44 M5 — arcade-native empty state
             empty.textContent = 'No sources yet — use + Add source to bring in your first chat.';
             list.appendChild(empty);
         } else {
