@@ -146,6 +146,89 @@ body.arcade-shell .arcade-nav button[data-arcade-tab-btn="ai"].is-on {
 }
 body.arcade-shell .arcade-topbar .arcade-spacer { flex: 1; }
 
+/* --------------------------------------------------------------------------
+   S46B — THE HAMBURGER FOLD (TASK-49, charter round 5). Below the MEASURED
+   width where every top-bar tab keeps its full hit target (measureTopbarFold
+   in arcade-shell.js sums the real rendered widths — no magic px), the
+   header carries .is-folded: the nav cluster leaves the bar and a burger
+   opens a sheet of FULL-SIZE rows. Hit targets never shrink, nothing clips,
+   no horizontal scroll; logo and clock keep their seats at every width.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-burger {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 40px; height: 32px;
+  border-radius: var(--arc-r);
+  border: 1px solid var(--arc-edge);
+  background: var(--arc-panel-2);
+  color: var(--arc-muted);
+  font: 600 15px/1 var(--arc-font-ui);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+body.arcade-shell .arcade-burger:hover { color: var(--arc-ink); border-color: #363b46; }
+body.arcade-shell .arcade-topbar.is-folded .arcade-burger { display: inline-flex; }
+body.arcade-shell .arcade-topbar.is-folded .arcade-nav,
+body.arcade-shell .arcade-topbar.is-folded .arcade-more { display: none; }
+
+body.arcade-shell .arcade-nav-sheet {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 8px;
+  z-index: 2020;
+  min-width: 240px;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - var(--arc-topbar-h) - 12px);
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--arc-panel-3);
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-nav-sheet.is-open { display: flex; }
+/* full-size rows — the fold's whole point: a folded tab keeps the hit
+   target it would have had on the bar, never a shrunk one. */
+body.arcade-shell .arcade-nav-sheet button {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px;
+  border: 0; border-radius: 4px;
+  background: transparent;
+  color: var(--arc-ink);
+  font: 600 12px/1.3 var(--arc-font-ui);
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+body.arcade-shell .arcade-nav-sheet button:hover { background: var(--arc-panel-2); }
+body.arcade-shell .arcade-nav-sheet button.is-on {
+  color: var(--arc-info);
+  background: rgba(53, 208, 255, 0.1);
+  box-shadow: inset 2px 0 0 rgba(53, 208, 255, 0.5);
+}
+/* the gated seat keeps its gold inside the sheet too (same semantic as the
+   bar berth — off the cyan accent every other tab shares). */
+body.arcade-shell .arcade-nav-sheet button[data-arcade-tab-btn="ai"] { color: #D9B24E; }
+body.arcade-shell .arcade-nav-sheet button[data-arcade-tab-btn="ai"].is-on {
+  color: #D9B24E;
+  background: rgba(217, 178, 78, 0.12);
+  box-shadow: inset 2px 0 0 rgba(217, 178, 78, 0.55);
+}
+/* Sheet entry motion — reduced-motion seats get the still-state only
+   (the sheet simply appears; no transform, no fade). */
+@media (prefers-reduced-motion: no-preference) {
+  body.arcade-shell .arcade-nav-sheet.is-open { animation: arcadeNavSheetIn 140ms ease-out; }
+}
+@keyframes arcadeNavSheetIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
 body.arcade-shell .arcade-pill {
   display: inline-flex;
   align-items: center;
@@ -680,6 +763,75 @@ body.arcade-shell .arcade-addons-type__count {
   color: var(--arc-faint);
 }
 body.arcade-shell .arcade-addons-types button.is-on .arcade-addons-type__count { color: var(--arc-info); }
+
+/* S46B — the left type column follows the top bar's fold discipline
+   (TASK-49): below its own MEASURED floor (column + widest card's
+   min-content + stage padding — measureAddonsTypesFold), the column leaves
+   the stage and filtering moves to a TYPES ▾ drawer of full-size rows.
+   Drawer or rail is the ruled-acceptable end state; unreachable/clipped is
+   not. The trigger names the live filter so the folded state never hides
+   WHAT is being shown. */
+body.arcade-shell .arcade-addons .arcade-panel-head { position: relative; }
+/* the TYPES ▾ trigger takes head room at folded widths — the title keeps one line */
+body.arcade-shell .arcade-addons .arcade-panel-head .arcade-panel-title { white-space: nowrap; }
+body.arcade-shell .arcade-addons-typesbtn {
+  display: none;
+  align-items: center; gap: 4px;
+  height: 28px; padding: 0 10px;
+  border-radius: var(--arc-r);
+  border: 1px solid var(--arc-edge);
+  background: var(--arc-panel-2);
+  color: var(--arc-muted);
+  font: 600 11px/1 var(--arc-font-ui);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+body.arcade-shell .arcade-addons-typesbtn:hover { color: var(--arc-ink); border-color: #363b46; }
+body.arcade-shell .arcade-addons-typesbtn span { color: var(--arc-info); }
+body.arcade-shell .arcade-addons.is-types-folded .arcade-addons-types { display: none; }
+body.arcade-shell .arcade-addons.is-types-folded .arcade-addons-typesbtn { display: inline-flex; }
+body.arcade-shell .arcade-addons-types-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 8px;
+  z-index: 2020;
+  min-width: 220px;
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: calc(100vh - var(--arc-topbar-h) - 80px);
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--arc-panel-3);
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-addons-types-pop.is-open { display: flex; }
+body.arcade-shell .arcade-addons-types-pop button {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px;
+  border: 1px solid transparent; border-radius: 4px;
+  background: transparent;
+  color: var(--arc-ink);
+  font: 600 12px/1.3 var(--arc-font-ui);
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+body.arcade-shell .arcade-addons-types-pop button:hover { background: var(--arc-panel-2); }
+body.arcade-shell .arcade-addons-types-pop button.is-on {
+  color: var(--arc-info);
+  background: rgba(53, 208, 255, 0.1);
+  border-color: rgba(53, 208, 255, 0.3);
+}
+@media (prefers-reduced-motion: no-preference) {
+  body.arcade-shell .arcade-addons-types-pop.is-open { animation: arcadeNavSheetIn 140ms ease-out; }
+}
 body.arcade-shell .arcade-addons-stage {
   flex: 1; min-width: 0;
   padding: 18px; overflow-y: auto;

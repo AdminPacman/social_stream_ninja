@@ -286,6 +286,21 @@
         brand.addEventListener('click', function () { navigateArcadeTab('main'); });
         header.appendChild(brand);
 
+        // S46B hamburger fold (TASK-49) — the burger + nav sheet exist at
+        // EVERY width but only take seats while the header carries the
+        // is-folded class, which measureTopbarFold() sets from MEASURED
+        // widths (see the fold section below buildMoreMenu()). Logo and
+        // clock keep their seats at every width; only nav + More fold.
+        var burger = document.createElement('button');
+        burger.type = 'button';
+        burger.className = 'arcade-burger';
+        burger.setAttribute('aria-label', 'Open navigation menu');
+        burger.setAttribute('aria-haspopup', 'true');
+        burger.setAttribute('aria-expanded', 'false');
+        burger.setAttribute('aria-controls', 'arcade-nav-sheet');
+        burger.textContent = '☰';
+        header.appendChild(burger);
+
         var nav = document.createElement('nav');
         nav.className = 'arcade-nav';
         nav.setAttribute('aria-label', 'Arcade screens');
@@ -314,6 +329,8 @@
 
         var clockWrap = buildClockControl();
         header.appendChild(clockWrap);
+
+        header.appendChild(buildNavSheet(burger));
 
         document.body.appendChild(header);
         startBftClock(clockWrap.querySelector('.arcade-bft'));
@@ -469,6 +486,219 @@
         });
 
         return wrap;
+    }
+
+    // --------------------------------------------------------------------
+    // S46B — THE HAMBURGER FOLD (TASK-49, charter round 5). Below the width
+    // where EVERY top-bar tab keeps its full hit target, the bar folds into
+    // a burger (☰) that opens a sheet of FULL-SIZE rows — hit targets never
+    // shrink, nothing clips, no horizontal scroll. The fold threshold is
+    // MEASURED, never a magic px: measureTopbarFold() sums the real rendered
+    // widths of every full-bar seat (brand + natural nav + More + beta chip
+    // + clock) plus the bar's own gaps/padding and folds the instant the
+    // window can't pay that bill. Logo and clock keep their seats at every
+    // width — only the nav cluster folds. The Add-ons left type column
+    // follows the same discipline (measureAddonsTypesFold): below its own
+    // measured floor it becomes a TYPES ▾ drawer of full-size rows.
+    // --------------------------------------------------------------------
+    var FOLD_HYSTERESIS_PX = 16; // anti-flicker band around the MEASURED threshold only
+    var navSheetApi = null;    // { close, isOpen } — set by buildNavSheet()
+
+    function buildNavSheet(burger) {
+        var sheet = document.createElement('div');
+        sheet.className = 'arcade-nav-sheet';
+        sheet.id = 'arcade-nav-sheet';
+        sheet.setAttribute('role', 'menu');
+        sheet.setAttribute('aria-label', 'Arcade screens');
+
+        function addRow(label, onActivate, tabBtnId) {
+            var row = document.createElement('button');
+            row.type = 'button';
+            row.setAttribute('role', 'menuitem');
+            if (tabBtnId) row.dataset.arcadeTabBtn = tabBtnId; // is-on rides setArcadeTab's existing [data-arcade-tab-btn] sweep
+            row.textContent = label;
+            row.addEventListener('click', function () {
+                closeSheet(true);
+                onActivate();
+            });
+            sheet.appendChild(row);
+        }
+
+        TABS.forEach(function (tab) {
+            addRow(tab.label, function () { navigateArcadeTab(tab.id); }, tab.id);
+        });
+
+        // The More▾ set folds in with the tabs — same stock trio + the S46
+        // transition hatch, so every top-bar destination stays reachable at
+        // full row size while folded.
+        var sep = document.createElement('div');
+        sep.className = 'arcade-more-sep';
+        sep.setAttribute('role', 'separator');
+        sheet.appendChild(sep);
+        MORE_ITEMS.forEach(function (item) {
+            addRow(item.label, function () {
+                setArcadeTab(null); // no nav berth is "on" for a More destination
+                clickStockNav(item.page);
+            });
+        });
+        var sep2 = document.createElement('div');
+        sep2.className = 'arcade-more-sep';
+        sep2.setAttribute('role', 'separator');
+        sheet.appendChild(sep2);
+        var note = document.createElement('div');
+        note.className = 'arcade-more-note';
+        note.textContent = 'Moved to Add-ons';
+        sheet.appendChild(note);
+        MORE_LEGACY_ITEMS.forEach(function (item) {
+            addRow(item.label, function () { navigateArcadeTab(item.tab); });
+        });
+
+        function isOpen() { return sheet.classList.contains('is-open'); }
+        function openSheet() {
+            sheet.classList.add('is-open');
+            burger.setAttribute('aria-expanded', 'true');
+            burger.setAttribute('aria-label', 'Close navigation menu');
+            // Focus lands IN the sheet on open — the current tab's row when
+            // there is one, else the first row.
+            var current = sheet.querySelector('button.is-on') || sheet.querySelector('button');
+            if (current) current.focus();
+        }
+        function closeSheet(returnFocus) {
+            if (!isOpen()) return;
+            sheet.classList.remove('is-open');
+            burger.setAttribute('aria-expanded', 'false');
+            burger.setAttribute('aria-label', 'Open navigation menu');
+            if (returnFocus) burger.focus(); // focus returns to the trigger on close
+        }
+        navSheetApi = { close: closeSheet, isOpen: isOpen };
+
+        burger.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (isOpen()) closeSheet(true); else openSheet();
+        });
+        sheet.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { closeSheet(false); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && isOpen()) closeSheet(true);
+        });
+
+        return sheet;
+    }
+
+    var topbarFolded = false;
+    var topbarNavNatural = null;  // px — nav's full-content width, cached while unfolded (tab set is fixed at boot)
+    var topbarMoreNatural = null; // px — More trigger's rendered width, same cache discipline
+
+    function measureTopbarFold() {
+        var header = document.querySelector('.arcade-topbar');
+        if (!header) return;
+        var brand = header.querySelector('.arcade-brand');
+        var nav = header.querySelector('.arcade-nav');
+        var more = header.querySelector('.arcade-more');
+        var clockWrap = header.querySelector('.arcade-clockbtn');
+        if (!brand || !nav || !clockWrap) return;
+
+        if (!topbarFolded) {
+            // The nav cluster is in the layout — refresh the natural-width
+            // cache off the live boxes. The nav is overflow:hidden and
+            // flex-shrinkable, so scrollWidth is the honest FULL-content
+            // width even when the bar is already squeezing it.
+            topbarNavNatural = nav.scrollWidth;
+            topbarMoreNatural = more ? more.offsetWidth : 0;
+        }
+        if (topbarNavNatural === null) return; // never seen unfolded — nothing honest to compare yet
+
+        var cs = getComputedStyle(header);
+        var gap = parseFloat(cs.columnGap) || 0;
+        var required = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        var seats = 0; // visible flex children other than the spacer
+        required += brand.offsetWidth; seats++;
+        required += topbarNavNatural; seats++;
+        if (more) { required += topbarMoreNatural; seats++; }
+        var beta = header.querySelector('.arcade-pill'); // beta chip only exists on the beta channel
+        if (beta) { required += beta.offsetWidth; seats++; }
+        required += clockWrap.offsetWidth; seats++; // live — the face width changes with seconds/mode
+        required += gap * (seats + 1 - 1); // +1 for the spacer, −1: N children have N−1 gaps
+
+        var available = header.clientWidth;
+        var shouldFold = topbarFolded
+            ? available < required + FOLD_HYSTERESIS_PX
+            : available < required;
+        if (shouldFold !== topbarFolded) {
+            topbarFolded = shouldFold;
+            header.classList.toggle('is-folded', shouldFold);
+            if (!shouldFold && navSheetApi) navSheetApi.close(false);
+        }
+    }
+
+    var addonsTypesFolded = false;
+    var addonsTypesNatural = null; // px — the type column's rendered width, cached while unfolded
+    var addonsCardMin = null;      // px — widest card's min-content + stage padding, measured once
+    var addonsTypesPopApi = null;  // { close, isOpen } — set by buildAddonsPanel()
+
+    function measureAddonsTypesFold() {
+        var panel = document.querySelector('.arcade-addons');
+        if (!panel) return;
+        if (getComputedStyle(panel).display === 'none') return; // hidden panel has no honest geometry — keep last state
+        var body = panel.querySelector('.arcade-addons-body');
+        var typesNav = panel.querySelector('.arcade-addons-types');
+        var stage = panel.querySelector('.arcade-addons-stage');
+        if (!body || !typesNav || !stage) return;
+
+        if (addonsCardMin === null) {
+            // The floor is measured, not guessed: the widest card's
+            // MIN-CONTENT width (below it the cards would start crushing
+            // their own buttons — the "hit targets never shrink" line)
+            // plus the stage's real padding.
+            var maxMin = 0;
+            panel.querySelectorAll('#arcade-addons-grid .arcade-el-card').forEach(function (card) {
+                var prevPosition = card.style.position;
+                var prevVisibility = card.style.visibility;
+                var prevWidth = card.style.width;
+                card.style.position = 'absolute';
+                card.style.visibility = 'hidden';
+                card.style.width = 'min-content';
+                maxMin = Math.max(maxMin, card.offsetWidth);
+                card.style.position = prevPosition;
+                card.style.visibility = prevVisibility;
+                card.style.width = prevWidth;
+            });
+            var scs = getComputedStyle(stage);
+            addonsCardMin = maxMin + (parseFloat(scs.paddingLeft) || 0) + (parseFloat(scs.paddingRight) || 0);
+        }
+        if (!addonsTypesFolded) addonsTypesNatural = typesNav.offsetWidth;
+        if (addonsTypesNatural === null) return;
+
+        var required = addonsTypesNatural + addonsCardMin;
+        var available = body.clientWidth;
+        var shouldFold = addonsTypesFolded
+            ? available < required + FOLD_HYSTERESIS_PX
+            : available < required;
+        if (shouldFold !== addonsTypesFolded) {
+            addonsTypesFolded = shouldFold;
+            panel.classList.toggle('is-types-folded', shouldFold);
+            if (!shouldFold && addonsTypesPopApi) addonsTypesPopApi.close(false);
+        }
+    }
+
+    var foldMeasureRaf = 0;
+    function requestFoldMeasures() {
+        if (foldMeasureRaf) return;
+        foldMeasureRaf = requestAnimationFrame(function () {
+            foldMeasureRaf = 0;
+            measureTopbarFold();
+            measureAddonsTypesFold();
+        });
+    }
+
+    function installFoldObservers() {
+        window.addEventListener('resize', requestFoldMeasures);
+        // Webfont arrival changes real tab/wordmark widths — re-measure once
+        // the faces settle so the threshold stays honest.
+        try {
+            if (document.fonts && document.fonts.ready) document.fonts.ready.then(requestFoldMeasures);
+        } catch (e) { /* noop */ }
+        requestFoldMeasures();
     }
 
     // --------------------------------------------------------------------
@@ -824,6 +1054,7 @@
         if (typeof bftRenderDisplay === 'function') bftRenderDisplay();
         if (typeof bftRescheduleTick === 'function') bftRescheduleTick();
         if (typeof bftRescheduleSecondsTimer === 'function') bftRescheduleSecondsTimer();
+        requestFoldMeasures(); // S46B — seconds/mode changes the clock face's real width
         // Toggling seconds ON with a real height already known and no anchor
         // yet: kick the cold-start timestamp fetch immediately so seconds
         // start ticking within one fetch, per the popover's live-apply law.
@@ -974,6 +1205,7 @@
 
     function navigateArcadeTab(tabId) {
         teardownAiAreaFrameIfLeaving(tabId);
+        requestFoldMeasures(); // S46B — a panel becoming visible changes what the fold math sees
         if (CUSTOM_TABS[tabId]) {
             // Custom in-shell panel (e.g. Elements): no stock page to drive —
             // remember the tab we're leaving and flip the tab state; CSS
@@ -1116,6 +1348,9 @@
         panel.innerHTML =
             '<div class="arcade-panel-head">' +
             '<span class="arcade-panel-title">ADD-ONS</span>' +
+            '<button type="button" class="arcade-addons-typesbtn" aria-haspopup="true" aria-expanded="false" aria-controls="arcade-addons-types-pop">' +
+            'TYPE: <span id="arcade-addons-typesbtn-label">ALL</span> ▾</button>' +
+            '<div class="arcade-addons-types-pop" id="arcade-addons-types-pop" role="menu" aria-label="Add-on types"></div>' +
             '<span class="arcade-spacer"></span>' +
             '<span class="arcade-el-hint">Everything on stream is an add-on — open one to work with it in place</span>' +
             '</div>' +
@@ -1145,6 +1380,58 @@
             typesNav.appendChild(btn);
         });
 
+        // S46B — the same type rows again as FULL-SIZE drawer rows for the
+        // folded state (is-types-folded hides the column, shows the TYPES ▾
+        // trigger). They carry the same data-arcade-addon-type attribute, so
+        // applyAddonsFilter's existing sweep keeps is-on/aria-pressed in
+        // sync across both presentations for free.
+        var typesBtn = panel.querySelector('.arcade-addons-typesbtn');
+        var typesPop = panel.querySelector('.arcade-addons-types-pop');
+        ADDON_TYPES.forEach(function (t) {
+            var row = document.createElement('button');
+            row.type = 'button';
+            row.dataset.arcadeAddonType = t.id;
+            row.setAttribute('role', 'menuitem');
+            row.setAttribute('aria-pressed', String(t.id === addonsActiveType));
+            var rowLabel = document.createElement('span');
+            rowLabel.textContent = t.label;
+            row.appendChild(rowLabel);
+            var rowCount = document.createElement('span');
+            rowCount.className = 'arcade-addons-type__count';
+            rowCount.textContent = String(addonTypeCount(t.id));
+            row.appendChild(rowCount);
+            row.addEventListener('click', function () {
+                closeTypesPop(true);
+                applyAddonsFilter(t.id);
+            });
+            typesPop.appendChild(row);
+        });
+
+        function typesPopIsOpen() { return typesPop.classList.contains('is-open'); }
+        function openTypesPop() {
+            typesPop.classList.add('is-open');
+            typesBtn.setAttribute('aria-expanded', 'true');
+            var current = typesPop.querySelector('button.is-on') || typesPop.querySelector('button');
+            if (current) current.focus(); // focus lands in the drawer on open
+        }
+        function closeTypesPop(returnFocus) {
+            if (!typesPopIsOpen()) return;
+            typesPop.classList.remove('is-open');
+            typesBtn.setAttribute('aria-expanded', 'false');
+            if (returnFocus) typesBtn.focus(); // and returns to the trigger on close
+        }
+        addonsTypesPopApi = { close: closeTypesPop, isOpen: typesPopIsOpen };
+
+        typesBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (typesPopIsOpen()) closeTypesPop(true); else openTypesPop();
+        });
+        typesPop.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { closeTypesPop(false); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && typesPopIsOpen()) closeTypesPop(true);
+        });
+
         // Cards in ruled type order: door cards first within a type, then
         // the re-homed element cards. Built once; filtering only toggles
         // [hidden] (applyAddonsFilter).
@@ -1166,6 +1453,8 @@
         addonsActiveType = typeId;
         var panel = document.querySelector('.arcade-addons');
         if (!panel) return;
+        var btnLabel = panel.querySelector('#arcade-addons-typesbtn-label');
+        if (btnLabel) btnLabel.textContent = addonTypeLabel(typeId).toUpperCase(); // S46B folded trigger names the live filter
         panel.querySelectorAll('[data-arcade-addon-type]').forEach(function (btn) {
             var on = btn.dataset.arcadeAddonType === typeId;
             btn.classList.toggle('is-on', on);
@@ -5714,6 +6003,7 @@
         buildAlertsPanel();
         if (CUSTOM_TABS.ai) buildAiPanel();
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
+        installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }
