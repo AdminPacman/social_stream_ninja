@@ -1355,3 +1355,45 @@ body.arcade-shell .new-session-btn:hover {
 }
 body.arcade-shell .session-remove-btn { color: var(--arc-danger); }
 body.arcade-shell .sessions-list { background: var(--arc-panel-2); border: 1px solid var(--arc-edge-soft); }
+
+
+/* --------------------------------------------------------------------------
+   S41 — ON-AIR strip (analytics pane family, arcade-shell.js renderOnAirStrip).
+   OBS stream state read off the background bridge's __ssnObsStreamState
+   global — three honest states only: ON AIR / OFF AIR / UNKNOWN (dash-face
+   until the first OBS stream event arrives; that face is also what "the
+   actions.html<->OBS link isn't up" honestly looks like). House tokens; NO
+   gold — no money on this screen. Live-green only on the genuinely-live face,
+   matching the existing .arcade-dot--live / .arcade-pill--live semantic.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-onair {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; flex: 0 0 auto;
+  background: var(--arc-panel-2);
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r);
+}
+body.arcade-shell .arcade-onair__dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  background: transparent; border: 1.5px solid var(--arc-faint);
+}
+body.arcade-shell .arcade-onair__label {
+  font: 700 12px/1 var(--arc-font-mono); letter-spacing: 0.12em; color: var(--arc-faint);
+}
+body.arcade-shell .arcade-onair__sub {
+  font: 400 10px/1.4 var(--arc-font-mono); font-variant-numeric: tabular-nums;
+  color: var(--arc-muted); margin-left: auto; text-align: right;
+}
+body.arcade-shell .arcade-onair[data-onair="live"] {
+  border-color: rgba(57, 255, 20, 0.35); background: rgba(57, 255, 20, 0.07);
+}
+body.arcade-shell .arcade-onair[data-onair="live"] .arcade-onair__dot {
+  background: var(--arc-live); border-color: transparent;
+  box-shadow: 0 0 6px rgba(57, 255, 20, 0.6);
+  animation: arcade-pulse 2s ease-in-out infinite;
+}
+body.arcade-shell .arcade-onair[data-onair="live"] .arcade-onair__label { color: var(--arc-live); }
+body.arcade-shell .arcade-onair[data-onair="offline"] .arcade-onair__label { color: var(--arc-muted); }
+@media (prefers-reduced-motion: reduce) {
+  body.arcade-shell .arcade-onair[data-onair="live"] .arcade-onair__dot { animation: none; }
+}
