@@ -1658,22 +1658,33 @@
     }
 
     // --------------------------------------------------------------------
-    // Alerts Builder — custom "Alerts" tab (Stage 2 shell surface). Spec:
-    // pacsarcade design-briefs/ssn-ui-overhaul/alert-style-builder-spec.md.
+    // Alerts — EVENTS AS EASY FLOWS (S47 interior redesign, ruled layout
+    // rounds 6/7; supersedes the Stage-2 card grid, which lives on only as
+    // the param25 plumbing below). Spec: TASK-44/S47 brief + pacsarcade
+    // design-briefs/ssn-ui-overhaul/alert-style-builder-spec.md.
     //
-    // Canvas-first per Pac's design-tool ruling (same law the Style tab
-    // follows): a live multi-alerts.html PREVIEW iframe is the hero, with a
-    // compact rail of 7 event-meaning cards below it (follow/subscription/
-    // donation/bits/raid/auction/hype). Each card edits accent, style
-    // preset, headline template, font, fallback media, sound, and enabled —
-    // the SAME per-event param25 settings the popup's multi-alert section
-    // owns (multi-alerts.js CATEGORY_*_PARAMS, ~:221-280: followaccent,
-    // followstyle, followtemplate [Stage 2 H3], followfont/followmedia
-    // [Stage 2 H4], followsound, disablefollows — and the auction/hype
-    // opt-in pair auctionwins/hypetrain). Reads/writes go through the SAME
-    // canonical saveSetting IPC (window.ninjafy.sendMessage) the Style tab
-    // already uses for ITS settings — settings are shared truth, so an edit
-    // here shows up in the popup's multi-alert section and vice versa.
+    // LAYOUT: LEFT = the alert EVENTS as a selectable list, grouped by the
+    // stock builder's own sectioning (ALERT_GROUPS — see the citation there),
+    // every row honestly showing its tier chip and its real active/inactive
+    // state (driven by the same param25 enable settings the popup owns).
+    // RIGHT = a BIG multi-alerts.html preview pane on TOP (test-fire lives
+    // here, never on a live session) with the selected event's edit/config
+    // BELOW: variant dropdown, tier select, [Style] and [Event flow] doors.
+    //
+    // MODEL (one card per event type — no card multiplication): the stock 7
+    // (follow/subscription/donation/bits/raid/auction/hype) each edit the
+    // SAME per-event param25 settings the popup's multi-alert section owns
+    // (multi-alerts.js CATEGORY_*_PARAMS, ~:221-280). VARIANTS live in a
+    // dropdown per event: "Template" (the stock param25 look, snapshotted at
+    // first fork) plus every custom the streamer saved. Editing a template
+    // FORKS — saves-as a new option, template untouched; the selected option
+    // is written through to param25, so it is what fires live (and what the
+    // popup's own copy-link composes). Variant/flow/tier metadata rides ONE
+    // arcade-owned settings key (arcadeAlertVariants, textparam1, canonical
+    // saveSetting — same rail arcadeStylePresets uses); the tier NAMES ride
+    // a second key (arcadeAlertTiers) seeded once here and taken over by
+    // S51's Points-page admin. Under the hood alerts stay
+    // multi-alerts.html + EventFlow — NO parallel alert engine.
     //
     // PREVIEW ISOLATION GUARANTEE: the preview iframe is always loaded with
     // &preview=1, which flips multi-alerts.js's settings.previewOnly flag —
@@ -1725,8 +1736,68 @@
         hype: 'Hype Train reached Level {level}!'
     };
 
+    // S47 — the LEFT LIST's grouping. The literal strings "priority/general/
+    // other alerts" do NOT exist in stock (grep-verified across the bundle);
+    // this mapping derives from what the stock builder REALLY sections, cited:
+    //  - PRIORITY (money events): donation/bits are the ONLY alert categories
+    //    stock gives a per-event gate ("Minimum cash value for donation/bits
+    //    alerts", popup.html:6112-6115, mindonation param), and stock's dock
+    //    ships a donation-priority concept (donationpriority, popup.html:12830).
+    //  - GENERAL (social events): follow/subscription/raid — the remaining
+    //    default-enabled categories (CATEGORY_DISABLE_PARAMS,
+    //    multi-alerts.js:231-238; the "Skip X alerts" toggles,
+    //    popup.html:6064-6097).
+    //  - OTHER (opt-in): auction/hype — stock's opt-in pair
+    //    (CATEGORY_OPT_IN_PARAMS, multi-alerts.js:240-243; both toggles
+    //    titled "Opt-in: …", popup.html:6098-6111).
+    var ALERT_GROUPS = [
+        { id: 'priority', label: 'Priority alerts', events: ['donation', 'bits'] },
+        { id: 'general', label: 'General alerts', events: ['follow', 'subscription', 'raid'] },
+        { id: 'other', label: 'Other (opt-in)', events: ['auction', 'hype'] }
+    ];
+
+    // EventFlow trigger backing each stock event — for the [Event flow] door
+    // seed. Dedicated stock triggers where they exist (EventFlowEditor.js
+    // :247-253); auction/hype have none, so they ride eventCustom with the
+    // REAL event names multi-alerts.js keys on (multi-alerts.js:100-101).
+    var ALERT_EVENT_TRIGGERS = {
+        follow: { triggerType: 'eventNewFollower' },
+        subscription: { triggerType: 'eventNewSubscriber' },
+        donation: { triggerType: 'eventDonation' },
+        bits: { triggerType: 'eventCheer' },
+        raid: { triggerType: 'eventRaid' },
+        auction: { triggerType: 'eventCustom', eventType: 'auction_update' },
+        hype: { triggerType: 'eventCustom', eventType: 'hype_train' }
+    };
+
+    // "+ Add event" picker defaults: the stock DEDICATED event triggers that
+    // are NOT already one of the 7 shelf events (EventFlowEditor.js:249-250).
+    var ALERT_ADD_EVENT_DEFAULTS = [
+        { triggerType: 'eventResub', eventType: '', label: 'Resub / Renewal', desc: 'Fires when a subscription or membership renews.' },
+        { triggerType: 'eventGiftSub', eventType: '', label: 'Gift Sub', desc: 'Fires when someone gifts subscriptions.' }
+    ];
+
+    // Priority conditions wire ONLY through what EventFlow already evaluates
+    // (no new evaluators invented): platform rides the dedicated triggers'
+    // own config.sources filter (EventFlowSystem.js:2240-2305), first-time
+    // rides messageProperties' requiredProperties on the real `firsttime`
+    // message property (EventFlowSystem.js:2841-2880; set by background.js
+    // :16595-16604 when the stock `firsttimers` setting is on).
+    var ALERT_CONDITION_PLATFORMS = ['twitch', 'kick', 'youtube', 'tiktok'];
+
+    // Arcade-owned settings keys (canonical saveSetting, textparam1 — the
+    // same rail arcadeStylePresets rides). NAMES only ever appear in reports.
+    var ALERT_VARIANTS_KEY = 'arcadeAlertVariants';
+    var ALERT_TIERS_KEY = 'arcadeAlertTiers';
+    var ALERT_TIERS_DEFAULT = ['HIGH', 'NORMAL', 'LOW']; // minimal names-only list; S51's Points-page admin takes this key over
+    var ALERT_DEFAULT_KEY = 'default'; // the "All types — default" left-list entry
+
     var alertsPanelLive = false;
-    var alertsState = {}; // category -> { accent, style, template, font, media, sound, enabled }
+    var alertsState = {}; // category -> { accent, style, template, font, media, sound, enabled } — live param25 truth
+    var alertsDoc = null; // parsed arcadeAlertVariants doc (normalized)
+    var alertTiers = ALERT_TIERS_DEFAULT.slice();
+    var alertsSelectedKey = 'follow'; // ALERT_DEFAULT_KEY | stock event id | custom event id
+    var alertsStyleOpen = true;
     var alertsPreviewToken = 0;
     var alertsReloadTimer = null;
 
@@ -2415,7 +2486,7 @@
     function buildAlertsPanel() {
         var panel = document.createElement('section');
         panel.className = 'arcade-alerts';
-        panel.setAttribute('aria-label', 'Alert box builder');
+        panel.setAttribute('aria-label', 'Alerts — events as easy flows');
         panel.innerHTML =
             '<div class="arcade-panel-head">' +
             '<span class="arcade-panel-title">ALERTS</span>' +
@@ -2424,22 +2495,27 @@
             '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--primary" id="arcade-alerts-copy">Copy overlay URL</button>' +
             '</div>' +
             '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-alerts-list" role="listbox" aria-label="Alert events"></div>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-add">+ Add event</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
             '<div class="arcade-alerts-preview">' +
             '<div class="arcade-alerts-preview-bar">' +
             '<span class="arcade-style-hint" id="arcade-alerts-preview-hint">Loading preview…</span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--primary" id="arcade-alerts-test">Fire test alert</button>' +
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-clear">Clear</button>' +
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-reload">Reload preview</button>' +
             '</div>' +
             '<iframe id="arcade-alerts-preview-frame" title="Alert box preview"></iframe>' +
             '</div>' +
-            '<div class="arcade-alerts-rail" id="arcade-alerts-rail"></div>' +
+            '<div class="arcade-evt-config" id="arcade-alerts-config"></div>' +
+            '</div>' +
             '</div>';
         document.body.appendChild(panel);
 
-        var rail = panel.querySelector('#arcade-alerts-rail');
         ALERT_EVENTS.forEach(function (evt) {
             alertsState[evt.id] = defaultAlertCategoryState(evt.id);
-            rail.appendChild(buildAlertEventCard(evt));
         });
 
         panel.querySelector('#arcade-alerts-copy').addEventListener('click', function (e) {
@@ -2447,6 +2523,8 @@
         });
         panel.querySelector('#arcade-alerts-clear').addEventListener('click', clearAlertsPreview);
         panel.querySelector('#arcade-alerts-reload').addEventListener('click', reloadAlertsPreview);
+        panel.querySelector('#arcade-alerts-test').addEventListener('click', fireSelectedTestAlert);
+        panel.querySelector('#arcade-alerts-add').addEventListener('click', openAddEventPicker);
     }
 
     function buildAlertFieldRow(category, field, label, placeholder) {
@@ -2488,55 +2566,6 @@
         return row;
     }
 
-    function buildAlertEventCard(evt) {
-        var card = document.createElement('article');
-        card.className = 'arcade-alert-card';
-        card.dataset.arcadeAlertEvent = evt.id;
-
-        var head = document.createElement('div');
-        head.className = 'arcade-alert-card__head';
-        var name = document.createElement('h3');
-        name.className = 'arcade-alert-card__name';
-        name.textContent = evt.emoji + ' ' + evt.label;
-        head.appendChild(name);
-
-        var enableLabel = document.createElement('label');
-        enableLabel.className = 'arcade-alert-card__enable';
-        var enableInput = document.createElement('input');
-        enableInput.type = 'checkbox';
-        enableInput.checked = alertsState[evt.id].enabled;
-        enableInput.dataset.arcadeAlertField = 'enabled';
-        enableInput.addEventListener('change', function () {
-            setAlertField(evt.id, 'enabled', enableInput.checked, null);
-        });
-        enableLabel.appendChild(enableInput);
-        enableLabel.appendChild(document.createTextNode('On'));
-        head.appendChild(enableLabel);
-        card.appendChild(head);
-
-        var body = document.createElement('div');
-        body.className = 'arcade-alert-card__body';
-        body.appendChild(buildAlertFieldRow(evt.id, 'accent', 'Accent', CATEGORY_ACCENT_DEFAULTS[evt.id] || '#9146ff'));
-        body.appendChild(buildAlertStyleRow(evt.id));
-        body.appendChild(buildAlertFieldRow(evt.id, 'template', 'Headline', ALERT_TEMPLATE_PLACEHOLDER[evt.id] || ''));
-        body.appendChild(buildAlertFieldRow(evt.id, 'font', 'Font', 'Georgia, serif'));
-        body.appendChild(buildAlertFieldRow(evt.id, 'media', 'Fallback media', 'https://…'));
-        body.appendChild(buildAlertFieldRow(evt.id, 'sound', 'Sound URL', 'https://…'));
-        card.appendChild(body);
-
-        var actions = document.createElement('div');
-        actions.className = 'arcade-alert-card__actions';
-        var testBtn = document.createElement('button');
-        testBtn.type = 'button';
-        testBtn.className = 'arcade-btn arcade-btn--sm';
-        testBtn.textContent = 'Fire test alert';
-        testBtn.addEventListener('click', function () { fireTestAlert(evt.id); });
-        actions.appendChild(testBtn);
-        card.appendChild(actions);
-
-        return card;
-    }
-
     // Same accent defaults multi-alerts.js's CATEGORY_ACCENTS ships (~:35-43)
     // — placeholder-only (never a real stored value), so an untouched field
     // honestly shows what the alert box will actually render.
@@ -2553,11 +2582,163 @@
         } catch (e) { console.error('[arcade-shell] alert setting save failed:', e); }
     }
 
+    // --------------------------------------------------------------------
+    // S47 variants doc — helpers. Look shape everywhere:
+    // { accent, style, template, font, media, sound } ('twitch'/'' = unset).
+    // --------------------------------------------------------------------
+    function blankAlertLook() {
+        return { accent: '', style: 'twitch', template: '', font: '', media: '', sound: '' };
+    }
+
+    function normalizeAlertLook(state) {
+        var look = blankAlertLook();
+        if (state && typeof state === 'object') {
+            ['accent', 'template', 'font', 'media', 'sound'].forEach(function (field) {
+                if (typeof state[field] === 'string') look[field] = state[field];
+            });
+            if (typeof state.style === 'string' && ALERT_STYLE_OPTIONS.indexOf(state.style) !== -1) look.style = state.style;
+        }
+        return look;
+    }
+
+    function defaultAlertTier() {
+        return alertTiers.indexOf('NORMAL') !== -1 ? 'NORMAL' : alertTiers[alertTiers.length - 1];
+    }
+
+    function normalizeAlertsDoc(raw) {
+        var doc = null;
+        if (raw) { try { doc = JSON.parse(raw); } catch (e) { doc = null; } }
+        if (!doc || typeof doc !== 'object') doc = {};
+        if (!doc.defaults || typeof doc.defaults !== 'object') doc.defaults = {};
+        doc.defaults.state = normalizeAlertLook(doc.defaults.state);
+        if (!doc.events || typeof doc.events !== 'object') doc.events = {};
+        ALERT_EVENTS.forEach(function (evt) {
+            var rec = doc.events[evt.id];
+            if (!rec || typeof rec !== 'object') rec = {};
+            if (typeof rec.selected !== 'string' || !rec.selected) rec.selected = 'template';
+            if (typeof rec.tier !== 'string' || !rec.tier) rec.tier = defaultAlertTier();
+            if (!Array.isArray(rec.variants)) rec.variants = [];
+            rec.variants.forEach(function (v) {
+                v.state = normalizeAlertLook(v.state);
+                if (!v.condition || typeof v.condition !== 'object') v.condition = { firsttime: false, platform: '' };
+                if (typeof v.flowId !== 'string') v.flowId = null;
+            });
+            if (rec.templateState) rec.templateState = normalizeAlertLook(rec.templateState);
+            if (rec.selected !== 'template' && !rec.variants.some(function (v) { return v.id === rec.selected; })) rec.selected = 'template';
+            doc.events[evt.id] = rec;
+        });
+        if (!Array.isArray(doc.custom)) doc.custom = [];
+        doc.custom.forEach(function (c) {
+            if (typeof c.tier !== 'string' || !c.tier) c.tier = defaultAlertTier();
+            if (typeof c.flowId !== 'string') c.flowId = null;
+        });
+        doc.version = 1;
+        return doc;
+    }
+
+    function saveAlertsDoc() {
+        if (!alertsDoc) return;
+        saveAlertSetting('textparam1', ALERT_VARIANTS_KEY, JSON.stringify(alertsDoc));
+    }
+
+    function isBlankAlertField(field, value) {
+        return field === 'style' ? (!value || value === 'twitch') : !value;
+    }
+
+    function alertEventMeta(category) {
+        for (var i = 0; i < ALERT_EVENTS.length; i++) {
+            if (ALERT_EVENTS[i].id === category) return ALERT_EVENTS[i];
+        }
+        return null;
+    }
+
+    function isStockAlertKey(key) {
+        return !!alertEventMeta(key);
+    }
+
+    function getCustomAlertEvent(id) {
+        if (!alertsDoc) return null;
+        for (var i = 0; i < alertsDoc.custom.length; i++) {
+            if (alertsDoc.custom[i].id === id) return alertsDoc.custom[i];
+        }
+        return null;
+    }
+
+    function lookFromAlertState(st) {
+        return normalizeAlertLook(st);
+    }
+
+    function alertSelectedVariant(category) {
+        var rec = alertsDoc && alertsDoc.events[category];
+        if (!rec || rec.selected === 'template') return null;
+        for (var i = 0; i < rec.variants.length; i++) {
+            if (rec.variants[i].id === rec.selected) return rec.variants[i];
+        }
+        return null;
+    }
+
+    // Editing a template FORKS (ruled: the template stays untouched and
+    // selectable) — the fork snapshots the live param25 look as templateState
+    // the first time, so re-selecting "Template" restores exactly that.
+    function forkAlertVariant(category) {
+        var rec = alertsDoc.events[category];
+        var live = lookFromAlertState(alertsState[category]);
+        if (!rec.templateState) rec.templateState = live;
+        var variant = {
+            id: mintAlertId('v'),
+            name: 'Custom ' + (rec.variants.length + 1),
+            state: normalizeAlertLook(live),
+            flowId: null,
+            condition: { firsttime: false, platform: '' }
+        };
+        rec.variants.push(variant);
+        rec.selected = variant.id;
+        return variant;
+    }
+
+    // The selected option is what fires live: write the whole look through to
+    // the SAME param25 keys the popup reads/writes (canonical saveSetting),
+    // keeping alertsState (this surface's live truth) in lockstep.
+    function applyLookToCategory(category, look) {
+        var map = ALERT_PARAM_MAP[category];
+        var st = alertsState[category];
+        if (!map || !st) return;
+        ['accent', 'template', 'font', 'media', 'sound'].forEach(function (field) {
+            st[field] = look[field] || '';
+            saveAlertSetting('textparam25', map[field], st[field]);
+        });
+        st.style = look.style || 'twitch';
+        saveAlertSetting('optionparam25', map.style, st.style);
+    }
+
+    function selectAlertVariant(category, selected) {
+        var rec = alertsDoc.events[category];
+        if (!rec) return;
+        rec.selected = selected;
+        var variant = alertSelectedVariant(category);
+        var look = variant ? variant.state : (rec.templateState || lookFromAlertState(alertsState[category]));
+        applyLookToCategory(category, look);
+        saveAlertsDoc();
+        renderAlertsConfig();
+        queueAlertsPreviewReload();
+    }
+
+    function mintAlertId(prefix) {
+        return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    }
+
     function setAlertField(category, field, value, rowEl) {
         var st = alertsState[category];
         var map = ALERT_PARAM_MAP[category];
-        if (!st || !map) return;
+        if (!st || !map || !alertsDoc) return;
+        if (field !== 'enabled' && alertsDoc.events[category].selected === 'template') {
+            forkAlertVariant(category); // editing a template saves-as a new option
+            saveAlertsDoc();
+            renderAlertsConfig();
+        }
+        var variant = alertSelectedVariant(category);
         st[field] = value;
+        if (variant && field !== 'enabled') variant.state[field] = value;
         if (rowEl) rowEl.classList.toggle('is-set', field === 'style' ? value !== 'twitch' : !!value);
 
         if (field === 'enabled') {
@@ -2568,26 +2749,43 @@
         } else {
             saveAlertSetting('textparam25', map[field], value);
         }
+        if (variant) saveAlertsDoc();
+        updateAlertInheritLine(category);
+        renderAlertsList(); // On/Off state on the row follows the real setting
         queueAlertsPreviewReload();
     }
 
-    function syncAlertCardFromState(category) {
-        var card = document.querySelector('.arcade-alert-card[data-arcade-alert-event="' + category + '"]');
-        if (!card) return;
+    function setDefaultLookField(field, value, rowEl) {
+        if (!alertsDoc) return;
+        alertsDoc.defaults.state[field] = value;
+        if (rowEl) rowEl.classList.toggle('is-set', field === 'style' ? value !== 'twitch' : !!value);
+        saveAlertsDoc();
+        queueAlertsPreviewReload(); // the preview composes inherited defaults
+    }
+
+    // "Inheriting default" vs "custom", per FIELD: an event field left at its
+    // blank/stock value inherits the All-types default's value in the
+    // composed overlay URL (alertComposedField below) — this line says so.
+    function alertInheritLineText(category) {
         var st = alertsState[category];
-        ['accent', 'template', 'font', 'media', 'sound'].forEach(function (field) {
-            var input = card.querySelector('[data-arcade-alert-field="' + field + '"]');
-            if (!input) return;
-            input.value = st[field] || '';
-            input.closest('.arcade-alert-row').classList.toggle('is-set', !!st[field]);
+        var def = alertsDoc ? alertsDoc.defaults.state : blankAlertLook();
+        var inheriting = [];
+        var custom = [];
+        ['accent', 'style', 'template', 'font', 'media', 'sound'].forEach(function (field) {
+            if (!isBlankAlertField(field, st[field])) { custom.push(field); return; }
+            if (!isBlankAlertField(field, def[field])) inheriting.push(field);
         });
-        var styleSelect = card.querySelector('[data-arcade-alert-field="style"]');
-        if (styleSelect) {
-            styleSelect.value = st.style || 'twitch';
-            styleSelect.closest('.arcade-alert-row').classList.toggle('is-set', st.style !== 'twitch');
+        if (custom.length && inheriting.length) return 'Custom look · inheriting default: ' + inheriting.join(', ');
+        if (custom.length) return 'Custom look';
+        if (inheriting.length) return 'Inheriting default look (' + inheriting.join(', ') + ')';
+        return 'Stock built-in look';
+    }
+
+    function updateAlertInheritLine(category) {
+        var el = document.getElementById('arcade-evt-inherit');
+        if (el && isStockAlertKey(alertsSelectedKey) && alertsSelectedKey === category) {
+            el.textContent = alertInheritLineText(category);
         }
-        var enableInput = card.querySelector('[data-arcade-alert-field="enabled"]');
-        if (enableInput) enableInput.checked = !!st.enabled;
     }
 
     function readTextParam25(settings, paramName) {
@@ -2603,8 +2801,9 @@
         return entry ? entry.param25 : undefined;
     }
 
-    // ONE getSettings read for all 7 categories' saved param25 values —
-    // same shape/IPC the Style tab's loadStyleSettings() already uses.
+    // ONE getSettings read for all 7 categories' saved param25 values PLUS
+    // the arcade-owned variants doc + tier list — same shape/IPC the Style
+    // tab's loadStyleSettings() already uses.
     function loadAlertsSettings() {
         return new Promise(function (resolve) {
             try {
@@ -2623,14 +2822,33 @@
                                 st.sound = readTextParam25(settings, map.sound);
                                 var paramIsSet = !!readParam25(settings, map.enable.param);
                                 st.enabled = map.enable.invert ? !paramIsSet : paramIsSet;
-                                syncAlertCardFromState(evt.id);
                             });
+                            // Tier NAMES list — S51's Points-page admin takes
+                            // this key over; until then it is seeded ONCE with
+                            // the minimal default and only ever READ here.
+                            var tiersEntry = settings[ALERT_TIERS_KEY];
+                            var tiersRaw = (tiersEntry && typeof tiersEntry.textparam1 === 'string') ? tiersEntry.textparam1 : '';
+                            var parsedTiers = null;
+                            if (tiersRaw) {
+                                try {
+                                    var t = JSON.parse(tiersRaw);
+                                    if (Array.isArray(t) && t.length && t.every(function (x) { return typeof x === 'string' && x; })) parsedTiers = t;
+                                } catch (e) { parsedTiers = null; }
+                            }
+                            if (parsedTiers) {
+                                alertTiers = parsedTiers;
+                            } else {
+                                saveAlertSetting('textparam1', ALERT_TIERS_KEY, JSON.stringify(alertTiers));
+                            }
+                            var docEntry = settings[ALERT_VARIANTS_KEY];
+                            alertsDoc = normalizeAlertsDoc((docEntry && typeof docEntry.textparam1 === 'string') ? docEntry.textparam1 : '');
                         } catch (e) { console.error('[arcade-shell] alerts settings parse failed:', e); }
                         resolve();
                     });
                     return;
                 }
             } catch (e) { console.error('[arcade-shell] alerts settings load failed:', e); }
+            alertsDoc = normalizeAlertsDoc('');
             setAlertsStatus('settings bridge unavailable — alert edits will not persist', true);
             resolve();
         });
@@ -2638,19 +2856,35 @@
 
     // Per-event URL params from the CURRENT in-memory state — shared by the
     // preview builder (adds &preview/&embedded) and the real Copy-overlay-
-    // URL builder (does not). Omits anything at its default/blank so an
-    // untouched category rides the alert box's own built-in defaults.
+    // URL builder (does not). A field left at its blank/stock value INHERITS
+    // the All-types default's value (alertComposedField); anything still
+    // blank rides the alert box's own built-in defaults and is omitted, so
+    // an untouched setup composes byte-identically to the pre-S47 builder.
+    function alertComposedField(category, field) {
+        var st = alertsState[category];
+        var own = st ? st[field] : '';
+        if (!isBlankAlertField(field, own)) return own;
+        var def = (alertsDoc && alertsDoc.defaults) ? alertsDoc.defaults.state[field] : '';
+        return isBlankAlertField(field, def) ? '' : def;
+    }
+
     function buildAlertEventParams() {
         var params = [];
         ALERT_EVENTS.forEach(function (evt) {
             var map = ALERT_PARAM_MAP[evt.id];
             var st = alertsState[evt.id];
-            if (st.accent) params.push(map.accent + '=' + encodeURIComponent(st.accent));
-            if (st.style && st.style !== 'twitch') params.push(map.style + '=' + encodeURIComponent(st.style));
-            if (st.template) params.push(map.template + '=' + encodeURIComponent(st.template));
-            if (st.font) params.push(map.font + '=' + encodeURIComponent(st.font));
-            if (st.media) params.push(map.media + '=' + encodeURIComponent(st.media));
-            if (st.sound) params.push(map.sound + '=' + encodeURIComponent(st.sound));
+            var accent = alertComposedField(evt.id, 'accent');
+            var style = alertComposedField(evt.id, 'style');
+            var template = alertComposedField(evt.id, 'template');
+            var font = alertComposedField(evt.id, 'font');
+            var media = alertComposedField(evt.id, 'media');
+            var sound = alertComposedField(evt.id, 'sound');
+            if (accent) params.push(map.accent + '=' + encodeURIComponent(accent));
+            if (style && style !== 'twitch') params.push(map.style + '=' + encodeURIComponent(style));
+            if (template) params.push(map.template + '=' + encodeURIComponent(template));
+            if (font) params.push(map.font + '=' + encodeURIComponent(font));
+            if (media) params.push(map.media + '=' + encodeURIComponent(media));
+            if (sound) params.push(map.sound + '=' + encodeURIComponent(sound));
             var enable = map.enable;
             var paramShouldBeSet = enable.invert ? !st.enabled : !!st.enabled;
             if (paramShouldBeSet) params.push(enable.param);
@@ -2687,7 +2921,7 @@
                     frame.onload = function () {
                         if (myToken !== alertsPreviewToken) return;
                         frame.dataset.alertsPreviewReady = '1';
-                        setAlertsPreviewHint('Preview ready — use "Fire test alert" on any card below.');
+                        setAlertsPreviewHint('Preview ready — select an event on the left, then Fire test alert.');
                     };
                     frame.src = resolved.url;
                 }
@@ -2709,11 +2943,34 @@
     }
 
     // Lazy boot on first Alerts-tab visit — same pattern as
-    // ensureStylePanelLive(): one getSettings read, then first preview load.
+    // ensureStylePanelLive(): one getSettings read, then list + config +
+    // first preview load.
     function ensureAlertsPanelLive() {
         if (alertsPanelLive) { return; }
         alertsPanelLive = true;
-        loadAlertsSettings().then(function () { initAlertsPreviewFrame(); });
+        loadAlertsSettings().then(function () {
+            renderAlertsList();
+            renderAlertsConfig();
+            initAlertsPreviewFrame();
+        });
+    }
+
+    // The preview pane's ONE test-fire: only the stock 7 can fire here (the
+    // isolated &preview=1 multi-alerts frame). The All-types default has no
+    // event of its own; flow-backed custom events would run their flow's
+    // REAL actions (a webhook really posts, OBS really switches) — stock has
+    // no isolated flow-preview path, so they honestly point at the Flow
+    // editor's own test panel instead of faking one here.
+    function fireSelectedTestAlert() {
+        if (isStockAlertKey(alertsSelectedKey)) {
+            fireTestAlert(alertsSelectedKey);
+            return;
+        }
+        if (alertsSelectedKey === ALERT_DEFAULT_KEY) {
+            setAlertsPreviewHint('The default look has no event of its own — select an event to test-fire.');
+        } else {
+            setAlertsPreviewHint('Flow-backed events fire through EventFlow — test this one in the Flow editor (its test would run real actions here).');
+        }
     }
 
     // "Fire test alert" — see the PREVIEW ISOLATION GUARANTEE comment at the
@@ -2771,6 +3028,815 @@
         }).catch(function (e) {
             console.error('[arcade-shell] copy alerts overlay url failed:', e);
             flashButton(btn, 'Open from Settings', 2200);
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // S47 — left list (events grouped by the stock sectioning, ALERT_GROUPS)
+    // --------------------------------------------------------------------
+    function renderAlertsList() {
+        var list = document.getElementById('arcade-alerts-list');
+        if (!list || !alertsDoc) return;
+        list.innerHTML = '';
+
+        list.appendChild(buildAlertListRow({
+            key: ALERT_DEFAULT_KEY,
+            icon: '★',
+            label: 'All types — default',
+            tier: null,
+            stateText: null
+        }));
+
+        ALERT_GROUPS.forEach(function (group) {
+            var header = document.createElement('div');
+            header.className = 'arcade-evt-group__title';
+            header.textContent = group.label;
+            list.appendChild(header);
+            group.events.forEach(function (cat) {
+                var evt = alertEventMeta(cat);
+                var rec = alertsDoc.events[cat];
+                var st = alertsState[cat];
+                list.appendChild(buildAlertListRow({
+                    key: cat,
+                    icon: evt.emoji,
+                    label: evt.label,
+                    tier: rec.tier,
+                    stateText: st.enabled ? 'on' : 'off',
+                    stateOn: !!st.enabled
+                }));
+            });
+        });
+
+        if (alertsDoc.custom.length) {
+            var customHeader = document.createElement('div');
+            customHeader.className = 'arcade-evt-group__title';
+            customHeader.textContent = 'Custom events';
+            list.appendChild(customHeader);
+            alertsDoc.custom.forEach(function (c) {
+                var flowState = getAlertFlowState(c.flowId);
+                list.appendChild(buildAlertListRow({
+                    key: c.id,
+                    icon: '🧩',
+                    label: c.name,
+                    tier: c.tier,
+                    stateText: flowState === 'active' ? 'on' : (flowState === 'inactive' ? 'off' : '—'),
+                    stateOn: flowState === 'active',
+                    stateTitle: flowState === 'missing' ? 'flow missing — the Event flow door reseeds it' : (flowState === 'unknown' ? 'flow system not up yet' : '')
+                }));
+            });
+        }
+    }
+
+    function buildAlertListRow(opts) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'arcade-evt-item';
+        row.dataset.arcadeAlertKey = opts.key;
+        row.setAttribute('role', 'option');
+        var selected = alertsSelectedKey === opts.key;
+        row.classList.toggle('is-on', selected);
+        row.setAttribute('aria-selected', String(selected));
+
+        var label = document.createElement('span');
+        label.className = 'arcade-evt-item__label';
+        label.textContent = (opts.icon ? opts.icon + ' ' : '') + opts.label;
+        row.appendChild(label);
+
+        if (opts.tier) {
+            var chip = document.createElement('span');
+            chip.className = 'arcade-evt-tier' + (opts.tier === alertTiers[0] ? ' arcade-evt-tier--high' : '');
+            chip.textContent = opts.tier;
+            chip.title = 'Priority tier — set on the right';
+            row.appendChild(chip);
+        }
+
+        if (opts.stateText) {
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state ' + (opts.stateOn ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+            state.textContent = opts.stateText;
+            if (opts.stateTitle) state.title = opts.stateTitle;
+            row.appendChild(state);
+        }
+
+        row.addEventListener('click', function () {
+            selectAlertsKey(opts.key);
+        });
+        return row;
+    }
+
+    function selectAlertsKey(key) {
+        if (alertsSelectedKey === key) return;
+        alertsSelectedKey = key;
+        renderAlertsList();
+        renderAlertsConfig();
+    }
+
+    // --------------------------------------------------------------------
+    // S47 — right side: edit/config for the selected event
+    // --------------------------------------------------------------------
+    function renderAlertsConfig() {
+        var host = document.getElementById('arcade-alerts-config');
+        if (!host || !alertsDoc) return;
+        host.innerHTML = '';
+        if (alertsSelectedKey === ALERT_DEFAULT_KEY) { renderDefaultAlertConfig(host); return; }
+        var customEvt = getCustomAlertEvent(alertsSelectedKey);
+        if (customEvt) { renderCustomAlertConfig(host, customEvt); return; }
+        if (isStockAlertKey(alertsSelectedKey)) { renderStockAlertConfig(host, alertsSelectedKey); }
+    }
+
+    function buildAlertConfigHead(iconLabel, stateText, stateOn, stateTitle) {
+        var head = document.createElement('div');
+        head.className = 'arcade-evt-config__head';
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-config__name';
+        title.textContent = iconLabel;
+        head.appendChild(title);
+        if (stateText) {
+            var chip = document.createElement('span');
+            chip.className = 'arcade-evt-state ' + (stateOn ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+            chip.textContent = stateText;
+            if (stateTitle) chip.title = stateTitle;
+            head.appendChild(chip);
+        }
+        return head;
+    }
+
+    function buildAlertTierRow(currentTier, onChange) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = 'Priority tier';
+        row.appendChild(lbl);
+        var select = document.createElement('select');
+        alertTiers.forEach(function (tier) {
+            var o = document.createElement('option');
+            o.value = tier;
+            o.textContent = tier;
+            select.appendChild(o);
+        });
+        if (alertTiers.indexOf(currentTier) === -1) {
+            var extra = document.createElement('option');
+            extra.value = currentTier;
+            extra.textContent = currentTier;
+            select.appendChild(extra);
+        }
+        select.value = currentTier;
+        select.title = 'Tier names come from the shared tier list — its admin lands on the Points page (S51)';
+        select.addEventListener('change', function () { onChange(select.value); });
+        row.appendChild(select);
+        return row;
+    }
+
+    function renderStockAlertConfig(host, category) {
+        var evt = alertEventMeta(category);
+        var rec = alertsDoc.events[category];
+        var st = alertsState[category];
+
+        host.appendChild(buildAlertConfigHead(evt.emoji + ' ' + evt.label, st.enabled ? 'on' : 'off', !!st.enabled, 'Driven by the real alert-enabled setting'));
+
+        // Variant dropdown — Template + saved customs; the selected option
+        // is what fires live (written through to param25 on selection).
+        var variantRow = document.createElement('div');
+        variantRow.className = 'arcade-evt-vrow';
+        var variantLbl = document.createElement('label');
+        variantLbl.textContent = 'Variant';
+        variantRow.appendChild(variantLbl);
+        var variantSelect = document.createElement('select');
+        variantSelect.id = 'arcade-evt-variant';
+        var templateOpt = document.createElement('option');
+        templateOpt.value = 'template';
+        templateOpt.textContent = 'Template (stock settings)';
+        variantSelect.appendChild(templateOpt);
+        rec.variants.forEach(function (v) {
+            var o = document.createElement('option');
+            o.value = v.id;
+            o.textContent = v.name;
+            variantSelect.appendChild(o);
+        });
+        variantSelect.value = rec.selected;
+        variantSelect.addEventListener('change', function () {
+            selectAlertVariant(category, variantSelect.value);
+        });
+        variantRow.appendChild(variantSelect);
+        var variant = alertSelectedVariant(category);
+        if (variant) {
+            var renameBtn = document.createElement('button');
+            renameBtn.type = 'button';
+            renameBtn.className = 'arcade-btn arcade-btn--sm';
+            renameBtn.textContent = 'Rename';
+            renameBtn.addEventListener('click', function () {
+                startVariantRename(variant, renameBtn);
+            });
+            variantRow.appendChild(renameBtn);
+        }
+        host.appendChild(variantRow);
+
+        var inherit = document.createElement('div');
+        inherit.className = 'arcade-evt-inherit';
+        inherit.id = 'arcade-evt-inherit';
+        inherit.textContent = alertInheritLineText(category);
+        host.appendChild(inherit);
+
+        host.appendChild(buildAlertTierRow(rec.tier, function (tier) {
+            rec.tier = tier;
+            saveAlertsDoc();
+            renderAlertsList();
+        }));
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var styleBtn = document.createElement('button');
+        styleBtn.type = 'button';
+        styleBtn.className = 'arcade-btn arcade-btn--sm';
+        styleBtn.textContent = 'Style';
+        styleBtn.setAttribute('aria-pressed', String(alertsStyleOpen));
+        styleBtn.addEventListener('click', function () {
+            alertsStyleOpen = !alertsStyleOpen;
+            renderAlertsConfig();
+        });
+        doors.appendChild(styleBtn);
+        var flowBtn = document.createElement('button');
+        flowBtn.type = 'button';
+        flowBtn.className = 'arcade-btn arcade-btn--sm';
+        flowBtn.textContent = 'Event flow';
+        flowBtn.addEventListener('click', function () {
+            openAlertFlowDoor(category);
+        });
+        doors.appendChild(flowBtn);
+        host.appendChild(doors);
+
+        if (alertsStyleOpen) {
+            var styleSection = document.createElement('div');
+            styleSection.className = 'arcade-evt-style';
+
+            var enableRow = document.createElement('div');
+            enableRow.className = 'arcade-alert-row';
+            var enableLbl = document.createElement('label');
+            enableLbl.textContent = 'Enabled';
+            enableRow.appendChild(enableLbl);
+            var enableInput = document.createElement('input');
+            enableInput.type = 'checkbox';
+            enableInput.checked = st.enabled;
+            enableInput.dataset.arcadeAlertField = 'enabled';
+            enableInput.addEventListener('change', function () {
+                setAlertField(category, 'enabled', enableInput.checked, null);
+                renderAlertsConfig();
+            });
+            enableRow.appendChild(enableInput);
+            styleSection.appendChild(enableRow);
+
+            var accentRow = buildAlertFieldRow(category, 'accent', 'Accent', CATEGORY_ACCENT_DEFAULTS[category] || '#9146ff');
+            syncAlertFieldRow(accentRow, 'accent', st.accent);
+            styleSection.appendChild(accentRow);
+            var styleRow = buildAlertStyleRow(category);
+            syncAlertFieldRow(styleRow, 'style', st.style);
+            styleSection.appendChild(styleRow);
+            var templateRow = buildAlertFieldRow(category, 'template', 'Headline', ALERT_TEMPLATE_PLACEHOLDER[category] || '');
+            syncAlertFieldRow(templateRow, 'template', st.template);
+            styleSection.appendChild(templateRow);
+            var fontRow = buildAlertFieldRow(category, 'font', 'Font', 'Georgia, serif');
+            syncAlertFieldRow(fontRow, 'font', st.font);
+            styleSection.appendChild(fontRow);
+            var mediaRow = buildAlertFieldRow(category, 'media', 'Fallback media', 'https://…');
+            syncAlertFieldRow(mediaRow, 'media', st.media);
+            styleSection.appendChild(mediaRow);
+            var soundRow = buildAlertFieldRow(category, 'sound', 'Sound URL', 'https://…');
+            syncAlertFieldRow(soundRow, 'sound', st.sound);
+            styleSection.appendChild(soundRow);
+
+            host.appendChild(styleSection);
+        }
+
+        if (variant) {
+            host.appendChild(buildAlertConditionBox(category, variant));
+        }
+
+        var flowLine = document.createElement('div');
+        flowLine.className = 'arcade-evt-flowline';
+        if (variant && variant.flowId) {
+            var flowState = getAlertFlowState(variant.flowId);
+            flowLine.textContent = 'Flow: ' + flowState + (flowState === 'missing' ? ' — the Event flow door reseeds it' : '');
+        } else {
+            flowLine.textContent = variant
+                ? 'Flow: none yet — the Event flow door seeds a trigger → gif + sound skeleton.'
+                : 'Template selected — editing style or opening the Event flow door saves-as a new variant.';
+        }
+        host.appendChild(flowLine);
+    }
+
+    function syncAlertFieldRow(row, field, value) {
+        var input = row.querySelector('[data-arcade-alert-field="' + field + '"]');
+        if (!input) return;
+        input.value = value || (field === 'style' ? 'twitch' : '');
+        row.classList.toggle('is-set', !isBlankAlertField(field, input.value));
+    }
+
+    function startVariantRename(variant, btn) {
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'arcade-evt-rename';
+        input.value = variant.name;
+        btn.replaceWith(input);
+        input.focus();
+        input.select();
+        var done = false;
+        function commit(save) {
+            if (done) return;
+            done = true;
+            if (save && input.value.trim()) {
+                variant.name = input.value.trim();
+                saveAlertsDoc();
+            }
+            renderAlertsList();
+            renderAlertsConfig();
+        }
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { commit(true); }
+            else if (e.key === 'Escape') { commit(false); }
+        });
+        input.addEventListener('blur', function () { commit(true); });
+    }
+
+    // Priority condition — wires ONLY through stock EventFlow evaluators
+    // (see ALERT_CONDITION_PLATFORMS' comment). Edits sync into the variant's
+    // flow head; a flow the operator restructured by hand is left alone with
+    // an honest status instead of being clobbered.
+    function buildAlertConditionBox(category, variant) {
+        var box = document.createElement('div');
+        box.className = 'arcade-evt-cond';
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Priority condition — this variant’s flow fires only when:';
+        box.appendChild(title);
+
+        var ftLabel = document.createElement('label');
+        ftLabel.className = 'arcade-evt-cond__opt';
+        var ftInput = document.createElement('input');
+        ftInput.type = 'checkbox';
+        ftInput.checked = !!variant.condition.firsttime;
+        ftInput.title = 'Rides the real firsttime message property — needs the stock first-timers setting on (background.js sets firsttime only then)';
+        ftInput.addEventListener('change', function () {
+            variant.condition.firsttime = ftInput.checked;
+            saveAlertsDoc();
+            syncVariantFlowCondition(category, variant);
+        });
+        ftLabel.appendChild(ftInput);
+        ftLabel.appendChild(document.createTextNode('first-time chatter'));
+        box.appendChild(ftLabel);
+
+        var platLabel = document.createElement('label');
+        platLabel.className = 'arcade-evt-cond__opt';
+        platLabel.appendChild(document.createTextNode('on platform'));
+        var platSelect = document.createElement('select');
+        var anyOpt = document.createElement('option');
+        anyOpt.value = '';
+        anyOpt.textContent = 'any';
+        platSelect.appendChild(anyOpt);
+        ALERT_CONDITION_PLATFORMS.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p;
+            o.textContent = p;
+            platSelect.appendChild(o);
+        });
+        platSelect.value = variant.condition.platform || '';
+        platSelect.addEventListener('change', function () {
+            variant.condition.platform = platSelect.value;
+            saveAlertsDoc();
+            syncVariantFlowCondition(category, variant);
+        });
+        platLabel.appendChild(platSelect);
+        box.appendChild(platLabel);
+
+        var hint = document.createElement('div');
+        hint.className = 'arcade-evt-cond__hint';
+        hint.textContent = 'Both ride what EventFlow already evaluates — first-time uses the stock firsttimers setting’s firsttime flag; platform uses the trigger’s own source filter.';
+        box.appendChild(hint);
+        return box;
+    }
+
+    function renderDefaultAlertConfig(host) {
+        host.appendChild(buildAlertConfigHead('★ All types — default', null, false));
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-blurb';
+        blurb.textContent = 'One look every event inherits unless it sets its own — per-event config says “inheriting default” vs “custom” honestly. Edits here never touch per-event settings; fields left blank everywhere ride the alert box’s built-in defaults.';
+        host.appendChild(blurb);
+
+        var def = alertsDoc.defaults.state;
+        var section = document.createElement('div');
+        section.className = 'arcade-evt-style';
+        section.appendChild(buildDefaultLookRow('accent', 'Accent', '#9146ff'));
+        section.appendChild(buildDefaultLookStyleRow());
+        section.appendChild(buildDefaultLookRow('template', 'Headline', '{name} …'));
+        section.appendChild(buildDefaultLookRow('font', 'Font', 'Georgia, serif'));
+        section.appendChild(buildDefaultLookRow('media', 'Fallback media', 'https://…'));
+        section.appendChild(buildDefaultLookRow('sound', 'Sound URL', 'https://…'));
+        host.appendChild(section);
+    }
+
+    function buildDefaultLookRow(field, label, placeholder) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.placeholder = placeholder || '';
+        input.value = alertsDoc.defaults.state[field] || '';
+        row.classList.toggle('is-set', !isBlankAlertField(field, input.value));
+        input.addEventListener('input', debounce(function () {
+            setDefaultLookField(field, input.value, row);
+        }, 300));
+        row.appendChild(input);
+        return row;
+    }
+
+    function buildDefaultLookStyleRow() {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = 'Style preset';
+        row.appendChild(lbl);
+        var select = document.createElement('select');
+        ALERT_STYLE_OPTIONS.forEach(function (opt) {
+            var o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+            select.appendChild(o);
+        });
+        select.value = alertsDoc.defaults.state.style || 'twitch';
+        row.classList.toggle('is-set', !isBlankAlertField('style', select.value));
+        select.addEventListener('change', function () {
+            setDefaultLookField('style', select.value, row);
+        });
+        row.appendChild(select);
+        return row;
+    }
+
+    function renderCustomAlertConfig(host, customEvt) {
+        var flowState = getAlertFlowState(customEvt.flowId);
+        host.appendChild(buildAlertConfigHead('🧩 ' + customEvt.name,
+            flowState === 'active' ? 'on' : (flowState === 'inactive' ? 'off' : '—'),
+            flowState === 'active',
+            flowState === 'missing' ? 'flow missing — the Event flow door reseeds it' : ''));
+
+        var nameRow = document.createElement('div');
+        nameRow.className = 'arcade-alert-row';
+        var nameLbl = document.createElement('label');
+        nameLbl.textContent = 'Name';
+        nameRow.appendChild(nameLbl);
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.autocomplete = 'off';
+        nameInput.value = customEvt.name;
+        nameInput.addEventListener('input', debounce(function () {
+            customEvt.name = nameInput.value.trim() || customEvt.name;
+            saveAlertsDoc();
+            renderAlertsList();
+        }, 300));
+        nameRow.appendChild(nameInput);
+        host.appendChild(nameRow);
+
+        var stateLine = document.createElement('div');
+        stateLine.className = 'arcade-evt-inherit';
+        stateLine.textContent = 'Flow-backed event — the look lives in its flow (gif, sound, text, webhook…). Flow: ' + flowState + '.';
+        host.appendChild(stateLine);
+
+        host.appendChild(buildAlertTierRow(customEvt.tier, function (tier) {
+            customEvt.tier = tier;
+            saveAlertsDoc();
+            renderAlertsList();
+        }));
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var styleBtn = document.createElement('button');
+        styleBtn.type = 'button';
+        styleBtn.className = 'arcade-btn arcade-btn--sm';
+        styleBtn.textContent = 'Style';
+        styleBtn.disabled = true;
+        styleBtn.title = 'The look lives in this event’s flow — gif, sound and text actions edit in the Flow editor.';
+        doors.appendChild(styleBtn);
+        var flowBtn = document.createElement('button');
+        flowBtn.type = 'button';
+        flowBtn.className = 'arcade-btn arcade-btn--sm';
+        flowBtn.textContent = 'Event flow';
+        flowBtn.addEventListener('click', function () {
+            if (customEvt.flowId && getAlertFlowState(customEvt.flowId) !== 'missing') {
+                openAlertFlowInEditor(customEvt.flowId);
+                return;
+            }
+            setAlertsStatus('seeding flow…');
+            seedAlertFlow(null, null, customEvt).then(function (flowId) {
+                customEvt.flowId = flowId;
+                saveAlertsDoc();
+                renderAlertsList();
+                renderAlertsConfig();
+                setAlertsStatus('');
+                openAlertFlowInEditor(flowId);
+            }).catch(function (e) {
+                console.error('[arcade-shell] custom event flow seed failed:', e);
+                setAlertsStatus('flow system unavailable — flow not seeded', true);
+            });
+        });
+        doors.appendChild(flowBtn);
+        host.appendChild(doors);
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'arcade-btn arcade-btn--sm arcade-evt-remove';
+        removeBtn.textContent = 'Remove from shelf';
+        removeBtn.addEventListener('click', function () {
+            if (removeBtn.dataset.armed === '1') {
+                alertsDoc.custom = alertsDoc.custom.filter(function (c) { return c.id !== customEvt.id; });
+                saveAlertsDoc();
+                alertsSelectedKey = 'follow';
+                renderAlertsList();
+                renderAlertsConfig();
+                setAlertsStatus('card removed — its flow stays in the Flow editor (delete it there if unwanted)');
+                return;
+            }
+            removeBtn.dataset.armed = '1';
+            removeBtn.textContent = 'Click again to remove (the flow is kept)';
+            setTimeout(function () {
+                removeBtn.dataset.armed = '';
+                if (document.body.contains(removeBtn)) removeBtn.textContent = 'Remove from shelf';
+            }, 3000);
+        });
+        host.appendChild(removeBtn);
+    }
+
+    // --------------------------------------------------------------------
+    // S47 — flow plumbing. Under the hood alerts stay multi-alerts.html +
+    // EventFlow: seeds/updates go through the background page's OWN
+    // eventFlowSystem (frame2, same bridge the analytics rail reads), never
+    // a parallel engine. Flow IDs are minted HERE with entropy and passed
+    // in — saveFlow only falls back to Date.now().toString() when id is
+    // falsy (EventFlowSystem.js:1494-1496), so the S41 same-millisecond
+    // import collision can't bite this path; each seed is one save, one
+    // flow, one gesture.
+    // --------------------------------------------------------------------
+    function withAlertFlowSystem(fn) {
+        var bg = getBackgroundWindow();
+        if (!bg || !bg.eventFlowSystem) return Promise.reject(new Error('EventFlow system unavailable'));
+        var fsys = bg.eventFlowSystem;
+        return Promise.resolve(fsys.initPromise).then(function () { return fn(fsys); });
+    }
+
+    function getAlertFlowState(flowId) {
+        if (!flowId) return 'none';
+        var bg = getBackgroundWindow();
+        if (!bg || !bg.eventFlowSystem || !Array.isArray(bg.eventFlowSystem.flows)) return 'unknown';
+        var flow = bg.eventFlowSystem.flows.find(function (f) { return f.id === flowId; });
+        if (!flow) return 'missing';
+        return flow.active !== false ? 'active' : 'inactive';
+    }
+
+    // Alert-shaped skeleton (trigger → overlay actions) — the same shape the
+    // stock FLOW_TEMPLATES ship (EventFlowEditor.js:41-53, :163-177), with
+    // the editor's own sample assets (its playTenorGiphy/playAudioClip
+    // defaults, :2949-2951 + FLOW_TEMPLATES' join.wav) so a fresh seed can
+    // visibly fire. Priority conditions wire the head ONLY: platform rides
+    // the event trigger's own config.sources filter, first-time adds a
+    // messageProperties trigger + AND gate — both stock evaluators.
+    function buildAlertFlowSpec(category, variant, customEvt) {
+        var triggerDef = customEvt
+            ? { triggerType: customEvt.triggerType, eventType: customEvt.eventType }
+            : ALERT_EVENT_TRIGGERS[category];
+        var condition = (variant && variant.condition) || { firsttime: false, platform: '' };
+
+        var trigger = { id: 'trigger_1', type: 'trigger', triggerType: triggerDef.triggerType, x: 185, y: 50, config: {} };
+        if (triggerDef.triggerType === 'eventCustom') trigger.config.eventType = triggerDef.eventType || 'my_custom_event';
+        if (condition.platform) trigger.config.sources = [condition.platform];
+
+        var nodes = [trigger];
+        var connections = [];
+        var head = 'trigger_1';
+        if (condition.firsttime) {
+            nodes.push({ id: 'trigger_2', type: 'trigger', triggerType: 'messageProperties', x: 430, y: 50, config: { requiredProperties: ['firsttime'], forbiddenProperties: [], requireAll: true } });
+            nodes.push({ id: 'logic_1', type: 'logic', logicType: 'AND', x: 300, y: 210, config: {} });
+            connections.push({ from: 'trigger_1', to: 'logic_1' }, { from: 'trigger_2', to: 'logic_1' });
+            head = 'logic_1';
+        }
+        nodes.push({ id: 'action_1', type: 'action', actionType: 'playTenorGiphy', x: 120, y: 390, config: { mediaUrl: 'https://giphy.com/embed/X9izlczKyCpmCSZu0l', mediaType: 'iframe', duration: 10000, width: 100, height: 100, x: 0, y: 0, randomX: false, randomY: false, useLayer: false, clearFirst: true } });
+        nodes.push({ id: 'action_2', type: 'action', actionType: 'playAudioClip', x: 470, y: 390, config: { audioUrl: 'https://vdo.ninja/media/join.wav', volume: 1.0 } });
+        connections.push({ from: head, to: 'action_1' }, { from: head, to: 'action_2' });
+        return { nodes: nodes, connections: connections };
+    }
+
+    function seedAlertFlow(category, variant, customEvt) {
+        return withAlertFlowSystem(function (fsys) {
+            var label = customEvt ? customEvt.name : (alertEventMeta(category).label + (variant ? ' — ' + variant.name : ''));
+            var spec = buildAlertFlowSpec(category, variant, customEvt);
+            var flow = {
+                id: mintAlertId('s47-' + (customEvt ? 'custom' : category)),
+                name: 'Alert: ' + label,
+                description: 'Seeded by the Arcade Alerts surface (S47) — trigger → overlay actions; refine freely.',
+                active: true,
+                nodes: spec.nodes,
+                connections: spec.connections
+            };
+            return fsys.saveFlow(flow).then(function (saved) { return saved.id; });
+        });
+    }
+
+    // One flow per variant, exactly one seed even when condition edits land
+    // faster than the seed resolves (an in-flight seed is shared, never
+    // doubled — an orphaned twin flow would be litter in the user's editor).
+    var alertFlowSeedPending = {}; // variant id -> in-flight seed Promise (session-only, never persisted)
+
+    function ensureVariantFlow(category, variant) {
+        if (variant.flowId && getAlertFlowState(variant.flowId) !== 'missing') {
+            return Promise.resolve(variant.flowId);
+        }
+        if (alertFlowSeedPending[variant.id]) return alertFlowSeedPending[variant.id];
+        setAlertsStatus('seeding flow…');
+        var p = seedAlertFlow(category, variant, null).then(function (flowId) {
+            variant.flowId = flowId;
+            saveAlertsDoc();
+            delete alertFlowSeedPending[variant.id];
+            return flowId;
+        }).catch(function (e) {
+            delete alertFlowSeedPending[variant.id];
+            throw e;
+        });
+        alertFlowSeedPending[variant.id] = p;
+        return p;
+    }
+
+    function syncVariantFlowCondition(category, variant) {
+        ensureVariantFlow(category, variant).then(function (flowId) {
+            return withAlertFlowSystem(function (fsys) {
+                var flow = fsys.flows.find(function (f) { return f.id === flowId; });
+                if (!flow) return null; // raced a delete in the editor — next edit reseeds
+                var trigger = flow.nodes.find(function (n) { return n.id === 'trigger_1'; });
+                if (!trigger) {
+                    setAlertsStatus('flow was restructured in the editor — edit its condition there');
+                    return null;
+                }
+                if (variant.condition.platform) { trigger.config.sources = [variant.condition.platform]; }
+                else { delete trigger.config.sources; }
+                var hasGate = flow.nodes.some(function (n) { return n.id === 'logic_1'; });
+                if (variant.condition.firsttime && !hasGate) {
+                    flow.nodes.push({ id: 'trigger_2', type: 'trigger', triggerType: 'messageProperties', x: 430, y: 50, config: { requiredProperties: ['firsttime'], forbiddenProperties: [], requireAll: true } });
+                    flow.nodes.push({ id: 'logic_1', type: 'logic', logicType: 'AND', x: 300, y: 210, config: {} });
+                    flow.connections = flow.connections.map(function (c) {
+                        return c.from === 'trigger_1' ? { from: 'logic_1', to: c.to } : c;
+                    });
+                    flow.connections.push({ from: 'trigger_1', to: 'logic_1' }, { from: 'trigger_2', to: 'logic_1' });
+                } else if (!variant.condition.firsttime && hasGate) {
+                    flow.connections = flow.connections.map(function (c) {
+                        return c.from === 'logic_1' ? { from: 'trigger_1', to: c.to } : c;
+                    }).filter(function (c) {
+                        return c.to !== 'logic_1';
+                    });
+                    flow.nodes = flow.nodes.filter(function (n) { return n.id !== 'trigger_2' && n.id !== 'logic_1'; });
+                }
+                return fsys.saveFlow(flow);
+            });
+        }).then(function (saved) {
+            if (saved === null || saved === undefined) return;
+            saveAlertsDoc();
+            renderAlertsConfig();
+            setAlertsStatus('condition wired into the flow');
+        }).catch(function (e) {
+            console.error('[arcade-shell] alert flow condition sync failed:', e);
+            setAlertsStatus('flow system unavailable — condition saved locally only', true);
+        });
+    }
+
+    // [Event flow] door — opens the flow backing the SELECTED variant in the
+    // stock editor (seeds the skeleton first when none exists). Opening it
+    // on a template is an edit of the template's flow → ruled round 4: that
+    // saves-as a new variant, template untouched.
+    function openAlertFlowDoor(category) {
+        var variant = alertSelectedVariant(category);
+        if (!variant) {
+            variant = forkAlertVariant(category);
+            saveAlertsDoc();
+        }
+        ensureVariantFlow(category, variant).then(function (flowId) {
+            renderAlertsConfig();
+            setAlertsStatus('');
+            openAlertFlowInEditor(flowId);
+        }).catch(function (e) {
+            console.error('[arcade-shell] alert flow seed failed:', e);
+            renderAlertsConfig();
+            setAlertsStatus('flow system unavailable — variant saved without a flow', true);
+        });
+    }
+
+    function openAlertFlowInEditor(flowId) {
+        navigateArcadeTab('eventflow'); // stock nav click → frame2 shows the editor view
+        var tries = 0;
+        var timer = setInterval(function () {
+            tries++;
+            var bg = getBackgroundWindow();
+            if (bg && bg.flowEditor && typeof bg.flowEditor.loadFlow === 'function') {
+                clearInterval(timer);
+                try {
+                    bg.flowEditor.loadFlow(flowId);
+                    if (typeof bg.flowEditor.loadFlowList === 'function') bg.flowEditor.loadFlowList();
+                } catch (e) { console.error('[arcade-shell] open flow in editor failed:', e); }
+            } else if (tries > 120) { // ~30s — frame2 can still be booting
+                clearInterval(timer);
+            }
+        }, 250);
+    }
+
+    // --------------------------------------------------------------------
+    // S47 — "+ Add event" picker: stock dedicated triggers not on the shelf
+    // yet (ALERT_ADD_EVENT_DEFAULTS) + Build your own… Each pick seeds an
+    // alert-shaped skeleton flow and lands a card on the shelf; Build your
+    // own… then opens the flow builder on that seed.
+    // --------------------------------------------------------------------
+    function closeAddEventPicker() {
+        var existing = document.getElementById('arcade-evt-add-modal');
+        if (existing) existing.remove();
+    }
+
+    function openAddEventPicker() {
+        if (!alertsDoc) return;
+        closeAddEventPicker();
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-evt-add-modal';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-label', 'Add event');
+
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.textContent = 'Add event';
+        modal.appendChild(title);
+
+        var sub = document.createElement('p');
+        sub.className = 'arcade-evt-modal__blurb';
+        sub.textContent = 'Stock triggers that aren’t on the shelf yet — each lands as a card backed by its own flow.';
+        modal.appendChild(sub);
+
+        ALERT_ADD_EVENT_DEFAULTS.forEach(function (opt) {
+            modal.appendChild(buildAddEventPick(opt.label, opt.desc, function () {
+                addCustomAlertEvent({ name: opt.label, triggerType: opt.triggerType, eventType: opt.eventType }, false);
+            }));
+        });
+        modal.appendChild(buildAddEventPick('Build your own…', 'The flow builder, seeded with an alert-shaped skeleton (trigger → overlay action).', function () {
+            addCustomAlertEvent({ name: 'Custom event ' + (alertsDoc.custom.length + 1), triggerType: 'eventCustom', eventType: 'my_custom_event' }, true);
+        }, true));
+
+        var cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'arcade-btn arcade-btn--sm';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', closeAddEventPicker);
+        modal.appendChild(cancel);
+
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeAddEventPicker(); });
+        document.body.appendChild(back);
+    }
+
+    function buildAddEventPick(name, desc, onPick, isBuild) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-evt-modal__pick' + (isBuild ? ' arcade-evt-modal__pick--build' : '');
+        var nameEl = document.createElement('span');
+        nameEl.className = 'arcade-evt-modal__pick-name';
+        nameEl.textContent = name;
+        btn.appendChild(nameEl);
+        var descEl = document.createElement('span');
+        descEl.className = 'arcade-evt-modal__pick-desc';
+        descEl.textContent = desc;
+        btn.appendChild(descEl);
+        btn.addEventListener('click', onPick);
+        return btn;
+    }
+
+    function addCustomAlertEvent(spec, openEditor) {
+        closeAddEventPicker();
+        var customEvt = {
+            id: mintAlertId('evt'),
+            name: spec.name,
+            triggerType: spec.triggerType,
+            eventType: spec.eventType || '',
+            flowId: null,
+            tier: defaultAlertTier()
+        };
+        setAlertsStatus('seeding flow…');
+        seedAlertFlow(null, null, customEvt).then(function (flowId) {
+            customEvt.flowId = flowId;
+            alertsDoc.custom.push(customEvt);
+            saveAlertsDoc();
+            alertsSelectedKey = customEvt.id;
+            renderAlertsList();
+            renderAlertsConfig();
+            setAlertsStatus('"' + customEvt.name + '" landed on the shelf');
+            if (openEditor) openAlertFlowInEditor(flowId);
+        }).catch(function (e) {
+            console.error('[arcade-shell] add event flow seed failed:', e);
+            setAlertsStatus('flow system unavailable — event not added', true);
         });
     }
 

@@ -1042,12 +1042,16 @@ body.arcade-shell .arcade-ai-items__title {
 }
 
 /* --------------------------------------------------------------------------
-   Alerts Builder — custom "Alerts" tab (Stage 2 shell surface). Same
-   custom-tab pattern as .arcade-addons/.arcade-style: canvas-first, a live
-   multi-alerts.html PREVIEW iframe as the hero (same checkerboard ground as
-   the Style preview, so alert-card transparency reads honestly) with a
-   compact rail of 7 event-meaning cards below it. Spec: pacsarcade
-   design-briefs/ssn-ui-overhaul/alert-style-builder-spec.md STAGE 2.
+   Alerts — EVENTS AS EASY FLOWS (S47 interior redesign; supersedes the
+   Stage-2 card rail, whose .arcade-alert-card/.arcade-alert-row classes
+   survive below because the AI console's MOVE cards reuse them
+   byte-for-byte). Same custom-tab pattern as .arcade-addons/.arcade-style.
+   Layout (ruled rounds 6/7): LEFT = the alert events grouped by the stock
+   builder's own sectioning (priority/general/other + custom), RIGHT = the
+   BIG multi-alerts.html preview pane on top (same checkerboard ground as
+   the Style preview, so alert-card transparency reads honestly; test-fire
+   lives here) with the selected event's edit/config below. Spec: TASK-44/
+   S47 brief + design-briefs/ssn-ui-overhaul/alert-style-builder-spec.md.
    -------------------------------------------------------------------------- */
 body.arcade-shell .arcade-alerts {
   display: none;
@@ -1066,18 +1070,164 @@ body.arcade-shell .arcade-alerts-status { font: 400 11px/1.4 var(--arc-font-ui);
 body.arcade-shell .arcade-alerts-status.is-error { color: var(--arc-warning); }
 
 body.arcade-shell .arcade-alerts-body {
+  display: flex; flex-direction: row; gap: 14px;
+  padding: 14px 18px; flex: 1; min-height: 0; overflow: hidden;
+}
+body.arcade-shell .arcade-alerts-stage {
+  flex: 1; min-width: 0; min-height: 0;
   display: flex; flex-direction: column; gap: 12px;
-  padding: 14px 18px; overflow-y: auto; flex: 1; min-height: 0;
+  overflow-y: auto;
 }
 body.arcade-shell .arcade-alerts-preview {
   display: flex; flex-direction: column; gap: 8px;
-  min-height: 260px; height: 42vh; flex-shrink: 0;
+  min-height: 240px; height: 40vh; flex-shrink: 0;
 }
 body.arcade-shell .arcade-alerts-preview-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+body.arcade-shell .arcade-alerts-preview-bar .arcade-style-hint { flex: 1 1 auto; min-width: 0; }
 body.arcade-shell .arcade-alerts-preview iframe {
   flex: 1; min-height: 0; width: 100%;
   border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
   background: repeating-conic-gradient(var(--arc-panel-2) 0% 25%, var(--arc-panel) 0% 50%) 0 0 / 18px 18px;
+}
+
+/* S47 — LEFT: the alert EVENTS as a selectable list, grouped by the stock
+   builder's own sectioning (ALERT_GROUPS in arcade-shell.js), each row
+   carrying its tier chip + honest active/inactive state. */
+body.arcade-shell .arcade-evt-list-col {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 268px; flex-shrink: 0; min-height: 0;
+}
+body.arcade-shell .arcade-evt-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  padding-right: 2px;
+}
+body.arcade-shell .arcade-evt-group__title {
+  margin: 10px 4px 3px;
+  font: 700 10px/1.4 var(--arc-font-ui); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--arc-muted);
+}
+body.arcade-shell .arcade-evt-group__title:first-child { margin-top: 2px; }
+body.arcade-shell .arcade-evt-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 8px; box-sizing: border-box;
+  border: 1px solid transparent; border-radius: var(--arc-r);
+  background: transparent; cursor: pointer; text-align: left;
+  font: 500 12px/1.2 var(--arc-font-ui); color: var(--arc-ink);
+}
+body.arcade-shell .arcade-evt-item:hover { background: var(--arc-panel); }
+body.arcade-shell .arcade-evt-item.is-on { background: var(--arc-panel); border-color: var(--arc-edge); }
+body.arcade-shell .arcade-evt-item__label {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Tier chip — top tier reads WARNING/amber (attention), every other tier
+   neutral; LIVE/neon and MONEY/gold stay reserved per the shell's semantic
+   locks. */
+body.arcade-shell .arcade-evt-tier {
+  flex-shrink: 0;
+  font: 700 9px/1 var(--arc-font-ui); letter-spacing: 0.06em;
+  padding: 3px 6px; border-radius: 99px;
+  border: 1px solid var(--arc-edge); color: var(--arc-muted);
+}
+body.arcade-shell .arcade-evt-tier--high {
+  color: var(--arc-warning);
+  border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.07);
+}
+/* on/off — INFO/cyan for "active" (available, not literally live), faint
+   for off. Same semantics as .arcade-el-status--ready. */
+body.arcade-shell .arcade-evt-state { flex-shrink: 0; font: 600 10px/1 var(--arc-font-ui); }
+body.arcade-shell .arcade-evt-state--on { color: var(--arc-info); }
+body.arcade-shell .arcade-evt-state--off { color: var(--arc-faint); }
+
+/* S47 — RIGHT below the preview: the selected event's edit/config. Field
+   rows reuse .arcade-alert-row byte-for-byte (same grid the AI MOVE cards
+   already share); the rest is new, scoped .arcade-evt-*. */
+body.arcade-shell .arcade-evt-config {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; flex-shrink: 0;
+  background: var(--arc-panel);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-evt-config__head { display: flex; align-items: center; gap: 8px; }
+body.arcade-shell .arcade-evt-config__name {
+  margin: 0; flex: 1 1 auto; min-width: 0;
+  font: 700 14px/1.2 var(--arc-font-ui); color: var(--arc-ink);
+}
+body.arcade-shell .arcade-evt-vrow { display: flex; align-items: center; gap: 8px; }
+body.arcade-shell .arcade-evt-vrow > label {
+  font: 500 10px/1.2 var(--arc-font-ui); color: var(--arc-muted);
+  width: 68px; flex-shrink: 0;
+}
+body.arcade-shell .arcade-evt-vrow select,
+body.arcade-shell .arcade-evt-rename {
+  flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 6px; box-sizing: border-box;
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  font: 400 11px/1 var(--arc-font-ui);
+}
+body.arcade-shell .arcade-evt-vrow .arcade-btn { flex-shrink: 0; }
+body.arcade-shell .arcade-evt-inherit { font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-muted); }
+body.arcade-shell .arcade-evt-blurb { margin: 0; font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted); max-width: 640px; }
+body.arcade-shell .arcade-evt-doors { display: flex; gap: 8px; }
+body.arcade-shell .arcade-evt-style {
+  display: flex; flex-direction: column; gap: 4px;
+  padding-top: 8px; border-top: 1px solid var(--arc-edge);
+  max-width: 560px;
+}
+body.arcade-shell .arcade-evt-cond {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 8px; border-top: 1px solid var(--arc-edge);
+}
+body.arcade-shell .arcade-evt-cond__title { font: 600 11px/1.4 var(--arc-font-ui); color: var(--arc-ink); }
+body.arcade-shell .arcade-evt-cond__opt {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: 400 11px/1.2 var(--arc-font-ui); color: var(--arc-muted);
+}
+body.arcade-shell .arcade-evt-cond__opt input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--arc-info); }
+body.arcade-shell .arcade-evt-cond__opt select {
+  height: 22px; padding: 0 6px;
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  font: 400 11px/1 var(--arc-font-ui);
+}
+body.arcade-shell .arcade-evt-cond__hint { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-faint); max-width: 560px; }
+body.arcade-shell .arcade-evt-flowline { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-faint); }
+body.arcade-shell .arcade-evt-remove { align-self: flex-start; }
+
+/* S47 — "+ Add event" picker modal. */
+body.arcade-shell .arcade-evt-modal-back {
+  position: fixed; inset: 0; z-index: 1600;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+body.arcade-shell .arcade-evt-modal {
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(420px, calc(100vw - 48px));
+  padding: 16px; box-sizing: border-box;
+  background: var(--arc-panel);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
+}
+body.arcade-shell .arcade-evt-modal__title { margin: 0; font: 700 14px/1.2 var(--arc-font-ui); color: var(--arc-ink); }
+body.arcade-shell .arcade-evt-modal__blurb { margin: 0; font: 400 11px/1.5 var(--arc-font-ui); color: var(--arc-muted); }
+body.arcade-shell .arcade-evt-modal__pick {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; text-align: left; cursor: pointer;
+  background: var(--arc-panel-2);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+}
+body.arcade-shell .arcade-evt-modal__pick:hover { border-color: var(--arc-info); }
+body.arcade-shell .arcade-evt-modal__pick-name { font: 600 12px/1.3 var(--arc-font-ui); color: var(--arc-ink); }
+body.arcade-shell .arcade-evt-modal__pick-desc { font: 400 11px/1.4 var(--arc-font-ui); color: var(--arc-muted); }
+body.arcade-shell .arcade-evt-modal__pick--build { border-style: dashed; }
+body.arcade-shell .arcade-evt-modal > .arcade-btn { align-self: flex-end; }
+
+@media (max-width: 900px) {
+  body.arcade-shell .arcade-alerts-body { flex-direction: column; overflow-y: auto; }
+  body.arcade-shell .arcade-evt-list-col { width: 100%; flex-shrink: 0; }
+  body.arcade-shell .arcade-evt-list { max-height: 220px; }
+  body.arcade-shell .arcade-alerts-stage { overflow: visible; }
 }
 
 body.arcade-shell .arcade-alerts-rail {
