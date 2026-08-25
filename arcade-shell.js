@@ -22,21 +22,34 @@
         return; // stock mode — do nothing, ever.
     }
 
+    // S46 shell frame (TASK-43, Add-On Arcade round 3 — boards APPROVED
+    // 0018.06.03): menu bar on TOP reads Main · Add-ons · Style · AI 🔒 ·
+    // Deck Settings · More▾. The old rail tabs Games / Elements / Alerts /
+    // VDO / Event Flow leave the nav — their surfaces stay reachable through
+    // the Add-ons gallery doors (ADDON_DOORS below) and the More▾ transition
+    // hatch (MORE_LEGACY_ITEMS). Their tab MACHINERY (ARCADE_TAB_PAGE /
+    // CUSTOM_TABS entries, scroll memory, the alerts panel) is untouched —
+    // only the nav berths moved. Interior redesigns are S47+.
     var TABS = [
         { id: 'main', label: 'Main' },
-        { id: 'games', label: 'Games' },
-        { id: 'elements', label: 'Elements' },
+        { id: 'addons', label: 'Add-ons' },
         { id: 'style', label: 'Style' },
-        { id: 'alerts', label: 'Alerts' },
-        { id: 'vdo', label: 'VDO' },
-        { id: 'eventflow', label: 'Event Flow' },
-        { id: 'settings', label: 'Settings' }
+        { id: 'settings', label: 'Deck Settings' }
     ];
 
     var MORE_ITEMS = [
         { page: 'dashboard', label: 'Status and Logs' },
         { page: 'streamdeck', label: 'Stream Deck Setup' },
         { page: 'sessions', label: 'Sessions' }
+    ];
+
+    // Transition hatch (S46): direct entries to the surfaces whose rail tabs
+    // left the nav, until muscle memory re-trains to the Add-ons doors.
+    var MORE_LEGACY_ITEMS = [
+        { tab: 'games', label: 'Games' },
+        { tab: 'alerts', label: 'Alerts' },
+        { tab: 'vdo', label: 'VDO / Cameras' },
+        { tab: 'eventflow', label: 'Event Flow' }
     ];
 
     // --------------------------------------------------------------------
@@ -113,16 +126,21 @@
     // + house tipjar-mini), and Hype Train ship ready
     // (watchtime-loyalty-elements-spec.md items 1-3). Fren Map stays
     // planned — no geo data source exists.
+    //
+    // S46: the standalone Elements tab is gone from the nav; these cards are
+    // re-homed inside the Add-ons gallery, filed under the gallery TYPE each
+    // entry declares in addonType ('money' | 'widgets') — Add-On Arcade
+    // round 3: "Elements' 5 cards re-homed here under Money/Widgets".
     // --------------------------------------------------------------------
     var ELEMENTS = [
         {
-            id: 'music', name: 'Now Playing', category: 'music', status: 'ready',
+            id: 'music', name: 'Now Playing', category: 'music', status: 'ready', addonType: 'widgets',
             overlayPage: 'music-widget.html',
             params: ['layout=horizontal'],
             blurb: 'Spotify now-playing overlay — transparent, Tuna-grade.'
         },
         {
-            id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'ready',
+            id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'ready', addonType: 'money',
             overlayPage: 'tipjar.html',
             // Stock SSN overlay (unmodified upstream) — themes/sound/confetti/
             // leaderboard/CSV export. theme accepts default|neon|gold (read from
@@ -135,21 +153,74 @@
             blurb: 'Full-featured stock tip jar — themes, sound, confetti, leaderboard. Display-only, no wallet.'
         },
         {
-            id: 'tipjar-mini', name: 'Tip Jar Mini', category: 'tips', status: 'ready',
+            id: 'tipjar-mini', name: 'Tip Jar Mini', category: 'tips', status: 'ready', addonType: 'money',
             overlayPage: 'tipjar-mini.html',
             params: ['goal=100', 'label=Tip Jar', 'layout=full'],
             blurb: 'Lean house variant — running total + goal bar, honest empty states, no wallet.'
         },
         {
-            id: 'hype', name: 'Hype Train', category: 'hype', status: 'ready',
+            id: 'hype', name: 'Hype Train', category: 'hype', status: 'ready', addonType: 'widgets',
             overlayPage: 'hype.html',
             blurb: 'Live viewer/chatter counts by platform, straight from the session.'
         },
         {
-            id: 'map', name: 'Fren Map', category: 'community', status: 'planned',
+            id: 'map', name: 'Fren Map', category: 'community', status: 'planned', addonType: 'widgets',
             blurb: 'Where the frens are — a live viewer map.'
         }
     ];
+
+    // --------------------------------------------------------------------
+    // Add-ons gallery (S46, TASK-43 — Add-On Arcade round 3, "everything on
+    // stream is an ADD-ON"). The gallery skeleton: TYPE list down the left
+    // (the sources-rail pattern), card grid on the right. v1 cards open what
+    // exists TODAY — interior redesigns are S47–S51.
+    //
+    // ADDON_TYPES is the ruled left-column order. ADDON_DOORS are the four
+    // door cards: each opens an EXISTING surface whose rail tab left the
+    // nav (tab ids match ARCADE_TAB_PAGE / CUSTOM_TABS, so the existing tab
+    // machinery — scroll memory, lazy panels, the boot guard — keeps working
+    // unchanged). Element cards (ELEMENTS above) file under 'money' and
+    // 'widgets'. 'chat' has no v1 cards — the grid shows an honest empty
+    // state for it, never a fake one.
+    // --------------------------------------------------------------------
+    var ADDON_TYPES = [
+        { id: 'all', label: 'All' },
+        { id: 'chat', label: 'Chat & Text' },
+        { id: 'frames', label: 'Frames & Cameras' },
+        { id: 'alerts', label: 'Alerts' },
+        { id: 'money', label: 'Money' },
+        { id: 'games', label: 'Games' },
+        { id: 'flows', label: 'Flows' },
+        { id: 'widgets', label: 'Widgets' }
+    ];
+
+    var ADDON_DOORS = [
+        {
+            id: 'frames', name: 'Frames & Cameras', addonType: 'frames', tab: 'vdo',
+            cta: 'Open Frames & Cameras',
+            blurb: 'Remote cameras and guests — VDO room links bring phones and remote guests onto the stream.'
+        },
+        {
+            id: 'alerts', name: 'Alerts', addonType: 'alerts', tab: 'alerts',
+            cta: 'Open Alerts',
+            blurb: 'Event alerts — follow, sub, donation, bits, raid, auction, hype. Styles, templates, sounds, test-fire.'
+        },
+        {
+            id: 'games', name: 'Games hub', addonType: 'games', tab: 'games',
+            cta: 'Open Games hub',
+            blurb: 'Chat-played games — pick one, copy its overlay URL into OBS.'
+        },
+        {
+            id: 'flows', name: 'Event Flows', addonType: 'flows', tab: 'eventflow',
+            cta: 'Open Flows',
+            blurb: 'Triggers and actions — automate what happens on stream when chat events land.'
+        }
+    ];
+
+    // Door tabs keep no nav berth of their own — while one is open, the
+    // Add-ons nav button carries the is-on mark (the door lives INSIDE the
+    // add-ons world). Also whitelists door tabs for boot-restore.
+    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons' };
 
     // --------------------------------------------------------------------
     // Analytics IPC bridge state (pacsarcade design-briefs/ssn-ui-overhaul/
@@ -360,6 +431,30 @@
                 clickStockNav(item.page);
             });
             pop.appendChild(mi);
+        });
+
+        // S46 transition hatch — the surfaces whose rail tabs left the nav,
+        // reachable directly here (and through their Add-ons gallery doors)
+        // until the consolidation waves (S47+) finish re-homing them.
+        var sep = document.createElement('div');
+        sep.className = 'arcade-more-sep';
+        sep.setAttribute('role', 'separator');
+        pop.appendChild(sep);
+        var note = document.createElement('div');
+        note.className = 'arcade-more-note';
+        note.textContent = 'Moved to Add-ons';
+        pop.appendChild(note);
+        MORE_LEGACY_ITEMS.forEach(function (item) {
+            var li = document.createElement('button');
+            li.type = 'button';
+            li.setAttribute('role', 'menuitem');
+            li.textContent = item.label;
+            li.addEventListener('click', function () {
+                wrap.classList.remove('is-open');
+                btn.setAttribute('aria-expanded', 'false');
+                navigateArcadeTab(item.tab);
+            });
+            pop.appendChild(li);
         });
         wrap.appendChild(pop);
 
@@ -753,8 +848,12 @@
     // --------------------------------------------------------------------
     function setArcadeTab(tabId) {
         document.body.dataset.arcadeTab = tabId || '';
+        // Door tabs (alerts/games/vdo/eventflow) have no nav berth of their
+        // own since S46 — while one is open, its PARENT gallery berth
+        // carries the is-on mark instead (DOOR_PARENT above).
+        var navId = DOOR_PARENT[tabId] || tabId;
         document.querySelectorAll('[data-arcade-tab-btn]').forEach(function (btn) {
-            btn.classList.toggle('is-on', btn.dataset.arcadeTabBtn === tabId);
+            btn.classList.toggle('is-on', btn.dataset.arcadeTabBtn === navId);
         });
         try { localStorage.setItem('arcadeTab', tabId || 'main'); } catch (e) { /* noop */ }
     }
@@ -840,13 +939,16 @@
     // navigateArcadeTab skips the stock-nav click for these, and CSS reveals
     // the panel + hides #content-pane while data-arcade-tab matches. The boot
     // guard is naturally a no-op for them (expected = ARCADE_TAB_PAGE[custom]
-    // is undefined, so it never fights). See buildElementsPanel().
+    // is undefined, so it never fights). See buildAddonsPanel().
+    // S46: 'addons' (the gallery) is a nav berth; 'alerts' keeps its panel
+    // but no berth — it opens through its gallery door (DOOR_PARENT). The
+    // old 'elements' panel is retired, its cards re-homed in the gallery.
     // 'ai' is deliberately NOT a static member here — it's added (along with
     // the TABS entry and the panel DOM itself) only when hasNostrSigner()
     // passes at boot, in init(). No signer on this seat => 'ai' stays
     // unknown to both maps => navigateArcadeTab('ai') is a silent no-op,
     // same as any other unrecognized tab id.
-    var CUSTOM_TABS = { elements: true, style: true, alerts: true };
+    var CUSTOM_TABS = { addons: true, style: true, alerts: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -972,13 +1074,20 @@
     }
 
     // --------------------------------------------------------------------
-    // Elements registry — the custom "Elements" tab. A full-width in-shell
-    // panel over the content area, built once at boot and CSS-hidden until
-    // its tab is on (body.arcade-shell[data-arcade-tab="elements"]). 'ready'
-    // cards expose Copy overlay URL (built via the app's own resolver — see
-    // buildElementOverlayUrl); 'planned' cards are honest, non-interactive
-    // SOON stubs. Spec: pacsarcade design-briefs/ssn-ui-overhaul/
-    // element-registry-spec.md.
+    // Add-ons gallery — the custom "Add-ons" tab (S46, TASK-43). A
+    // full-width in-shell panel over the content area, built once at boot
+    // and CSS-hidden until its tab is on
+    // (body.arcade-shell[data-arcade-tab="addons"]). The ruled shell shape
+    // (Add-On Arcade round 3): TYPE list down the LEFT (the sources-rail
+    // pattern — topbar + left item column + stage), card grid on the right.
+    // Cards = ADDON_DOORS (open today's surfaces) + ELEMENTS (re-homed from
+    // the retired Elements tab; 'ready' cards expose Copy overlay URL built
+    // via the app's own resolver — see buildElementOverlayUrl; 'planned'
+    // cards are honest, non-interactive SOON stubs). Grid order follows the
+    // ruled type order; filtering is hide/show via [hidden], cards are built
+    // once. Spec lineage: design-briefs/ssn-ui-overhaul/
+    // element-registry-spec.md (registry) + the Add-On Arcade board round 3
+    // (gallery).
     //
     // No "Send to OBS" button by design: the Electron StreamDeck bridge has
     // no add-browser-source action, and the fleet's real OBS paths live
@@ -986,23 +1095,141 @@
     // actions, and VDO's OBS camera-join scene. The house workflow is
     // Copy overlay URL -> paste as an OBS browser source.
     // --------------------------------------------------------------------
-    function buildElementsPanel() {
+    var addonsActiveType = 'all';
+
+    function addonTypeLabel(typeId) {
+        var t = ADDON_TYPES.find(function (x) { return x.id === typeId; });
+        return t ? t.label : String(typeId || '').toUpperCase();
+    }
+
+    function addonTypeCount(typeId) {
+        var n = 0;
+        ADDON_DOORS.forEach(function (d) { if (typeId === 'all' || d.addonType === typeId) n++; });
+        ELEMENTS.forEach(function (el) { if (typeId === 'all' || el.addonType === typeId) n++; });
+        return n;
+    }
+
+    function buildAddonsPanel() {
         var panel = document.createElement('section');
-        panel.className = 'arcade-elements';
-        panel.setAttribute('aria-label', 'Overlay elements');
+        panel.className = 'arcade-addons';
+        panel.setAttribute('aria-label', 'Add-ons gallery');
         panel.innerHTML =
             '<div class="arcade-panel-head">' +
-            '<span class="arcade-panel-title">ELEMENTS</span>' +
+            '<span class="arcade-panel-title">ADD-ONS</span>' +
             '<span class="arcade-spacer"></span>' +
-            '<span class="arcade-el-hint">Overlay add-ons — copy a URL into OBS as a browser source</span>' +
+            '<span class="arcade-el-hint">Everything on stream is an add-on — open one to work with it in place</span>' +
             '</div>' +
-            '<div class="arcade-el-body"><div class="arcade-el-grid" id="arcade-el-grid"></div></div>';
+            '<div class="arcade-addons-body">' +
+            '<nav class="arcade-addons-types" aria-label="Add-on types"></nav>' +
+            '<div class="arcade-addons-stage">' +
+            '<div class="arcade-el-grid" id="arcade-addons-grid"></div>' +
+            '<p class="arcade-addons-empty" id="arcade-addons-empty" hidden></p>' +
+            '</div>' +
+            '</div>';
         document.body.appendChild(panel);
 
-        var grid = panel.querySelector('#arcade-el-grid');
-        ELEMENTS.forEach(function (el) {
-            grid.appendChild(buildElementCard(el));
+        var typesNav = panel.querySelector('.arcade-addons-types');
+        ADDON_TYPES.forEach(function (t) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.arcadeAddonType = t.id;
+            btn.setAttribute('aria-pressed', String(t.id === addonsActiveType));
+            var label = document.createElement('span');
+            label.textContent = t.label;
+            btn.appendChild(label);
+            var count = document.createElement('span');
+            count.className = 'arcade-addons-type__count';
+            count.textContent = String(addonTypeCount(t.id));
+            btn.appendChild(count);
+            btn.addEventListener('click', function () { applyAddonsFilter(t.id); });
+            typesNav.appendChild(btn);
         });
+
+        // Cards in ruled type order: door cards first within a type, then
+        // the re-homed element cards. Built once; filtering only toggles
+        // [hidden] (applyAddonsFilter).
+        var grid = panel.querySelector('#arcade-addons-grid');
+        ADDON_TYPES.forEach(function (t) {
+            if (t.id === 'all') return;
+            ADDON_DOORS.forEach(function (d) {
+                if (d.addonType === t.id) grid.appendChild(buildAddonDoorCard(d));
+            });
+            ELEMENTS.forEach(function (el) {
+                if (el.addonType === t.id) grid.appendChild(buildElementCard(el));
+            });
+        });
+
+        applyAddonsFilter(addonsActiveType);
+    }
+
+    function applyAddonsFilter(typeId) {
+        addonsActiveType = typeId;
+        var panel = document.querySelector('.arcade-addons');
+        if (!panel) return;
+        panel.querySelectorAll('[data-arcade-addon-type]').forEach(function (btn) {
+            var on = btn.dataset.arcadeAddonType === typeId;
+            btn.classList.toggle('is-on', on);
+            btn.setAttribute('aria-pressed', String(on));
+        });
+        var visible = 0;
+        panel.querySelectorAll('#arcade-addons-grid [data-arcade-addon-card-type]').forEach(function (card) {
+            var show = (typeId === 'all' || card.dataset.arcadeAddonCardType === typeId);
+            card.hidden = !show;
+            if (show) visible++;
+        });
+        // Honest empty state (charter: no fake content, ever) — 'chat' has
+        // no v1 cards; the wave that lands them is named, nothing is faked.
+        var empty = panel.querySelector('#arcade-addons-empty');
+        if (empty) {
+            empty.hidden = visible !== 0;
+            if (visible === 0) {
+                empty.textContent = 'No ' + addonTypeLabel(typeId) + ' add-ons yet — they land in this gallery in a later wave.';
+            }
+        }
+    }
+
+    // Door card — same card shell as an element card (arcade-el-card, CTAs
+    // pinned to the bottom edge per the card-footer law), but its CTA opens
+    // an EXISTING surface in place (the tab id rides the pre-S46 machinery:
+    // ARCADE_TAB_PAGE / CUSTOM_TABS / scroll memory all unchanged).
+    function buildAddonDoorCard(door) {
+        var card = document.createElement('article');
+        card.className = 'arcade-el-card';
+        card.dataset.arcadeAddon = door.id;
+        card.dataset.arcadeAddonCardType = door.addonType || '';
+
+        var head = document.createElement('div');
+        head.className = 'arcade-el-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-el-card__name';
+        name.textContent = door.name;
+        head.appendChild(name);
+        var cat = document.createElement('span');
+        cat.className = 'arcade-pill arcade-el-cat';
+        cat.textContent = addonTypeLabel(door.addonType).toUpperCase();
+        head.appendChild(cat);
+        var status = document.createElement('span');
+        status.className = 'arcade-pill arcade-el-status arcade-el-status--ready';
+        status.textContent = 'READY';
+        head.appendChild(status);
+        card.appendChild(head);
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-el-card__blurb';
+        blurb.textContent = door.blurb || '';
+        card.appendChild(blurb);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-el-card__actions';
+        var openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'arcade-btn arcade-btn--primary';
+        openBtn.textContent = door.cta || 'Open';
+        openBtn.addEventListener('click', function () { navigateArcadeTab(door.tab); });
+        actions.appendChild(openBtn);
+        card.appendChild(actions);
+
+        return card;
     }
 
     function elementCategoryLabel(cat) {
@@ -1021,6 +1248,7 @@
         card.className = 'arcade-el-card' + (ready ? '' : ' arcade-el-card--planned');
         card.dataset.arcadeElement = el.id;
         card.dataset.arcadeElementCategory = el.category || '';
+        card.dataset.arcadeAddonCardType = el.addonType || '';
 
         var head = document.createElement('div');
         head.className = 'arcade-el-card__head';
@@ -5470,14 +5698,18 @@
         // its panel DOM never gets built at all. Hidden entirely, not
         // disabled — see hasNostrSigner()'s comment for exactly why this is
         // the only cheap pre-check available.
+        // S46 berth order: the locked seat sits between Style and Deck
+        // Settings on the top bar (Add-On Arcade round 3 menu), marked 🔒.
         if (aiGateOpen() || hasNostrSigner()) {
-            TABS.push({ id: 'ai', label: 'AI' });
+            var settingsIdx = -1;
+            TABS.forEach(function (t, i) { if (t.id === 'settings') settingsIdx = i; });
+            TABS.splice(settingsIdx === -1 ? TABS.length : settingsIdx, 0, { id: 'ai', label: 'AI 🔒' });
             CUSTOM_TABS.ai = true;
         }
 
         buildTopbar();
         buildRailAndSide();
-        buildElementsPanel();
+        buildAddonsPanel();
         buildStylePanel();
         buildAlertsPanel();
         if (CUSTOM_TABS.ai) buildAiPanel();
@@ -5485,7 +5717,9 @@
 
         var restored = 'main';
         try { restored = localStorage.getItem('arcadeTab') || 'main'; } catch (e) { /* noop */ }
-        if (!TABS.some(function (t) { return t.id === restored; })) restored = 'main';
+        // Door tabs (DOOR_PARENT) restore too — a reload while inside a
+        // gallery door lands back inside that door, not on Main.
+        if (!TABS.some(function (t) { return t.id === restored; }) && !DOOR_PARENT[restored]) restored = 'main';
 
         // index.html has its own independent boot-restore for "last open page"
         // that resolves asynchronously (see installBootGuard() above for why a

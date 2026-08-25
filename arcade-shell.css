@@ -57,7 +57,7 @@ body.arcade-shell #content-pane { padding-top: var(--arc-topbar-h) !important; }
 body.arcade-shell .arcade-topbar :focus-visible,
 body.arcade-shell .arcade-rail :focus-visible,
 body.arcade-shell .arcade-side :focus-visible,
-body.arcade-shell .arcade-elements :focus-visible,
+body.arcade-shell .arcade-addons :focus-visible,
 body.arcade-shell .arcade-style :focus-visible,
 body.arcade-shell .arcade-alerts :focus-visible,
 body.arcade-shell .arcade-pop :focus-visible {
@@ -272,6 +272,19 @@ body.arcade-shell .arcade-more-pop button {
   cursor: pointer;
 }
 body.arcade-shell .arcade-more-pop button:hover { background: var(--arc-panel-2); }
+/* S46 transition hatch — divider + caption over the "moved to Add-ons"
+   legacy entries (see MORE_LEGACY_ITEMS in arcade-shell.js). */
+body.arcade-shell .arcade-more-sep {
+  height: 1px; margin: 4px 6px;
+  background: var(--arc-edge-soft);
+}
+body.arcade-shell .arcade-more-note {
+  padding: 4px 10px 2px;
+  font: 700 9px/1.4 var(--arc-font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--arc-faint);
+}
 
 /* --------------------------------------------------------------------------
    Buttons (shared scale — rail, side panel, dock actions)
@@ -606,14 +619,15 @@ body.arcade-shell[data-arcade-tab="main"] #chat-empty-hint {
    session id, no keys) — masking law is honored by omission, not display */
 
 /* --------------------------------------------------------------------------
-   Elements registry — custom "Elements" tab. A full-width in-shell panel
-   over the content area, shown only while data-arcade-tab="elements" (the
-   stock content pane sits behind it, covered by the opaque ground). Card
-   grid of overlay add-ons; 'ready' cards copy an OBS overlay URL, 'planned'
-   cards are honest, non-interactive SOON stubs.
-   Spec: pacsarcade design-briefs/ssn-ui-overhaul/element-registry-spec.md
+   Add-ons gallery — custom "Add-ons" tab (S46, TASK-43; Add-On Arcade round
+   3). A full-width in-shell panel over the content area, shown only while
+   data-arcade-tab="addons" (the stock content pane sits behind it, covered
+   by the opaque ground). The ruled shell shape: TYPE list down the LEFT
+   (the sources-rail pattern — topbar + left item column + stage), card grid
+   on the right. Cards reuse the .arcade-el-card shell from the retired
+   Elements tab; door cards open today's surfaces in place.
    -------------------------------------------------------------------------- */
-body.arcade-shell .arcade-elements {
+body.arcade-shell .arcade-addons {
   display: none;
   position: fixed;
   top: var(--arc-topbar-h);
@@ -624,14 +638,58 @@ body.arcade-shell .arcade-elements {
   min-height: 0;
   box-sizing: border-box;
 }
-body.arcade-shell[data-arcade-tab="elements"] .arcade-elements { display: flex; }
+body.arcade-shell[data-arcade-tab="addons"] .arcade-addons { display: flex; }
 
-body.arcade-shell .arcade-elements .arcade-el-hint {
+body.arcade-shell .arcade-addons .arcade-el-hint {
   font: 400 11px/1.4 var(--arc-font-ui);
   color: var(--arc-faint);
 }
-body.arcade-shell .arcade-el-body {
-  padding: 18px; overflow-y: auto; flex: 1; min-height: 0;
+body.arcade-shell .arcade-addons-body {
+  display: flex; flex: 1; min-height: 0;
+}
+/* left item column — same ground/rhythm as the Main tab's sources rail */
+body.arcade-shell .arcade-addons-types {
+  flex: 0 0 208px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 8px;
+  background: var(--arc-panel);
+  border-right: 1px solid var(--arc-edge);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-addons-types button {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 32px; padding: 0 10px;
+  border: 1px solid transparent; border-radius: var(--arc-r);
+  background: transparent;
+  color: var(--arc-muted);
+  font: 600 11px/1.3 var(--arc-font-ui);
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+body.arcade-shell .arcade-addons-types button:hover { color: var(--arc-ink); background: var(--arc-panel-2); }
+body.arcade-shell .arcade-addons-types button.is-on {
+  color: var(--arc-info);
+  background: rgba(53, 208, 255, 0.1);
+  border-color: rgba(53, 208, 255, 0.3);
+}
+body.arcade-shell .arcade-addons-type__count {
+  margin-left: auto;
+  font: 400 10px/1 var(--arc-font-mono);
+  color: var(--arc-faint);
+}
+body.arcade-shell .arcade-addons-types button.is-on .arcade-addons-type__count { color: var(--arc-info); }
+body.arcade-shell .arcade-addons-stage {
+  flex: 1; min-width: 0;
+  padding: 18px; overflow-y: auto;
+  box-sizing: border-box;
+}
+body.arcade-shell .arcade-addons-empty {
+  margin: 24px auto; max-width: 420px;
+  font: 400 12px/1.6 var(--arc-font-ui);
+  color: var(--arc-faint);
+  text-align: center;
 }
 body.arcade-shell .arcade-el-grid {
   display: grid;
@@ -688,14 +746,14 @@ body.arcade-shell .arcade-el-status--ready { color: var(--arc-info); border-colo
 body.arcade-shell .arcade-el-status--planned { color: var(--arc-faint); }
 
 @media (max-width: 760px) {
-  body.arcade-shell .arcade-el-body { padding: 12px; }
+  body.arcade-shell .arcade-addons-stage { padding: 12px; }
   body.arcade-shell .arcade-el-grid { grid-template-columns: 1fr; }
 }
 
 /* --------------------------------------------------------------------------
    AI area — custom "AI" tab (Phase 1, pacsarcade briefings/
    ssn-ai-area-design.md). Same full-panel custom-tab pattern as
-   .arcade-elements/.arcade-alerts, but its own ground: gate ink on a
+   .arcade-addons/.arcade-alerts, but its own ground: gate ink on a
    dedicated dark-violet panel (design doc colors, 0018.06.01) rather than
    the shared --arc-void, so the gated DevChat berth reads visually distinct
    from the rest of the shell. Only ever built at all when hasNostrSigner()
@@ -833,7 +891,7 @@ body.arcade-shell .arcade-ai-items__title {
 
 /* --------------------------------------------------------------------------
    Alerts Builder — custom "Alerts" tab (Stage 2 shell surface). Same
-   custom-tab pattern as .arcade-elements/.arcade-style: canvas-first, a live
+   custom-tab pattern as .arcade-addons/.arcade-style: canvas-first, a live
    multi-alerts.html PREVIEW iframe as the hero (same checkerboard ground as
    the Style preview, so alert-card transparency reads honestly) with a
    compact rail of 7 event-meaning cards below it. Spec: pacsarcade
@@ -923,7 +981,7 @@ body.arcade-shell .arcade-alert-card__actions .arcade-btn { width: 100%; }
 
 /* --------------------------------------------------------------------------
    Style Builder v1 — custom "Style" tab. Full-width in-shell panel (same
-   custom-tab pattern as .arcade-elements): presets row · controls column ·
+   custom-tab pattern as .arcade-addons): presets row · controls column ·
    live dock.html preview. The preview iframe wears a checkerboard ground so
    background transparency reads HONESTLY. Spec: pacsarcade design-briefs/
    ssn-ui-overhaul/style-builder-v1-spec.md
