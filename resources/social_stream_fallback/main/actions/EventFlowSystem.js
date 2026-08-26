@@ -1,3 +1,57 @@
+// S52 dry-run gate (house patch, TASK-61): in testMode a transport action never
+// executes — it is recorded in this.testModeLog as a "would have …" line the
+// test panel SHOWS. Engine-local actions (message mutation, state/memory/
+// counters) and the overlay-render family still execute against the throwaway
+// engine, whose only transport posts into an isolated preview. Default-deny:
+// any action id not on this allow-list is intercepted, known or not.
+const TEST_MODE_EXECUTE_ALLOWLIST = [
+	// message-flow / mutation (engine-local, no transport)
+	'blockMessage', 'returnMessage', 'continueAsync', 'reflectionFilter',
+	'modifyMessage', 'setProperty', 'featureMessage', 'addPrefix', 'addSuffix',
+	'findReplace', 'removeText',
+	// state / memory / counters (the throwaway engine's own scratch state)
+	'setGateState', 'resetStateNode', 'setCounter', 'incrementCounter', 'checkCounter',
+	'rememberUser', 'forgetUser', 'clearUserMemory', 'pickRandomUser',
+	// overlay-render family (render into the isolated preview) + engine-local timing
+	'playTenorGiphy', 'showAvatar', 'showText', 'clearLayer', 'playAudioClip', 'delay'
+];
+const TEST_MODE_INTERCEPT_LABELS = {
+	sendMessage: 'would have sent a message (sendMessage transport)',
+	relay: 'would have relayed the message (relay transport)',
+	webhook: 'would have called webhook',
+	addPoints: 'would have added points',
+	spendPoints: 'would have spent points',
+	customJs: 'would have run custom JS',
+	pinMessage: 'would have posted a pin update to the dock',
+	triggerOBSScene: 'would have triggered an OBS scene',
+	obsChangeScene: 'would have sent OBS command: change scene',
+	obsToggleSource: 'would have sent OBS command: toggle source',
+	obsSetSourceFilter: 'would have sent OBS command: set source filter',
+	obsMuteSource: 'would have sent OBS command: mute source',
+	obsStartRecording: 'would have sent OBS command: start recording',
+	obsStopRecording: 'would have sent OBS command: stop recording',
+	obsStartStreaming: 'would have sent OBS command: start streaming',
+	obsStopStreaming: 'would have sent OBS command: stop streaming',
+	obsReplayBuffer: 'would have sent OBS command: replay buffer',
+	spotifySkip: 'would have sent Spotify command: skip',
+	spotifyPrevious: 'would have sent Spotify command: previous',
+	spotifyPause: 'would have sent Spotify command: pause',
+	spotifyResume: 'would have sent Spotify command: resume',
+	spotifyVolume: 'would have sent Spotify command: volume',
+	spotifyQueue: 'would have sent Spotify command: queue',
+	spotifyToggle: 'would have sent Spotify command: toggle',
+	spotifyNowPlaying: 'would have sent Spotify command: now playing',
+	spotifyShuffle: 'would have sent Spotify command: shuffle',
+	spotifyRepeat: 'would have sent Spotify command: repeat',
+	ttsSpeak: 'would have spoken TTS text',
+	ttsToggle: 'would have sent TTS command: toggle',
+	ttsSkip: 'would have sent TTS command: skip',
+	ttsClear: 'would have sent TTS command: clear',
+	ttsVolume: 'would have sent TTS command: volume',
+	midiSendNote: 'would have sent MIDI note',
+	midiSendCC: 'would have sent MIDI CC'
+};
+
 class EventFlowSystem {
     constructor(options = {}) {
         this.flows = [];
@@ -26,6 +80,12 @@ class EventFlowSystem {
 			: this.detectCustomJsEvalSupport();
 		this.customJsEvalSupported = this.allowEvalCustomJs; // alias used by EventFlowEditor
 		this.customJsEvalWarningShown = false;
+
+		// S52 dry-run gate: testMode instances never fire transports — see the
+		// interception at the top of executeAction. testModeLog collects the
+		// "would have …" lines the test panel displays.
+		this.testMode = options.testMode === true;
+		this.testModeLog = [];
 		
 		// MIDI properties
 		this.midiEnabled = false;
@@ -3152,6 +3212,16 @@ class EventFlowSystem {
     async executeAction(actionNode, message, flow = null) {
         const { actionType, config } = actionNode;
         //console.log(`[ExecuteAction] Node: ${actionNode.id}, Type: ${actionType}, Config: ${JSON.stringify(config)}`);
+
+        // S52 dry-run gate: in testMode every transport action is a logged
+        // no-op; the chain continues with the message unmodified so downstream
+        // nodes still evaluate honestly.
+        if (this.testMode && TEST_MODE_EXECUTE_ALLOWLIST.indexOf(actionType) === -1) {
+            const label = TEST_MODE_INTERCEPT_LABELS[actionType] || ('would have run unknown action "' + actionType + '" (dry run: not executed)');
+            this.testModeLog.push({ actionType: actionType, label: label, at: Date.now() });
+            return { modified: false, message: message, blocked: false, dryRunIntercepted: actionType };
+        }
+
         let result = { modified: false, message, blocked: false };
         
         switch (actionType) {
