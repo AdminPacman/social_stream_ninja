@@ -1334,6 +1334,113 @@ body.arcade-shell .arcade-goals {
 body.arcade-shell[data-arcade-tab="commands"] .arcade-commands { display: flex; }
 body.arcade-shell[data-arcade-tab="goals"] .arcade-goals { display: flex; }
 
+/* ---------------------------------------------------------------------------
+   S50 (TASK-47) — FRAMES & CAMERAS + THE TIP JAR interior. Same scoped-panel
+   recipe as .arcade-commands/.arcade-goals; the interiors ride the shared
+   .arcade-alerts-body/stage + .arcade-evt-* shapes — only the display gates
+   and the small lane-specific blocks below are new.
+   --------------------------------------------------------------------------- */
+body.arcade-shell .arcade-frames,
+body.arcade-shell .arcade-tipjar {
+  display: none;
+  position: fixed;
+  top: var(--arc-topbar-h);
+  left: 0; right: 0; bottom: 0;
+  z-index: 1500;
+  background: var(--arc-void);
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+body.arcade-shell[data-arcade-tab="frames"] .arcade-frames { display: flex; }
+body.arcade-shell[data-arcade-tab="tipjar"] .arcade-tipjar { display: flex; }
+
+body.arcade-shell .arcade-frames-empty {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--arc-muted);
+  font-style: italic;
+}
+body.arcade-shell .arcade-frames-device {
+  margin: 8px 0;
+  border: 1px solid var(--arc-edge);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--arc-panel);
+}
+body.arcade-shell .arcade-frames-device iframe {
+  display: block;
+  width: 100%;
+  height: 520px;
+  border: 0;
+  background: #ffffff; /* the stock vdo.html page is a light page — honest ground, not a dressed one */
+}
+body.arcade-shell .arcade-frames-honest {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--arc-muted);
+}
+body.arcade-shell .arcade-frames-linkblock { margin: 10px 0 0; }
+body.arcade-shell .arcade-frames-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+body.arcade-shell .arcade-frames-linkrow input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--arc-font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--arc-edge);
+  border-radius: 8px;
+  background: var(--arc-panel);
+  color: var(--arc-ink);
+}
+body.arcade-shell .arcade-frames-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+body.arcade-shell .arcade-frames-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+body.arcade-shell .arcade-frames-presets .arcade-btn[aria-pressed="true"] {
+  border-color: var(--arc-info);
+  color: var(--arc-info);
+}
+body.arcade-shell .arcade-frames-field { margin: 8px 0; }
+body.arcade-shell .arcade-frames-field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--arc-ink);
+}
+body.arcade-shell .arcade-frames-field input {
+  font-family: var(--arc-font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--arc-edge);
+  border-radius: 8px;
+  background: var(--arc-panel);
+  color: var(--arc-ink);
+  min-width: 180px;
+}
+body.arcade-shell .arcade-tipjar-rail__hint {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--arc-muted);
+}
+body.arcade-shell .arcade-tipjar-preview { height: 300px; }
+body.arcade-shell .arcade-tipjar-preview iframe { background: var(--arc-panel); }
+
 /* Commands has no visual overlay — the config fills the whole stage. */
 body.arcade-shell .arcade-evt-config--fill { flex: 1; }
 

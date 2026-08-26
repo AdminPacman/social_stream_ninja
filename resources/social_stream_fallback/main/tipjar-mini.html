@@ -16,11 +16,21 @@
   already flow through the SSN session (data.hasDonation on chat messages).
 
   THIS PAGE DOES NO WALLET / ON-CHAIN / PAYMENT OPERATIONS OF ANY KIND. It
-  never embeds a key, lnurl, invoice, or address, and it never talks to any
-  payment API. It is a read-only view of events SSN's own sources already
+  never embeds a key, invoice, or signing credential, and it never talks to
+  any payment API. It is a read-only view of events SSN's own sources already
   produce (Fourthwall/Ko-fi/Stripe webhooks, platform superchats/bits/subs,
   whatever is already wired into the session) — same trust boundary as every
   other overlay page. Wallet/on-chain setup is Pac-only, done elsewhere.
+
+  RECEIVE RAILS (S50, TASK-47 — wallet law: receive-side PUBLIC strings
+  ONLY): when the operator passes a lightning address/LNURL and/or zap
+  identifiers via URL params (the shell's Tip Jar → Payment rails setup
+  composes them), the page RENDERS those public strings — the lightning
+  address as a QR (generated locally by the vendored qrcodejs, thirdparty/
+  qrcode.min.js, no network) plus a lightning: link, the zap ids as text
+  lines. Nothing here can send, sign, or verify; settlement truth stays
+  with the payment provider. A value that smells like a secret is never
+  requested and never rendered — the shell refuses to even save one.
 
   Transport: reuses the SAME house session-connection pattern as hype.html /
   the stock tipjar.html — a hidden vdo.socialstream.ninja P2P bridge iframe
@@ -55,11 +65,16 @@
   recentcount how many recent-tip rows to keep (default 5, max 20)
   demo        1 — plays a short scripted sequence of CLEARLY fake demo tips,
               no session join, no network at all (screenshots/styling only)
-  showqr      1 — reveals an empty, labeled placeholder slot for a static
-              QR/address image (see qrimage). Off by default. This page never
-              generates or embeds a real QR/address itself.
-  qrimage     URL or data-URI for the placeholder slot's image, ONLY shown
-              when showqr=1. Pac fills this in; nothing here invents one.
+  showqr      1 — reveals the QR/address slot (see qrimage/lightning). Off by
+              default unless lightning is set. This page never invents an
+              address itself — it only renders what the operator passed.
+  qrimage     URL or data-URI for the slot's image. Wins over the generated
+              QR when both are set (an explicit image beats a generated one).
+  lightning   lightning address or LNURL (a PUBLIC receive string) — reveals
+              the slot and renders it as a locally-generated QR + lightning:
+              link. S50 receive rails; no keys, nothing that signs.
+  zaplud16    lud16 zap address (public identifier) — shown as a zap line.
+  zapnpub     npub (public identifier) — shown as a zap line.
   bg          CSS color OR "transparent" (default transparent — OBS-safe)
   width       px max-width of the widget (default 340; compact 260)
   pad         px inner padding (default 14; compact 10)
@@ -194,8 +209,9 @@
   }
   #emptyState.hidden { display: none; }
 
-  /* QR/address placeholder — same labeled-slot pattern as the music widget's
-     Spotify-logo placeholder. Empty by design; Pac fills qrimage. */
+  /* QR/address slot — renders the operator-supplied PUBLIC receive string
+     (S50 rails): an explicit qrimage wins; otherwise a lightning address
+     becomes a locally-generated QR (vendored qrcodejs) + lightning: link. */
   #qrSlot {
     display: none;
     align-items: center;
@@ -209,7 +225,26 @@
     color: var(--text-dim);
   }
   #qrSlot.shown { display: flex; }
-  #qrSlot img { width: 40px; height: 40px; border-radius: 4px; object-fit: contain; }
+  #qrSlot img, #qrSlot canvas { width: 40px; height: 40px; border-radius: 4px; object-fit: contain; }
+  #qrGen { flex: none; width: 40px; height: 40px; }
+  #qrGen img, #qrGen canvas { width: 40px; height: 40px; }
+  #qrSlot a { color: var(--gold); word-break: break-all; }
+
+  #zapLines {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+    font-family: var(--mono-font);
+    font-size: 10px;
+    color: var(--gold); /* gold = money only — this IS the money surface */
+  }
+  #zapLines.shown { display: flex; }
+  #zapLines .zap-row {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   #demoTag {
     display: none;
@@ -231,8 +266,10 @@
   <div id="emptyState">No tips yet this stream</div>
   <div id="qrSlot">
     <img id="qrSlotImg" alt="" aria-hidden="true">
-    <span>[ QR / address — optional, add via ?qrimage= ]</span>
+    <div id="qrGen" aria-hidden="true"></div>
+    <span id="qrSlotLabel">[ QR / address — optional, add via ?qrimage= ]</span>
   </div>
+  <div id="zapLines"></div>
   <span id="demoTag">DEMO — fake data, no session connected</span>
 </div>
 
@@ -255,6 +292,9 @@ var cfg = {
   demo: onoff("demo", false),
   showqr: onoff("showqr", false),
   qrimage: param("qrimage", ""),
+  lightning: param("lightning", "").slice(0, 200),
+  zaplud16: param("zaplud16", "").slice(0, 120),
+  zapnpub: param("zapnpub", "").slice(0, 120),
   bg: param("bg", "transparent"),
   width: param("width", ""),
   pad: param("pad", ""),
@@ -304,11 +344,70 @@ var qrSlotEl = document.getElementById("qrSlot");
 var qrSlotImgEl = document.getElementById("qrSlotImg");
 labelEl.textContent = cfg.label;
 
-if (cfg.showqr) {
-  qrSlotEl.classList.add("shown");
-  if (cfg.qrimage) qrSlotImgEl.src = cfg.qrimage;
-  else qrSlotImgEl.style.display = "none";
+/* ---- receive rails (S50) — renders operator-supplied PUBLIC strings only.
+   qrimage wins when explicitly set; otherwise a lightning address becomes a
+   locally-generated QR (vendored qrcodejs, lazy-loaded from thirdparty/ —
+   local file, zero network) plus a lightning: link. If the lib can't load,
+   the address still renders as text/link — honest degrade, never a fake. */
+var qrSlotLabelEl = document.getElementById("qrSlotLabel");
+var qrGenEl = document.getElementById("qrGen");
+var zapLinesEl = document.getElementById("zapLines");
+
+function renderZapLines() {
+  var rows = [];
+  if (cfg.zaplud16) rows.push("⚡ zaps: " + cfg.zaplud16);
+  if (cfg.zapnpub) rows.push("⚡ npub: " + cfg.zapnpub);
+  if (!rows.length) return;
+  zapLinesEl.classList.add("shown");
+  rows.forEach(function (text) {
+    var row = document.createElement("div");
+    row.className = "zap-row";
+    row.textContent = text;
+    row.title = text;
+    zapLinesEl.appendChild(row);
+  });
 }
+
+function renderLightningQr(generateImage) {
+  var link = document.createElement("a");
+  link.href = "lightning:" + cfg.lightning;
+  link.textContent = cfg.lightning;
+  qrSlotLabelEl.textContent = "";
+  qrSlotLabelEl.appendChild(link);
+  if (!generateImage) return;
+  var script = document.createElement("script");
+  script.src = "./thirdparty/qrcode.min.js";
+  script.onload = function () {
+    try {
+      new QRCode(qrGenEl, {
+        text: "lightning:" + cfg.lightning,
+        width: 40,
+        height: 40,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch (e) { console.error("tipjar-mini.html: QR render failed", e); }
+  };
+  script.onerror = function () { console.error("tipjar-mini.html: qrcode lib missing — address shown as text only"); };
+  document.head.appendChild(script);
+}
+
+if (cfg.showqr || cfg.lightning) {
+  qrSlotEl.classList.add("shown");
+  if (cfg.qrimage) {
+    qrSlotImgEl.src = cfg.qrimage;
+    qrGenEl.style.display = "none"; // an explicit image wins over a generated QR
+    if (cfg.lightning) renderLightningQr(false); // the label/link still names the rail
+  } else {
+    qrSlotImgEl.style.display = "none";
+    if (cfg.lightning) renderLightningQr(true);
+    else qrGenEl.style.display = "none";
+  }
+} else {
+  qrGenEl.style.display = "none";
+}
+renderZapLines();
 
 /* ---- state --------------------------------------------------------------- */
 var totalValue = 0;
