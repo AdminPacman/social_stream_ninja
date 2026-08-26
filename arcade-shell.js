@@ -1698,6 +1698,34 @@
     // ever sent to window.parent, to the app's own P2P/session bridge, or to
     // any other frame, so a test alert can never reach the real live overlay
     // a viewer might be watching.
+    //
+    // S47B — THE TWO RULED RIDERS (TASK-50, ruled off the S47 report's
+    // decision board; everything else on that board stays "as built"):
+    //  D1-B — a one-click "Turn on first-timers" switch beside the first-time
+    //    chatter checkbox (buildAlertConditionBox), rendered ONLY while the
+    //    stock `firsttimers` setting is off. One click writes the setting
+    //    through the SAME canonical saveSetting payload the popup's own
+    //    toggle uses (popup.js:6259-6267), plus the popup's companion
+    //    local-DB re-enable (popup.js:5538-5546 — background.js:16595 sets
+    //    `firsttime` only when firsttimers is on AND disableDB is off). The
+    //    button's title states the honest side effect (the dock starts
+    //    highlighting first-time chatters — stock behavior). No auto-enable
+    //    anywhere; state is re-read on every surface render, no polling.
+    //  D2-C — overlay-only test-fire for flow-backed custom events: "Fire
+    //    test alert" is allowed ONLY when EVERY action node in the event's
+    //    flow is on the ALERT_OVERLAY_ONLY_ACTIONS allow-list (default-deny,
+    //    unknown ids included); otherwise the UI says WHY, naming the first
+    //    disqualifying action. The fire runs the flow's REAL action chain
+    //    through stock's own engine on a THROWAWAY EventFlowSystem whose
+    //    only transport is aimed at the preview frame — loaded with
+    //    actions.html WITHOUT a session, inert by construction (no bridge
+    //    iframe, no socket — actions.html:1211-1220, :2028-2040; stock's
+    //    unconditional OBS probe at :1145-1146 is pinned to a dead localhost
+    //    port via &obsws=) — via the
+    //    page's OWN exposed test hook (window.testAction,
+    //    actions.html:2020-2024). Parent window and live session receive
+    //    NOTHING; qualification re-evaluates on every surface render and
+    //    reads action nodes only (the condition-sync machinery is untouched).
     // --------------------------------------------------------------------
     var ALERT_EVENTS = [
         { id: 'follow', label: 'Follow', emoji: '💖' },
@@ -1784,6 +1812,23 @@
     // message property (EventFlowSystem.js:2841-2880; set by background.js
     // :16595-16604 when the stock `firsttimers` setting is on).
     var ALERT_CONDITION_PLATFORMS = ['twitch', 'kick', 'youtube', 'tiktok'];
+
+    // S47B (ruled D2-C) — overlay-type action allow-list for the flow-backed
+    // test-fire: the editor's own "🎨 Media & Effects" catalog group
+    // (EventFlowEditor.js:380-392), every id cited to where it renders —
+    // each posts {overlayNinja:…} to the `actions` label consumed by
+    // actions.html (or, for delay, never leaves the engine):
+    //   playTenorGiphy → play_media  (EventFlowSystem.js:3777-3808 → actions.html:1385-1408)
+    //   playAudioClip  → play_audio  (EventFlowSystem.js:3936-3958 → actions.html:1426+)
+    //   showText       → show_text   (EventFlowSystem.js:3842-3898 → actions.html:1819)
+    //   showAvatar     → show_avatar (EventFlowSystem.js:3810-3840 → actions.html:1815)
+    //   clearLayer     → clear_layer (EventFlowSystem.js:3900-3914 → actions.html:1823; overlay-local)
+    //   delay          → engine-local setTimeout, zero I/O (EventFlowSystem.js:3960-3965)
+    // Anything else leaves the overlay (webhook posts HTTP, OBS rides to the
+    // obs-websocket client, TTS-out, custom JS, points writes, relays,
+    // spotify/MIDI/user-memory/state…) and disqualifies the flow.
+    // DEFAULT-DENY: an id not listed here disqualifies, known or not.
+    var ALERT_OVERLAY_ONLY_ACTIONS = ['playTenorGiphy', 'playAudioClip', 'showText', 'showAvatar', 'clearLayer', 'delay'];
 
     // Arcade-owned settings keys (canonical saveSetting, textparam1 — the
     // same rail arcadeStylePresets rides). NAMES only ever appear in reports.
@@ -2896,6 +2941,28 @@
         return ['session=' + encodeURIComponent(sessionId), 'preview=1', 'embedded=1'].concat(buildAlertEventParams());
     }
 
+    // S47B (D2-C) — which page the preview frame should host right now:
+    // 'actions' when the selected event is a flow-backed custom event whose
+    // flow qualifies for the overlay-only test-fire (its actions render on
+    // the actions overlay, so that is the honest preview surface), 'alerts'
+    // otherwise (today's multi-alerts.html &preview=1 frame).
+    function alertsPreviewWantsActionsMode() {
+        var customEvt = getCustomAlertEvent(alertsSelectedKey);
+        if (!customEvt) return false;
+        return getAlertFlowOverlayTestState(customEvt.flowId).ok === true;
+    }
+
+    // Re-evaluates the desired mode against live flow state and re-inits the
+    // frame ONLY on a mode flip — called from surface renders (selection
+    // changes, tab re-entry), never on a timer. Before the first init the
+    // mode is unset; that first load is owned by ensureAlertsPanelLive.
+    function syncAlertsPreviewMode() {
+        var frame = document.getElementById('arcade-alerts-preview-frame');
+        if (!frame || !alertsPanelLive || !frame.dataset.alertsPreviewMode) return;
+        var mode = alertsPreviewWantsActionsMode() ? 'actions' : 'alerts';
+        if (frame.dataset.alertsPreviewMode !== mode) initAlertsPreviewFrame();
+    }
+
     // First paint + every debounced reload after an edit. Always a full src
     // reload (multi-alerts.js reads its settings ONCE from location.search
     // at boot — there is no live same-origin var to poke the way dock's CSS
@@ -2910,9 +2977,47 @@
             setAlertsPreviewHint('preview unavailable (app helpers not found)');
             return;
         }
+        var mode = alertsPreviewWantsActionsMode() ? 'actions' : 'alerts';
         var myToken = ++alertsPreviewToken;
         frame.dataset.alertsPreviewReady = '';
+        frame.dataset.alertsPreviewMode = mode;
         setAlertsPreviewHint('Loading preview…');
+        if (mode === 'actions') {
+            // S47B — flow-test preview: actions.html WITHOUT a session, inert
+            // by construction (no bridge iframe, no socket — its session
+            // gate, actions.html:2028-2040); the &preview=1 param rides along
+            // to mark intent (actions.html has no preview gate of its own —
+            // the isolation HERE is that no transport ever exists in this
+            // frame). Its session modal is hidden by a shell-injected style
+            // once loaded (same DRESS idiom as installStockFrameDressing).
+            // &obsws= points stock's unconditional OBS probe
+            // (actions.html:1145-1146 dials the OBS default 1s after EVERY
+            // load) at a dead localhost port, so the isolated frame never
+            // touches the operator's real OBS either.
+            resolver('actions.html', { extraParams: ['preview=1', 'embedded=1', 'obsws=' + encodeURIComponent('ws://127.0.0.1:9')] }).then(function (resolved) {
+                if (myToken !== alertsPreviewToken) return; // superseded by a newer reload
+                if (resolved && resolved.url) {
+                    frame.onload = function () {
+                        if (myToken !== alertsPreviewToken) return;
+                        try {
+                            var doc = frame.contentDocument;
+                            if (doc && doc.head) {
+                                var style = doc.createElement('style');
+                                style.textContent = '#sessionModal{display:none!important}';
+                                doc.head.appendChild(style);
+                            }
+                        } catch (e) {}
+                        frame.dataset.alertsPreviewReady = '1';
+                        setAlertsPreviewHint('Preview ready — Fire test alert runs this event’s overlay actions here only.');
+                    };
+                    frame.src = resolved.url;
+                }
+            }).catch(function (e) {
+                console.error('[arcade-shell] actions preview init failed:', e);
+                setAlertsPreviewHint('preview failed — see console');
+            });
+            return;
+        }
         Promise.resolve(getSession()).then(function (sessionId) {
             if (!sessionId) { setAlertsPreviewHint('waiting for session…'); return; }
             return resolver('multi-alerts.html', { extraParams: buildAlertsPreviewParams(sessionId) }).then(function (resolved) {
@@ -2946,7 +3051,15 @@
     // ensureStylePanelLive(): one getSettings read, then list + config +
     // first preview load.
     function ensureAlertsPanelLive() {
-        if (alertsPanelLive) { return; }
+        if (alertsPanelLive) {
+            // S47B — re-entering the tab IS a surface render: re-evaluate the
+            // first-timers switch (D1-B) and flow test-fire qualification
+            // (D2-C) against live state — the flow may have been edited in
+            // the editor since the last render. No polling, render-driven only.
+            renderAlertsList();
+            renderAlertsConfig(); // flips the preview surface too (syncAlertsPreviewMode)
+            return;
+        }
         alertsPanelLive = true;
         loadAlertsSettings().then(function () {
             renderAlertsList();
@@ -2955,12 +3068,12 @@
         });
     }
 
-    // The preview pane's ONE test-fire: only the stock 7 can fire here (the
-    // isolated &preview=1 multi-alerts frame). The All-types default has no
-    // event of its own; flow-backed custom events would run their flow's
-    // REAL actions (a webhook really posts, OBS really switches) — stock has
-    // no isolated flow-preview path, so they honestly point at the Flow
-    // editor's own test panel instead of faking one here.
+    // The preview pane's ONE test-fire. The stock 7 fire into the isolated
+    // &preview=1 multi-alerts frame; the All-types default has no event of
+    // its own. S47B (ruled D2-C): a flow-backed custom event MAY fire here
+    // too — but only when every action node in its flow is overlay-type
+    // (getAlertFlowOverlayTestState, default-deny); otherwise the honest
+    // reason is named and the Flow editor's own test panel remains the path.
     function fireSelectedTestAlert() {
         if (isStockAlertKey(alertsSelectedKey)) {
             fireTestAlert(alertsSelectedKey);
@@ -2968,9 +3081,16 @@
         }
         if (alertsSelectedKey === ALERT_DEFAULT_KEY) {
             setAlertsPreviewHint('The default look has no event of its own — select an event to test-fire.');
-        } else {
-            setAlertsPreviewHint('Flow-backed events fire through EventFlow — test this one in the Flow editor (its test would run real actions here).');
+            return;
         }
+        var customEvt = getCustomAlertEvent(alertsSelectedKey);
+        if (!customEvt) return;
+        var testState = getAlertFlowOverlayTestState(customEvt.flowId); // re-qualify at fire time
+        if (!testState.ok) {
+            setAlertsPreviewHint(testState.reason);
+            return;
+        }
+        fireFlowTestAlert(customEvt, testState.flow);
     }
 
     // "Fire test alert" — see the PREVIEW ISOLATION GUARANTEE comment at the
@@ -2990,7 +3110,122 @@
     function clearAlertsPreview() {
         var frame = document.getElementById('arcade-alerts-preview-frame');
         if (!frame || !frame.contentWindow) return;
+        if (frame.dataset.alertsPreviewMode === 'actions') {
+            // S47B — actions.html's own clear idiom (clear_layer, actions.html:1823)
+            try {
+                if (typeof frame.contentWindow.testAction === 'function') {
+                    frame.contentWindow.testAction({ actionType: 'clear_layer', layer: 'all' });
+                }
+            } catch (e) {}
+            return;
+        }
         frame.contentWindow.postMessage({ multiAlertsPreview: false }, '*');
+    }
+
+    // --------------------------------------------------------------------
+    // S47B (ruled D2-C) — the flow test-fire. Isolation is STRUCTURAL, the
+    // same doctrine as the stock 7's preview path: delivery targets ONLY the
+    // preview frame's own window — here via actions.html's OWN exposed test
+    // hook (window.testAction, actions.html:2020-2024 — the page's built-in
+    // processInput entry), never a postMessage upward, never P2P, never the
+    // session. The frame is actions.html loaded WITHOUT a session, inert by
+    // construction (no bridge iframe, no socket — actions.html:1211-1220,
+    // :1292-1311, :2028-2040). The flow's REAL action chain runs through
+    // stock's own engine — evaluateFlow/executeAction on a THROWAWAY
+    // EventFlowSystem whose one transport (sendTargetP2P) is aimed at the
+    // preview frame and whose every other transport is a blocked stub — so
+    // payload building is stock code, not a parallel engine and not a
+    // dry-run fork. A staged in-memory copy swaps the trigger head for ONE
+    // always-true messageProperties trigger (empty requiredProperties pass —
+    // EventFlowSystem.js:2856-2858) so the actions fire on demand in their
+    // real connection order; the operator's flow is never written back.
+    // --------------------------------------------------------------------
+    function fireFlowTestAlert(customEvt, flow) {
+        var frame = document.getElementById('arcade-alerts-preview-frame');
+        if (!frame || !frame.contentWindow || frame.dataset.alertsPreviewMode !== 'actions' || !frame.dataset.alertsPreviewReady) {
+            setAlertsPreviewHint('preview still loading — try again in a moment');
+            return;
+        }
+        var bg = getBackgroundWindow();
+        var testWin = frame.contentWindow;
+        // The EventFlowSystem CLASS is a script-global on the background
+        // page, not a window property (background.js:18698-18724 exposes
+        // only the instance) — reach it through the live instance.
+        var FlowSystemClass = bg && bg.eventFlowSystem && bg.eventFlowSystem.constructor;
+        if (typeof FlowSystemClass !== 'function') {
+            setAlertsPreviewHint('flow system unavailable — test in the flow editor');
+            return;
+        }
+        if (typeof testWin.testAction !== 'function') {
+            setAlertsPreviewHint('preview not ready for flow tests — reload the preview');
+            return;
+        }
+
+        // Staged copy: always-true trigger head → the flow's REAL action
+        // chain. Entry actions = actions whose ORIGINAL upstream included a
+        // non-action node (trigger/logic/state); action→action connections
+        // carry over verbatim; orphaned actions stay orphaned (they would
+        // never fire live either — honest).
+        var rawNodes = JSON.parse(JSON.stringify(flow.nodes || []));
+        var rawConnections = JSON.parse(JSON.stringify(flow.connections || []));
+        var actionNodes = rawNodes.filter(function (n) { return n && n.type === 'action'; });
+        var actionIds = {};
+        actionNodes.forEach(function (n) { actionIds[n.id] = true; });
+        var entryIds = {};
+        rawConnections.forEach(function (c) {
+            if (actionIds[c.to] && !actionIds[c.from]) entryIds[c.to] = true;
+        });
+        if (!Object.keys(entryIds).length) {
+            setAlertsPreviewHint('the flow’s actions aren’t wired to a trigger — nothing would fire');
+            return;
+        }
+        var staged = {
+            id: flow.id + '__previewtest',
+            name: (flow.name || 'flow') + ' (preview test)',
+            active: true,
+            nodes: [{ id: '__test_trigger', type: 'trigger', triggerType: 'messageProperties', x: 40, y: 40, config: { requiredProperties: [], forbiddenProperties: [], requireAll: true } }].concat(actionNodes),
+            connections: rawConnections.filter(function (c) { return actionIds[c.from] && actionIds[c.to]; })
+                .map(function (c) { return { from: c.from, to: c.to }; })
+        };
+        Object.keys(entryIds).forEach(function (id) { staged.connections.push({ from: '__test_trigger', to: id }); });
+
+        var poster = function (payload) {
+            try {
+                var action = payload && payload.overlayNinja ? payload.overlayNinja : payload;
+                if (action) testWin.testAction(action);
+            } catch (e) { console.error('[arcade-shell] preview action post failed:', e); }
+        };
+        var blocked = function () { console.warn('[arcade-shell] preview flow fire: non-overlay transport blocked'); };
+        var throwaway = new FlowSystemClass({
+            dbName: 'arcadeAlertPreviewFireDB', // own scratch DB + BroadcastChannel namespace — torn down below
+            sendTargetP2P: poster,
+            sendMessageToTabs: blocked,
+            sendToDestinations: blocked,
+            sendMessageToBackground: blocked
+        });
+        var testMessage = {
+            type: 'twitch', chatname: 'TestUser', userid: 'testuser',
+            chatmessage: 'Test alert fired from the Alerts tab',
+            event: customEvt.eventType || 'test', firsttime: true, timestamp: Date.now()
+        };
+        setAlertsPreviewHint('Firing test into the preview…');
+        Promise.resolve(throwaway.initPromise).then(function () {
+            return throwaway.evaluateFlow(staged, testMessage);
+        }).then(function () {
+            setAlertsPreviewHint('Test fired into the preview only — nothing reached the live session.');
+        }).catch(function (e) {
+            console.error('[arcade-shell] flow preview test failed:', e);
+            setAlertsPreviewHint('flow test failed — see console');
+        }).then(function () {
+            // Teardown the throwaway: close its BroadcastChannel + IndexedDB
+            // handle, then delete the scratch DB so nothing persists.
+            try { if (throwaway.userMemoryChannel) throwaway.userMemoryChannel.close(); } catch (e) {}
+            try { if (throwaway.db) throwaway.db.close(); } catch (e) {}
+            try {
+                var del = bg.indexedDB.deleteDatabase('arcadeAlertPreviewFireDB');
+                del.onblocked = function () { console.warn('[arcade-shell] preview fire DB delete blocked'); };
+            } catch (e) {}
+        });
     }
 
     // Real OBS overlay URL (no &preview/&embedded) — same resolver + session
@@ -3128,7 +3363,7 @@
         if (alertsSelectedKey === key) return;
         alertsSelectedKey = key;
         renderAlertsList();
-        renderAlertsConfig();
+        renderAlertsConfig(); // S47B — also flips the preview surface via syncAlertsPreviewMode
     }
 
     // --------------------------------------------------------------------
@@ -3138,10 +3373,11 @@
         var host = document.getElementById('arcade-alerts-config');
         if (!host || !alertsDoc) return;
         host.innerHTML = '';
-        if (alertsSelectedKey === ALERT_DEFAULT_KEY) { renderDefaultAlertConfig(host); return; }
+        if (alertsSelectedKey === ALERT_DEFAULT_KEY) { renderDefaultAlertConfig(host); syncAlertsPreviewMode(); return; }
         var customEvt = getCustomAlertEvent(alertsSelectedKey);
-        if (customEvt) { renderCustomAlertConfig(host, customEvt); return; }
+        if (customEvt) { renderCustomAlertConfig(host, customEvt); syncAlertsPreviewMode(); return; }
         if (isStockAlertKey(alertsSelectedKey)) { renderStockAlertConfig(host, alertsSelectedKey); }
+        syncAlertsPreviewMode(); // S47B — every config render re-checks the preview surface
     }
 
     function buildAlertConfigHead(iconLabel, stateText, stateOn, stateTitle) {
@@ -3382,6 +3618,33 @@
         });
         ftLabel.appendChild(ftInput);
         ftLabel.appendChild(document.createTextNode('first-time chatter'));
+        // S47B (ruled D1-B) — one-click first-timers switch, rendered ONLY
+        // while the stock `firsttimers` setting is off (state re-read from
+        // the background page on every render — no polling, NO auto-enable
+        // anywhere). One click writes the setting through the SAME canonical
+        // saveSetting payload the popup's own toggle uses for it
+        // (popup.js:6259-6267), plus the popup's companion local-DB re-enable
+        // when disableDB is on (popup.js:5538-5546 — background.js:16595
+        // sets `firsttime` only under firsttimers && !disableDB).
+        var ftBg = getBackgroundWindow();
+        var firsttimersOn = !!(ftBg && typeof ftBg.getSettingFlag === 'function' && ftBg.getSettingFlag('firsttimers'));
+        if (!firsttimersOn) {
+            var ftOnBtn = document.createElement('button');
+            ftOnBtn.type = 'button';
+            ftOnBtn.className = 'arcade-btn arcade-btn--sm arcade-evt-cond__ft-on';
+            ftOnBtn.textContent = 'Turn on first-timers';
+            ftOnBtn.title = 'Turns on stock first-time chatter detection — the dock will start highlighting first-time chatters (that is the stock behavior this flag controls). If the local message database is disabled it is re-enabled too, because detection needs it.';
+            ftOnBtn.addEventListener('click', function () {
+                ftOnBtn.disabled = true;
+                saveAlertSetting('setting', 'firsttimers', true);
+                if (ftBg && typeof ftBg.getSettingFlag === 'function' && ftBg.getSettingFlag('disableDB')) {
+                    saveAlertSetting('setting', 'disableDB', false);
+                }
+                setAlertsStatus('first-time chatter detection turned on — the dock now highlights first-time chatters');
+                setTimeout(function () { renderAlertsConfig(); }, 400); // re-read state → the button is gone
+            });
+            ftLabel.appendChild(ftOnBtn);
+        }
         box.appendChild(ftLabel);
 
         var platLabel = document.createElement('label');
@@ -3543,6 +3806,17 @@
         doors.appendChild(flowBtn);
         host.appendChild(doors);
 
+        // S47B (ruled D2-C) — honest test-fire qualification, re-evaluated
+        // on EVERY render from the live flow's action nodes (the flow may
+        // have been edited in the editor since the last render).
+        var overlayTest = getAlertFlowOverlayTestState(customEvt.flowId);
+        var testLine = document.createElement('div');
+        testLine.className = 'arcade-evt-flowline';
+        testLine.textContent = overlayTest.ok
+            ? 'Test-fire: overlay-only flow — Fire test alert runs its actions in the isolated preview above (nothing reaches the live session).'
+            : 'Test-fire unavailable — ' + overlayTest.reason;
+        host.appendChild(testLine);
+
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'arcade-btn arcade-btn--sm arcade-evt-remove';
@@ -3591,6 +3865,49 @@
         var flow = bg.eventFlowSystem.flows.find(function (f) { return f.id === flowId; });
         if (!flow) return 'missing';
         return flow.active !== false ? 'active' : 'inactive';
+    }
+
+    // --------------------------------------------------------------------
+    // S47B (ruled D2-C) — overlay-only test-fire qualification. Reads the
+    // flow's ACTION nodes only (never the condition-sync machinery) and is
+    // re-run on every surface render — the flow may have been edited in the
+    // editor. Default-deny: any action id off ALERT_OVERLAY_ONLY_ACTIONS
+    // disqualifies, and the reason names the FIRST disqualifying action.
+    // --------------------------------------------------------------------
+    function alertActionFamilyLabel(actionType) {
+        if (!actionType) return 'unknown';
+        if (actionType.indexOf('obs') === 0 || actionType === 'triggerOBSScene') return 'OBS';
+        if (actionType.indexOf('spotify') === 0) return 'Spotify';
+        if (actionType.indexOf('tts') === 0) return 'TTS';
+        if (actionType.indexOf('midi') === 0) return 'MIDI';
+        var labels = {
+            webhook: 'webhook', customJs: 'custom JS', relay: 'relay', sendMessage: 'send-message',
+            addPoints: 'points', spendPoints: 'points',
+            blockMessage: 'message-blocking', returnMessage: 'message-return', continueAsync: 'async-continue',
+            modifyMessage: 'message-modify', addPrefix: 'message-modify', addSuffix: 'message-modify',
+            findReplace: 'message-modify', removeText: 'message-modify', setProperty: 'message-modify',
+            featureMessage: 'feature-message', pinMessage: 'pin-message', reflectionFilter: 'reflection-filter',
+            rememberUser: 'user-memory', forgetUser: 'user-memory', clearUserMemory: 'user-memory', pickRandomUser: 'user-memory',
+            setGateState: 'state-control', resetStateNode: 'state-control', setCounter: 'state-control', incrementCounter: 'state-control'
+        };
+        return labels[actionType] || ('unknown "' + actionType + '"');
+    }
+
+    function getAlertFlowOverlayTestState(flowId) {
+        var bg = getBackgroundWindow();
+        if (!bg || !bg.eventFlowSystem || !Array.isArray(bg.eventFlowSystem.flows)) {
+            return { ok: false, reason: 'flow system not up yet — test in the flow editor' };
+        }
+        var flow = bg.eventFlowSystem.flows.find(function (f) { return f.id === flowId; });
+        if (!flow) return { ok: false, reason: 'flow missing — the Event flow door reseeds it' };
+        var actions = (flow.nodes || []).filter(function (n) { return n && n.type === 'action'; });
+        if (!actions.length) return { ok: false, reason: 'flow has no actions yet — nothing to test', flow: flow };
+        for (var i = 0; i < actions.length; i++) {
+            if (ALERT_OVERLAY_ONLY_ACTIONS.indexOf(actions[i].actionType) === -1) {
+                return { ok: false, reason: 'contains a ' + alertActionFamilyLabel(actions[i].actionType) + ' action — test in the flow editor', flow: flow };
+            }
+        }
+        return { ok: true, flow: flow };
     }
 
     // Alert-shaped skeleton (trigger → overlay actions) — the same shape the

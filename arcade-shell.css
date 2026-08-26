@@ -1193,6 +1193,7 @@ body.arcade-shell .arcade-evt-cond__opt select {
   font: 400 11px/1 var(--arc-font-ui);
 }
 body.arcade-shell .arcade-evt-cond__hint { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-faint); max-width: 560px; }
+body.arcade-shell .arcade-evt-cond__ft-on { margin-left: 8px; flex-shrink: 0; }
 body.arcade-shell .arcade-evt-flowline { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-faint); }
 body.arcade-shell .arcade-evt-remove { align-self: flex-start; }
 
