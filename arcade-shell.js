@@ -24,23 +24,23 @@
 
     // S46 shell frame (TASK-43, Add-On Arcade round 3 — boards APPROVED
     // 0018.06.03): menu bar on TOP reads Main · Add-ons · Style · AI 🔒 ·
-    // Deck Settings · More▾. The old rail tabs Games / Elements / Alerts /
-    // VDO / Event Flow leave the nav — their surfaces stay reachable through
-    // the Add-ons gallery doors (ADDON_DOORS below) and the More▾ transition
-    // hatch (MORE_LEGACY_ITEMS). Their tab MACHINERY (ARCADE_TAB_PAGE /
-    // CUSTOM_TABS entries, scroll memory, the alerts panel) is untouched —
-    // only the nav berths moved. Interior redesigns are S47+.
+    // Deck Settings. The old rail tabs Games / Elements / Alerts / VDO /
+    // Event Flow leave the nav — their surfaces stay reachable through the
+    // Add-ons gallery doors (ADDON_DOORS below). Interior redesigns: S47+.
+    //
+    // S51 (TASK-48 — Deck Settings + control surfaces): the More▾ hatch is
+    // RETIRED. Its stock trio is absorbed into Deck Settings sections
+    // (Status and Logs + Sessions → Diagnostics; Stream Deck Setup →
+    // Control surfaces) and the S46 "Moved to Add-ons" transition entries
+    // go with it — every one of those four surfaces has had its own Add-ons
+    // gallery door since S46–S50. The retirement touches BOTH the topbar
+    // (no More menu is built at all) and the S46B burger sheet (no stock
+    // trio / hatch rows), per the brief.
     var TABS = [
         { id: 'main', label: 'Main' },
         { id: 'addons', label: 'Add-ons' },
         { id: 'style', label: 'Style' },
         { id: 'settings', label: 'Deck Settings' }
-    ];
-
-    var MORE_ITEMS = [
-        { page: 'dashboard', label: 'Status and Logs' },
-        { page: 'streamdeck', label: 'Stream Deck Setup' },
-        { page: 'sessions', label: 'Sessions' }
     ];
 
     // S48 (TASK-45 — the Games hub + the points loop): 'games' leaves
@@ -49,17 +49,8 @@
     // streams page is never driven for games (so the stock Welcome
     // interstitial zero-source profiles get on that page is not inherited —
     // the trap the S46 report flagged), and the popup scroll memory no
-    // longer has a games entry to restore. Door card, More▾ hatch entry,
-    // and DOOR_PARENT all keep working — they drive the same tab id.
-
-    // Transition hatch (S46): direct entries to the surfaces whose rail tabs
-    // left the nav, until muscle memory re-trains to the Add-ons doors.
-    var MORE_LEGACY_ITEMS = [
-        { tab: 'games', label: 'Games' },
-        { tab: 'alerts', label: 'Alerts' },
-        { tab: 'vdo', label: 'VDO / Cameras' },
-        { tab: 'eventflow', label: 'Event Flow' }
-    ];
+    // longer has a games entry to restore. Door card and DOOR_PARENT keep
+    // working — they drive the same tab id.
 
     // --------------------------------------------------------------------
     // AI area — rail berth for the DevChat console, gated to a single ruled
@@ -335,8 +326,6 @@
         });
         header.appendChild(nav);
 
-        header.appendChild(buildMoreMenu());
-
         var spacer = document.createElement('span');
         spacer.className = 'arcade-spacer';
         header.appendChild(spacer);
@@ -443,72 +432,6 @@
         return wrap;
     }
 
-    function buildMoreMenu() {
-        var wrap = document.createElement('div');
-        wrap.className = 'arcade-more';
-
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.setAttribute('aria-haspopup', 'true');
-        btn.setAttribute('aria-expanded', 'false');
-        btn.textContent = 'More ▾';
-        wrap.appendChild(btn);
-
-        var pop = document.createElement('div');
-        pop.className = 'arcade-more-pop';
-        pop.setAttribute('role', 'menu');
-        MORE_ITEMS.forEach(function (item) {
-            var mi = document.createElement('button');
-            mi.type = 'button';
-            mi.setAttribute('role', 'menuitem');
-            mi.textContent = item.label;
-            mi.addEventListener('click', function () {
-                wrap.classList.remove('is-open');
-                btn.setAttribute('aria-expanded', 'false');
-                setArcadeTab(null); // none of the 5 mapped tabs are "on" for a More destination
-                clickStockNav(item.page);
-            });
-            pop.appendChild(mi);
-        });
-
-        // S46 transition hatch — the surfaces whose rail tabs left the nav,
-        // reachable directly here (and through their Add-ons gallery doors)
-        // until the consolidation waves (S47+) finish re-homing them.
-        var sep = document.createElement('div');
-        sep.className = 'arcade-more-sep';
-        sep.setAttribute('role', 'separator');
-        pop.appendChild(sep);
-        var note = document.createElement('div');
-        note.className = 'arcade-more-note';
-        note.textContent = 'Moved to Add-ons';
-        pop.appendChild(note);
-        MORE_LEGACY_ITEMS.forEach(function (item) {
-            var li = document.createElement('button');
-            li.type = 'button';
-            li.setAttribute('role', 'menuitem');
-            li.textContent = item.label;
-            li.addEventListener('click', function () {
-                wrap.classList.remove('is-open');
-                btn.setAttribute('aria-expanded', 'false');
-                navigateArcadeTab(item.tab);
-            });
-            pop.appendChild(li);
-        });
-        wrap.appendChild(pop);
-
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            var open = wrap.classList.toggle('is-open');
-            btn.setAttribute('aria-expanded', String(open));
-        });
-        document.addEventListener('click', function () {
-            wrap.classList.remove('is-open');
-            btn.setAttribute('aria-expanded', 'false');
-        });
-
-        return wrap;
-    }
-
     // --------------------------------------------------------------------
     // S46B — THE HAMBURGER FOLD (TASK-49, charter round 5). Below the width
     // where EVERY top-bar tab keeps its full hit target, the bar folds into
@@ -553,30 +476,9 @@
             addRow(tab.label, function () { navigateArcadeTab(tab.id); }, tab.id, tab.id, null);
         });
 
-        // The More▾ set folds in with the tabs — same stock trio + the S46
-        // transition hatch, so every top-bar destination stays reachable at
-        // full row size while folded.
-        var sep = document.createElement('div');
-        sep.className = 'arcade-more-sep';
-        sep.setAttribute('role', 'separator');
-        sheet.appendChild(sep);
-        MORE_ITEMS.forEach(function (item) {
-            addRow(item.label, function () {
-                setArcadeTab(null); // no nav berth is "on" for a More destination
-                clickStockNav(item.page);
-            }, null, null, item.page);
-        });
-        var sep2 = document.createElement('div');
-        sep2.className = 'arcade-more-sep';
-        sep2.setAttribute('role', 'separator');
-        sheet.appendChild(sep2);
-        var note = document.createElement('div');
-        note.className = 'arcade-more-note';
-        note.textContent = 'Moved to Add-ons';
-        sheet.appendChild(note);
-        MORE_LEGACY_ITEMS.forEach(function (item) {
-            addRow(item.label, function () { navigateArcadeTab(item.tab); }, null, item.tab, null);
-        });
+        // S51 — the sheet carries the ruled tabs and nothing else: the
+        // More▾ stock trio was absorbed into Deck Settings sections and
+        // the S46 "Moved to Add-ons" hatch retired with it.
 
         function isOpen() { return sheet.classList.contains('is-open'); }
         function openSheet() {
@@ -1114,15 +1016,16 @@
         try { localStorage.setItem('arcadeTab', tabId || 'main'); } catch (e) { /* noop */ }
     }
 
-    // Games and Settings are two different tabs but the SAME underlying
-    // page (#frame1's popup.html, "streams-page") — so by default they'd
-    // share one scroll position: leave Settings scrolled halfway down and
-    // Games opens halfway down too (Shell Alpha verification nit #3).
-    // Each tab gets its own remembered scrollY in this map, saved right
-    // before navigating away and restored right after navigating in;
-    // first visit to a tab falls back to an honest per-tab default
-    // (Games -> the #games section, Settings -> the top of the popup).
-    var POPUP_SCROLL_TABS = { settings: true }; // S48: games left the popup page (custom hub panel) — only settings still maps there
+    // Games and Settings USED to be two different tabs sharing the SAME
+    // underlying page (#frame1's popup.html, "streams-page") — so by default
+    // they'd share one scroll position. Each popup-backed tab got its own
+    // remembered scrollY in this map, saved right before navigating away and
+    // restored right after navigating in. S48 took games to a custom panel;
+    // S51 takes settings (Deck Settings is now its own in-shell panel with
+    // section-scoped popup embeds of its own) — no tab maps to the shared
+    // popup page any more, so the map is empty and both helpers are no-ops.
+    // The machinery stays in place, same as S48 left it.
+    var POPUP_SCROLL_TABS = {}; // S51: settings left the popup page (custom Deck Settings panel)
     var popupScrollMemory = {};
 
     function getReadyFrame1() {
@@ -1185,8 +1088,11 @@
     var ARCADE_TAB_PAGE = {
         main: 'chat',
         vdo: 'vdo-ninja',
-        eventflow: 'event-flow-editor',
-        settings: 'streams'
+        eventflow: 'event-flow-editor'
+        // S51: settings left this map — Deck Settings is a CUSTOM_TAB (its
+        // own sectioned panel). The 'streams' stock page is now driven only
+        // from inside Deck Settings (Diagnostics/Full-stock-library stock-
+        // stage doors), never as a tab underlay.
     };
     // Custom tabs render their OWN in-shell panel (no ARCADE_TAB_PAGE entry) —
     // navigateArcadeTab skips the stock-nav click for these, and CSS reveals
@@ -1204,7 +1110,8 @@
     // S48: 'games' joins the custom set — the hub is its own in-shell panel.
     // S49: 'commands' (chat commands + timers) and 'goals' (goal bars) too.
     // S50: 'frames' (Frames & Cameras) and 'tipjar' (the Tip Jar interior).
-    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true, frames: true, tipjar: true };
+    // S51: 'settings' (Deck Settings) — the sectioned settings home.
+    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true, frames: true, tipjar: true, settings: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -1244,6 +1151,7 @@
             if (tabId === 'goals') ensureGoalsPanelLive(); // lazy (S49): load goals + first demo preview on first visit
             if (tabId === 'frames') ensureFramesPanelLive(); // lazy (S50): load guests/frame style, then the device frame (sendSync-before-churn order)
             if (tabId === 'tipjar') ensureTipjarPanelLive(); // lazy (S50): load payment rails + first demo preview on first visit
+            if (tabId === 'settings') ensureDeckSettingsLive(); // lazy (S51): load deck settings + first section on first visit
             if (tabId === 'ai') runAiAreaGate(); // NOT lazy-once — a fresh challenge every open, no stored grants (design doc, 0018.06.01)
             return;
         }
@@ -1268,7 +1176,7 @@
     var CUSTOM_TAB_PANEL = {
         addons: '.arcade-addons', style: '.arcade-style', alerts: '.arcade-alerts',
         games: '.arcade-games', commands: '.arcade-commands', goals: '.arcade-goals', ai: '.arcade-ai',
-        frames: '.arcade-frames', tipjar: '.arcade-tipjar'
+        frames: '.arcade-frames', tipjar: '.arcade-tipjar', settings: '.arcade-settings'
     };
 
     function focusFirstInteractiveIn(root, fallbackEl) {
@@ -1398,7 +1306,10 @@
         document.body.appendChild(rail);
 
         rail.querySelector('#arcade-add-source').addEventListener('click', function () {
+            // S51 — sources admin is cross-linked from Deck Settings →
+            // Connections (the sources rail itself stays the one home).
             navigateArcadeTab('settings');
+            if (typeof window.arcadeDeckSelect === 'function') window.arcadeDeckSelect('connections');
         });
         rail.querySelector('#arcade-start-all').addEventListener('click', function () {
             callBridge({ action: 'startAllSources' });
@@ -5231,6 +5142,11 @@
     // leaderboard door — its preview/copy ride the shared frame/URL code).
     // --------------------------------------------------------------------
     function renderPointsConfig(config) {
+        // S51 — the Games hub "Points & unlocks" row is now a CROSS-LINK,
+        // not a duplicate config (Rider 3: Deck Settings → Points system is
+        // THE one home for points/engagement configuration; this row keeps
+        // pointing at the same destination). The earn state line stays live
+        // so the shelf row's on/off chip is explained right here.
         var head = document.createElement('div');
         head.className = 'arcade-evt-config__head';
         var name = document.createElement('span');
@@ -5239,77 +5155,32 @@
         head.appendChild(name);
         config.appendChild(head);
 
-        // EARN — the real rates off getSettings, measured against points.js.
-        var earnTitle = document.createElement('div');
-        earnTitle.className = 'arcade-evt-cond__title';
-        earnTitle.textContent = 'Earn';
-        config.appendChild(earnTitle);
         var earnLine = document.createElement('p');
         earnLine.className = 'arcade-evt-blurb';
-        earnLine.textContent =
-            'Chatters earn ' + pointsEarnState.per + ' point' + (pointsEarnState.per === 1 ? '' : 's') +
-            ' per ' + pointsEarnState.windowMin + '-minute engagement window, plus a streak bonus ' +
-            '(+10% per consecutive hour, capped at 2× — stock rules). Points are message engagement, not watch time.';
+        earnLine.textContent = pointsEarnState.enabled === true
+            ? 'Points are ON — chatters earn ' + pointsEarnState.per + ' point' + (pointsEarnState.per === 1 ? '' : 's') +
+              ' per ' + pointsEarnState.windowMin + '-minute engagement window (base rate, stock rules).'
+            : 'The points system is OFF — no points accrue until it’s on.';
         config.appendChild(earnLine);
-        if (pointsEarnState.enabled !== true) {
-            var offLine = document.createElement('div');
-            offLine.className = 'arcade-evt-cond__hint';
-            offLine.textContent = 'The points system is OFF — no points accrue until it’s on.';
-            config.appendChild(offLine);
-        }
-        var earnDoors = document.createElement('div');
-        earnDoors.className = 'arcade-evt-doors';
+
+        var homeLine = document.createElement('p');
+        homeLine.className = 'arcade-evt-blurb';
+        homeLine.textContent = 'Earn rates, the unlocks table, alert priority tiers, points backup, and the ' +
+            'Botrix / StreamElements import lanes all live in one place now — Deck Settings → Points system.';
+        config.appendChild(homeLine);
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
         var deckBtn = document.createElement('button');
         deckBtn.type = 'button';
-        deckBtn.className = 'arcade-btn arcade-btn--sm';
-        deckBtn.textContent = pointsEarnState.enabled === true ? 'Edit rates in Deck Settings' : 'Turn on in Deck Settings';
-        deckBtn.addEventListener('click', function () { navigateArcadeTab('settings'); });
-        earnDoors.appendChild(deckBtn);
-        config.appendChild(earnDoors);
-
-        // UNLOCKS — the streamer-edited threshold → effect-name ledger. v1
-        // renders the table and says honestly where execution lives.
-        var unlocksTitle = document.createElement('div');
-        unlocksTitle.className = 'arcade-evt-cond__title';
-        unlocksTitle.textContent = 'Unlocks';
-        config.appendChild(unlocksTitle);
-        var unlocksList = document.createElement('div');
-        unlocksList.className = 'arcade-game-unlocks';
-        config.appendChild(unlocksList);
-        pointsUnlocks.forEach(function (unlock, idx) {
-            unlocksList.appendChild(buildUnlockRow(unlock, idx));
+        deckBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        deckBtn.textContent = 'Open Points system';
+        deckBtn.addEventListener('click', function () {
+            navigateArcadeTab('settings');
+            if (typeof window.arcadeDeckSelect === 'function') window.arcadeDeckSelect('points');
         });
-        if (!pointsUnlocks.length) {
-            var noUnlocks = document.createElement('div');
-            noUnlocks.className = 'arcade-evt-cond__hint';
-            noUnlocks.textContent = 'No unlocks yet — set a points threshold and name what it means.';
-            unlocksList.appendChild(noUnlocks);
-        }
-        var addUnlockBtn = document.createElement('button');
-        addUnlockBtn.type = 'button';
-        addUnlockBtn.className = 'arcade-btn arcade-btn--sm';
-        addUnlockBtn.textContent = '+ Add unlock';
-        addUnlockBtn.addEventListener('click', function () {
-            var nextThreshold = pointsUnlocks.length ? (Math.max.apply(null, pointsUnlocks.map(function (u) { return u.threshold; })) * 2) : 100;
-            pointsUnlocks.push({ threshold: nextThreshold, name: '' });
-            savePointsUnlocks();
-            renderGamesConfig();
-        });
-        config.appendChild(addUnlockBtn);
-        var unlocksHint = document.createElement('div');
-        unlocksHint.className = 'arcade-evt-cond__hint';
-        unlocksHint.textContent = 'Names only for now — unlocks fire via event flows; the execution wiring is a follow-up task. ' +
-            'Flows and overlays can already read this table through the settings chain (arcadePointsUnlocks).';
-        config.appendChild(unlocksHint);
-        var flowDoors = document.createElement('div');
-        flowDoors.className = 'arcade-evt-doors';
-        var flowsBtn = document.createElement('button');
-        flowsBtn.type = 'button';
-        flowsBtn.className = 'arcade-btn arcade-btn--sm';
-        flowsBtn.textContent = 'Open Flows';
-        flowsBtn.addEventListener('click', function () { navigateArcadeTab('eventflow'); });
-        flowDoors.appendChild(flowsBtn);
-        config.appendChild(flowDoors);
+        doors.appendChild(deckBtn);
+        config.appendChild(doors);
 
         var lbNote = document.createElement('div');
         lbNote.className = 'arcade-evt-cond__hint';
@@ -5317,7 +5188,11 @@
         config.appendChild(lbNote);
     }
 
-    function buildUnlockRow(unlock, idx) {
+    // S51 — the unlocks row builder moved to Deck Settings → Points system
+    // (THE one home, Rider 3); the Games hub keeps only a cross-link. The
+    // builder now takes the list it edits + a re-render callback so both
+    // homes (only the deck section renders it today) share the one idiom.
+    function buildUnlockRow(unlock, idx, list, onChanged) {
         var row = document.createElement('div');
         row.className = 'arcade-game-unlock';
         var thresholdInput = document.createElement('input');
@@ -5326,10 +5201,11 @@
         thresholdInput.step = '1';
         thresholdInput.value = String(unlock.threshold);
         thresholdInput.title = 'Points threshold';
+        thresholdInput.setAttribute('aria-label', 'Unlock points threshold');
         thresholdInput.addEventListener('change', function () {
             var v = Math.max(1, Math.round(Number(thresholdInput.value) || 0));
             thresholdInput.value = String(v);
-            pointsUnlocks[idx].threshold = v;
+            list[idx].threshold = v;
             savePointsUnlocks();
         });
         row.appendChild(thresholdInput);
@@ -5341,9 +5217,10 @@
         nameInput.type = 'text';
         nameInput.autocomplete = 'off';
         nameInput.placeholder = 'effect name — e.g. Emote storm';
+        nameInput.setAttribute('aria-label', 'Unlock effect name');
         nameInput.value = unlock.name;
         nameInput.addEventListener('input', debounce(function () {
-            pointsUnlocks[idx].name = nameInput.value;
+            list[idx].name = nameInput.value;
             savePointsUnlocks();
         }, 300));
         row.appendChild(nameInput);
@@ -5352,10 +5229,11 @@
         remove.className = 'arcade-btn arcade-btn--sm';
         remove.textContent = '×';
         remove.title = 'Remove this unlock';
+        remove.setAttribute('aria-label', 'Remove this unlock');
         remove.addEventListener('click', function () {
-            pointsUnlocks.splice(idx, 1);
+            list.splice(idx, 1);
             savePointsUnlocks();
-            renderGamesConfig();
+            if (typeof onChanged === 'function') onChanged();
         });
         row.appendChild(remove);
         return row;
@@ -10819,6 +10697,1826 @@
     }
 
     // --------------------------------------------------------------------
+    // S51 (TASK-48) — DECK SETTINGS + CONTROL SURFACES. Deck Settings stops
+    // being the stock popup page and becomes the sectioned settings home:
+    // a left section list (the sources-rail pattern, .arcade-evt-* idiom)
+    // with the stage on the right. Sections:
+    //
+    //   Session & rooms · Control surfaces · Connections · Speech (TTS) ·
+    //   Points system · Backups & storage · Diagnostics
+    //
+    // The More▾ hatch is RETIRED by this task (see the TABS comment): its
+    // stock trio is absorbed here — Status and Logs + Sessions →
+    // Diagnostics, Stream Deck Setup → Control surfaces.
+    //
+    // Stock settings groups are berthed two ways, both riding the SAME
+    // canonical saveSetting truth (never a forked copy):
+    //   1. NATIVE re-berth — compact house cards writing the same keys the
+    //      stock groups own (Points system is the full native section).
+    //   2. EMBED — a private popup.html iframe whose DOM is filtered to
+    //      ONLY the groups berthed in that section (triplets moved into a
+    //      fresh root, everything else display:none), dressed with the same
+    //      DRESS_POPUP_CSS the shell already injects into frame1. The stock
+    //      page, the stock handlers, the stock keys — one home per group.
+    // Groups no section claims stay reachable through the FULL STOCK
+    // SETTINGS transition door (the last left-list row, stock-stage) until
+    // add-on interiors absorb them — the disposition ledger lives in the
+    // S51 report.
+    //
+    // Laws held: every write rides canonical saveSetting via the S48 async
+    // idiom (saveDeckSetting — the sendSync/iframe-churn deadlock trap);
+    // getSettings reads are sequenced BEFORE the first iframe src is set
+    // (S50 discipline); session IDs render masked-by-default everywhere
+    // (blur law) and key NAMES only in docs; all CSS body.arcade-shell
+    // -scoped; stock byte-inert (this module early-returns without the
+    // body class).
+    // --------------------------------------------------------------------
+    var DECK_SECTIONS = [
+        { id: 'session', label: 'Session & rooms' },
+        { id: 'surfaces', label: 'Control surfaces' },
+        { id: 'connections', label: 'Connections' },
+        { id: 'speech', label: 'Speech (TTS)' },
+        { id: 'points', label: 'Points system' },
+        { id: 'backups', label: 'Backups & storage' },
+        { id: 'diagnostics', label: 'Diagnostics' }
+    ];
+    var DECK_STOCKLIB_KEY = '__stocklib__'; // the pinned transition-door row
+
+    // Stock popup groups berthed in each EMBED section (disposition ledger
+    // in the report — berthed-here). Everything else: moved-to-add-on or
+    // the transition door.
+    var DECK_POPUP_SECTIONS = {
+        session: ['wrapper-session-options'],
+        connections: ['wrapper-flowactions-obs-options', 'wrapper-additional-chat-services-options', 'wrapper-beta-sdk-options'],
+        speech: ['wrapper-chat-message-tts-options', 'wrapper-featured-tts-options', 'wrapper-flowactions-tts-options', 'wrapper-chatbot-message-tts-options'],
+        backups: ['wrapper-export-options', 'wrapper-profiles-options', 'wrapper-chat-message-export-options', 'wrapper-global-mechanics-options']
+    };
+
+    var ALERT_TIER_RULES_KEY = 'arcadeAlertTierRules'; // NEW (S51) — per-tier promotion-condition policy
+    var CONTROL_SURFACES_KEY = 'arcadeControlSurfaces'; // NEW (S51) — configured control-surface devices
+
+    var deckSettingsLive = false;
+    var deckSelectedSection = 'session';
+    var deckPendingSection = null;   // arcadeDeckSelect() target before the panel is live
+    var deckSessionId = '';          // the real id — NEVER rendered unmasked
+    var deckPointsState = { enabled: false, per: 1, windowMin: 15, cmdPoints: false, cmdLeaderboard: false, cmdRewards: false };
+    var deckTiers = ALERT_TIERS_DEFAULT.slice(); // names — SAME string[] shape S47 seeds/reads
+    var deckTierRules = [];          // [{ tier, conditions:[{kind, ...}] }]
+    var deckSurfaces = [];           // [{ id, type:'touchportal'|'streamdeck'|'neither', name, at }]
+    var deckDiagnosticsView = 'dashboard'; // 'dashboard' | 'sessions'
+
+    // Every S51 write rides the canonical saveSetting IPC — ASYNC, no
+    // callback, + one idempotent retry (the S48 sendSync/iframe-churn trap;
+    // this panel hosts popup embeds and stock iframes). Same law as
+    // saveGameSetting, generalized to the three storage shapes the deck
+    // sections touch.
+    function saveDeckSetting(type, key, value) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                var payload = { cmd: 'saveSetting', type: type, target: null, setting: key, value: value };
+                window.ninjafy.sendMessage(null, payload);
+                setTimeout(function () {
+                    try { window.ninjafy.sendMessage(null, payload); } catch (e) { /* noop */ }
+                }, 600);
+            }
+        } catch (e) { console.error('[arcade-shell] deck setting save failed:', e); }
+    }
+
+    // Command round-trips that need a RESPONSE (points export/import/reset,
+    // Stream Deck capabilities). These fire on user gesture at settled
+    // frame-tree time — the callback form (sendSync) is only unsafe DURING
+    // iframe churn, so these are never wired to load paths.
+    function deckCmd(payload, cb) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                window.ninjafy.sendMessage(null, payload, function (response) {
+                    cb(response || null);
+                });
+                return;
+            }
+        } catch (e) { console.error('[arcade-shell] deck cmd failed:', e); }
+        cb(null);
+    }
+
+    function setDeckStatus(text, isError) {
+        var el = document.getElementById('arcade-deck-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    function deckSessionMasked() {
+        return deckSessionId ? '••••••••••' : '—';
+    }
+
+    function buildDeckSettingsPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-settings';
+        panel.setAttribute('aria-label', 'Deck Settings');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">DECK SETTINGS</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-deck-status"></span>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-deck-list" role="listbox" aria-label="Deck Settings sections"></div>' +
+            '<div id="arcade-deck-diag-sub" class="arcade-deck-diag-sub" hidden></div>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage arcade-deck-stage" id="arcade-deck-stage"></div>' +
+            '</div>';
+        document.body.appendChild(panel);
+
+        // H18-A listbox contract via the shared S50 helper.
+        var list = panel.querySelector('#arcade-deck-list');
+        attachArcadeListboxNav(
+            list,
+            '[data-arcade-deck-key]',
+            function () { return deckSelectedSection; },
+            function (id) { selectDeckSection(id, false); },
+            function (row) { return row.dataset.arcadeDeckKey; }
+        );
+    }
+
+    function buildDeckListRow(opts) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'arcade-evt-item';
+        row.dataset.arcadeDeckKey = opts.key;
+        row.setAttribute('role', 'option');
+        var selected = deckSelectedSection === opts.key;
+        row.classList.toggle('is-on', selected);
+        row.setAttribute('aria-selected', String(selected));
+        var label = document.createElement('span');
+        label.className = 'arcade-evt-item__label';
+        label.textContent = (opts.icon ? opts.icon + ' ' : '') + opts.label;
+        row.appendChild(label);
+        if (opts.stateText) {
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state ' + (opts.stateOn ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+            state.textContent = opts.stateText;
+            if (opts.stateTitle) state.title = opts.stateTitle;
+            row.appendChild(state);
+        }
+        row.addEventListener('click', function () { selectDeckSection(opts.key, true); });
+        return row;
+    }
+
+    function renderDeckList() {
+        var list = document.getElementById('arcade-deck-list');
+        if (!list) return;
+        list.innerHTML = '';
+        DECK_SECTIONS.forEach(function (section) {
+            var stateText = null;
+            var stateOn = false;
+            var stateTitle = null;
+            if (section.id === 'points') {
+                stateText = deckPointsState.enabled ? 'on' : 'off';
+                stateOn = deckPointsState.enabled === true;
+                stateTitle = stateOn ? 'The points system is on' : 'The points system is off';
+            } else if (section.id === 'surfaces' && deckSurfaces.length) {
+                stateText = String(deckSurfaces.length);
+                stateOn = true;
+                stateTitle = deckSurfaces.length + ' control surface' + (deckSurfaces.length === 1 ? '' : 's') + ' configured';
+            }
+            list.appendChild(buildDeckListRow({ key: section.id, label: section.label, stateText: stateText, stateOn: stateOn, stateTitle: stateTitle }));
+        });
+        var divider = document.createElement('div');
+        divider.className = 'arcade-game-list__divider';
+        list.appendChild(divider);
+        var libRow = buildDeckListRow({
+            key: DECK_STOCKLIB_KEY,
+            label: 'Full stock settings',
+            stateText: 'transition',
+            stateOn: false,
+            stateTitle: 'The unfiltered stock settings page — retires as add-on interiors absorb their groups'
+        });
+        list.appendChild(libRow);
+    }
+
+    function selectDeckSection(key, moveFocus) {
+        deckSelectedSection = key;
+        renderDeckList();
+        renderDeckStage();
+        if (moveFocus) {
+            // H17-B — after a left-list pick, focus lands IN the destination.
+            requestAnimationFrame(function () {
+                var stage = document.getElementById('arcade-deck-stage');
+                var sub = document.getElementById('arcade-deck-diag-sub');
+                if (key === 'diagnostics' && sub && !sub.hidden) {
+                    focusFirstInteractiveIn(sub, sub);
+                } else if (deckIsStockStageKey(key)) {
+                    deckFocusStockStage(key);
+                } else {
+                    focusFirstInteractiveIn(stage, stage);
+                }
+            });
+        }
+    }
+
+    // External door (the Games hub "Points & unlocks" cross-link, the rail's
+    // add-source, S48's earn door): navigate to the tab, then select.
+    window.arcadeDeckSelect = function (sectionId) {
+        deckPendingSection = sectionId;
+        if (deckSettingsLive) {
+            deckPendingSection = null;
+            selectDeckSection(sectionId, false);
+        }
+    };
+
+    function deckIsStockStageKey(key) {
+        return key === 'diagnostics' || key === DECK_STOCKLIB_KEY;
+    }
+
+    // The stock-stage: for Diagnostics and the Full-stock-library door the
+    // panel shrinks to its left column and the REAL stock page (frame2's
+    // dashboard, the sessions page, or the streams page) shows beside it —
+    // driven through the same hidden stock-nav anchors the stock UI uses.
+    function deckSetStockStage(stockPage) {
+        var panel = document.querySelector('.arcade-settings');
+        if (!panel) return;
+        var on = !!stockPage;
+        panel.classList.toggle('is-stock-stage', on);
+        document.body.classList.toggle('arcade-deck-stock-stage', on);
+        if (on) clickStockNav(stockPage);
+    }
+
+    function deckFocusStockStage(key) {
+        setTimeout(function () {
+            if (key === 'diagnostics' && deckDiagnosticsView === 'dashboard') {
+                var frame2 = document.getElementById('frame2');
+                if (frame2) frame2.focus();
+                return;
+            }
+            if (key === 'diagnostics' && deckDiagnosticsView === 'sessions') {
+                var sessions = document.getElementById('sessions-page');
+                if (sessions && focusFirstInteractiveIn(sessions, null)) return;
+            }
+            var frame1 = document.getElementById('frame1');
+            if (frame1) frame1.focus();
+        }, 350); // let the stock page's own display flip settle first
+    }
+
+    function renderDeckStage() {
+        var stage = document.getElementById('arcade-deck-stage');
+        if (!stage) return;
+        var sub = document.getElementById('arcade-deck-diag-sub');
+        stage.innerHTML = '';
+        if (sub) { sub.hidden = true; sub.innerHTML = ''; }
+
+        if (deckSelectedSection === 'diagnostics') {
+            renderDeckDiagnosticsSubNav();
+            deckSetStockStage(deckDiagnosticsView);
+            return;
+        }
+        if (deckSelectedSection === DECK_STOCKLIB_KEY) {
+            deckSetStockStage('streams');
+            return;
+        }
+        deckSetStockStage(null);
+
+        if (deckSelectedSection === 'session') renderDeckSession(stage);
+        else if (deckSelectedSection === 'surfaces') renderDeckSurfaces(stage);
+        else if (deckSelectedSection === 'connections') renderDeckConnections(stage);
+        else if (deckSelectedSection === 'speech') renderDeckSpeech(stage);
+        else if (deckSelectedSection === 'points') renderDeckPoints(stage);
+        else if (deckSelectedSection === 'backups') renderDeckBackups(stage);
+    }
+
+    function renderDeckDiagnosticsSubNav() {
+        var sub = document.getElementById('arcade-deck-diag-sub');
+        if (!sub) return;
+        sub.hidden = false;
+        sub.innerHTML = '';
+        [
+            { id: 'dashboard', label: 'Status and Logs' },
+            { id: 'sessions', label: 'Sessions' }
+        ].forEach(function (view) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm arcade-deck-diag-sub__btn';
+            btn.textContent = view.label;
+            btn.setAttribute('aria-pressed', String(deckDiagnosticsView === view.id));
+            btn.addEventListener('click', function () {
+                deckDiagnosticsView = view.id;
+                renderDeckDiagnosticsSubNav();
+                deckSetStockStage(deckDiagnosticsView);
+                deckFocusStockStage('diagnostics');
+            });
+            sub.appendChild(btn);
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — the popup EMBED driver. One private popup.html iframe per
+    // embed section, filtered to ONLY that section's berthed groups: each
+    // berthed collapsible triplet (input.collapsible-input + label + div
+    // .collapsible-text) MOVES into a fresh root div; every other body
+    // child hides. Same stock page, same handlers, same keys — zero stock
+    // JS touched, zero duplicate homes (frame1's popup stays covered). The
+    // frame is dressed with the same DRESS_POPUP_CSS the shell already
+    // injects into frame1, and any session-ID text inside is blurred by
+    // default (the house mask law) with hover/focus reveal.
+    // --------------------------------------------------------------------
+    function buildDeckPopupEmbed(stage, sectionId, noteText) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-deck-embed';
+        if (noteText) {
+            var note = document.createElement('p');
+            note.className = 'arcade-style-hint arcade-deck-embed__note';
+            note.textContent = noteText;
+            wrap.appendChild(note);
+        }
+        var frame = document.createElement('iframe');
+        frame.className = 'arcade-deck-embed__frame';
+        frame.title = 'Stock settings — ' + sectionId + ' groups';
+        frame.setAttribute('aria-label', 'Stock settings — ' + sectionId + ' groups');
+        wrap.appendChild(frame);
+        stage.appendChild(wrap);
+
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        var langParams = (typeof window.getLanguageExtraParams === 'function') ? window.getLanguageExtraParams() : [];
+        resolver('popup.html', { versionParam: 'v=2', extraParams: langParams }).then(function (resolved) {
+            if (!resolved || !resolved.url) return;
+            frame.dataset.ssappOrigin = resolved.origin || '';
+            frame.addEventListener('load', function () {
+                try {
+                    deckFilterPopupFrame(frame, DECK_POPUP_SECTIONS[sectionId] || []);
+                } catch (err) {
+                    console.error('[arcade-shell] deck popup filter failed:', err);
+                }
+            });
+            frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] deck popup embed resolve failed:', e); });
+    }
+
+    function deckFilterPopupFrame(frame, groupIds) {
+        var origin = frame.dataset.ssappOrigin || '';
+        if (!LOCAL_ORIGIN_FAMILY[origin]) return; // hosted fallback — can't filter cross-origin; show as-is
+        var doc;
+        try { doc = frame.contentDocument; } catch (e) { return; }
+        if (!doc || !doc.body) return;
+
+        // Dress first (same CSS the shell injects into frame1 — the var is
+        // a pre-joined string, same as injectDressIntoFrame consumes), plus
+        // the embed's own filter/mask rules.
+        var style = doc.createElement('style');
+        style.id = 'arcade-deck-embed-css';
+        style.textContent = DRESS_POPUP_CSS + '\n' +
+            '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;}' +
+            '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}';
+        doc.head.appendChild(style);
+
+        var root = doc.createElement('div');
+        root.id = 'arcade-deck-popup-root';
+        var moved = [];
+        groupIds.forEach(function (id) {
+            var input = doc.getElementById(id);
+            if (!input) return;
+            var label = input.nextElementSibling;
+            var text = label && label.nextElementSibling;
+            if (!label || !text) return;
+            moved.push([input, label, text]);
+        });
+        moved.forEach(function (trip) {
+            root.appendChild(trip[0]);
+            root.appendChild(trip[1]);
+            root.appendChild(trip[2]);
+        });
+        doc.body.appendChild(root);
+        Array.prototype.slice.call(doc.body.children).forEach(function (el) {
+            if (el !== root) el.style.display = 'none';
+        });
+        // popup.js keeps injecting chrome (toasts, dialogs, file inputs)
+        // AND un-hiding late containers after load — anything that isn't
+        // the berthed root (or inside it) stays hidden for the life of
+        // the embed document.
+        try {
+            new doc.defaultView.MutationObserver(function (mutations) {
+                mutations.forEach(function (m) {
+                    Array.prototype.slice.call(m.addedNodes || []).forEach(function (el) {
+                        if (el && el.nodeType === 1 && el !== root && el.style) el.style.display = 'none';
+                    });
+                    if (m.type === 'attributes' && m.target && m.target.nodeType === 1) {
+                        var t = m.target;
+                        if (t !== root && t !== doc.body && t !== doc.documentElement && !(root.contains && root.contains(t)) && t.style && t.style.display !== 'none') {
+                            t.style.display = 'none';
+                        }
+                    }
+                });
+            }).observe(doc.body, { childList: true, attributes: true, attributeFilter: ['style', 'class'], subtree: true });
+        } catch (e) { /* observer is best-effort; the static pass above already ran */ }
+        // Berthed groups arrive expanded.
+        groupIds.forEach(function (id) {
+            var input = doc.getElementById(id);
+            if (input) input.checked = true;
+        });
+
+        // Session-ID mask law: blur any text node / input value carrying the
+        // id (reveal on hover/focus). Throwaway-profile ids scrub too — the
+        // mask is content-based, not profile-based.
+        if (deckSessionId) deckMaskSessionInDoc(doc, root);
+    }
+
+    function deckMaskSessionInDoc(doc, root) {
+        var id = deckSessionId;
+        if (!id) return;
+        try {
+            var walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */, null);
+            var node;
+            var touched = [];
+            while ((node = walker.nextNode())) {
+                if (node.nodeValue && node.nodeValue.indexOf(id) !== -1) {
+                    var el = node.parentElement;
+                    if (el && touched.indexOf(el) === -1) {
+                        el.classList.add('arcade-deck-masked');
+                        touched.push(el);
+                    }
+                }
+            }
+            Array.prototype.slice.call(root.querySelectorAll('input, textarea')).forEach(function (input) {
+                try {
+                    if (input.value && String(input.value).indexOf(id) !== -1) input.classList.add('arcade-deck-masked');
+                } catch (e) { /* noop */ }
+            });
+        } catch (e) { /* masking is best-effort dressing, never fatal */ }
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — SECTION: Session & rooms. The session ID masked-by-default
+    // (blur law), a rotate door (runbook pointer — rotation is a runbook,
+    // never a button), plus the stock Session Options group embedded.
+    // --------------------------------------------------------------------
+    function renderDeckSession(stage) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Your session';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+
+        var idRow = document.createElement('div');
+        idRow.className = 'arcade-alert-row';
+        var idLabel = document.createElement('label');
+        idLabel.textContent = 'Session ID';
+        idRow.appendChild(idLabel);
+        var idValue = document.createElement('span');
+        idValue.className = 'arcade-deck-masked arcade-deck-sessionid';
+        idValue.tabIndex = 0;
+        idValue.textContent = deckSessionId || '—';
+        idValue.setAttribute('aria-label', 'Session ID — hidden, focus or hover to reveal');
+        idRow.appendChild(idValue);
+        body.appendChild(idRow);
+
+        var btnRow = document.createElement('div');
+        btnRow.className = 'arcade-evt-doors';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm';
+        copyBtn.textContent = 'Copy session ID';
+        copyBtn.addEventListener('click', function () {
+            if (!deckSessionId) { flashButton(copyBtn, 'No session', 2200); return; }
+            copyToClipboard(deckSessionId).then(function () { flashButton(copyBtn, 'Copied ✓'); });
+        });
+        btnRow.appendChild(copyBtn);
+        body.appendChild(btnRow);
+
+        var maskNote = document.createElement('div');
+        maskNote.className = 'arcade-evt-cond__hint';
+        maskNote.textContent = 'Masked by default — hover or keyboard-focus the value to peek. Masked beats rotated: keep it out of screenshots and the ID keeps working.';
+        body.appendChild(maskNote);
+
+        // Rotate door — a runbook pointer, deliberately not an action.
+        var rotateBtn = document.createElement('button');
+        rotateBtn.type = 'button';
+        rotateBtn.className = 'arcade-btn arcade-btn--sm';
+        rotateBtn.textContent = 'How to rotate your session ID';
+        rotateBtn.setAttribute('aria-expanded', 'false');
+        btnRow.appendChild(rotateBtn);
+        var rotateCard = document.createElement('div');
+        rotateCard.className = 'arcade-evt-cond__hint';
+        rotateCard.hidden = true;
+        rotateCard.textContent = 'Rotation is a runbook, not a button: mint a new session, then sweep every place the old one lives — OBS scene JSONs, webhook URLs, overlay browser sources (pacscenes don’t carry the ID). Full runbook: pacsarcade/rtfm/ssn-session-rotation.md. The stock group below carries the session fields themselves (password, link obscuring) — its own “please do not change your session ID” warning stands.';
+        body.appendChild(rotateCard);
+        rotateBtn.addEventListener('click', function () {
+            rotateCard.hidden = !rotateCard.hidden;
+            rotateBtn.setAttribute('aria-expanded', String(!rotateCard.hidden));
+        });
+
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        buildDeckPopupEmbed(stage, 'session', 'Stock session options — password and link obscuring, berthed in place.');
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — SECTION: Connections. Platform sources admin (the sources live
+    // on Main's rail — cross-link, no duplicate) + the OBS-websocket fields
+    // (obsws/obspw — NAMES only ever in docs) + optional chat services +
+    // the experimental transport toggle, all embedded in place.
+    // --------------------------------------------------------------------
+    function renderDeckConnections(stage) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Platform sources';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'Chat sources (Twitch, Kick, YouTube and the rest) are added, started and stopped on Main’s sources rail — one home, no duplicate admin here.';
+        body.appendChild(line);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var mainBtn = document.createElement('button');
+        mainBtn.type = 'button';
+        mainBtn.className = 'arcade-btn arcade-btn--sm';
+        mainBtn.textContent = 'Open Main';
+        mainBtn.addEventListener('click', function () { navigateArcadeTab('main'); });
+        doors.appendChild(mainBtn);
+        body.appendChild(doors);
+        var obsNote = document.createElement('div');
+        obsNote.className = 'arcade-evt-cond__hint';
+        obsNote.textContent = 'OBS WebSocket (obsws / obspw) is configured in the embedded stock group below — values stay in the fields, names only ever leave this app.';
+        body.appendChild(obsNote);
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        buildDeckPopupEmbed(stage, 'connections', 'Connection-level stock groups — OBS WebSocket, opt-in chat services, experimental transport.');
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — SECTION: Speech (TTS). App-wide text-to-speech: the dock's
+    // message TTS, the featured-overlay TTS, flow-action TTS, and the chat
+    // bot's TTS — one speech home.
+    // --------------------------------------------------------------------
+    function renderDeckSpeech(stage) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Text to speech';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'Every text-to-speech surface in one place: chat messages (dock), the featured-message overlay, event-flow actions, and the chat bot. Providers and voices are the stock fields below — including the local Kokoro voice set.';
+        body.appendChild(line);
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        buildDeckPopupEmbed(stage, 'speech', 'All four stock TTS groups, berthed in place.');
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — SECTION: Backups & storage. Settings profiles, message export
+    // (file/Excel), and the storage mechanics (local DB toggles), plus a
+    // door to the points backup that lives in Points system.
+    // --------------------------------------------------------------------
+    function renderDeckBackups(stage) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Backups & storage';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'Settings profiles, message-history export, and local-storage mechanics. Points data has its own backup lane — it lives with the rest of the community points area.';
+        body.appendChild(line);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var pointsBtn = document.createElement('button');
+        pointsBtn.type = 'button';
+        pointsBtn.className = 'arcade-btn arcade-btn--sm';
+        pointsBtn.textContent = 'Points backup → Points system';
+        pointsBtn.addEventListener('click', function () { selectDeckSection('points', true); });
+        doors.appendChild(pointsBtn);
+        body.appendChild(doors);
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        buildDeckPopupEmbed(stage, 'backups', 'Stock backup & storage groups — settings profiles, message export, storage mechanics.');
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — settings loader. ONE getSettings read hydrates every deck
+    // section, sequenced BEFORE any iframe src is set (the S50 sendSync
+    // discipline — embeds and stock-stage frames come after). Re-entry
+    // re-reads (S47B doctrine): edits made elsewhere since the last visit
+    // show honestly.
+    // --------------------------------------------------------------------
+    function ensureDeckSettingsLive() {
+        loadDeckSettings().then(function () {
+            deckSettingsLive = true;
+            if (deckPendingSection) {
+                deckSelectedSection = deckPendingSection;
+                deckPendingSection = null;
+            }
+            renderDeckList();
+            renderDeckStage();
+        });
+    }
+
+    function loadDeckSettings() {
+        return new Promise(function (resolve) {
+            function applySettings(settings) {
+                try {
+                    var enabledEntry = settings.enablePointsSystem;
+                    deckPointsState.enabled = !!(enabledEntry && enabledEntry.setting);
+                    var perEntry = settings.pointsPerEngagement;
+                    var per = perEntry && Number(perEntry.numbersetting);
+                    deckPointsState.per = (isFinite(per) && per > 0) ? per : 1;
+                    var winEntry = settings.engagementWindow;
+                    var winMin = winEntry && Number(winEntry.numbersetting);
+                    deckPointsState.windowMin = (isFinite(winMin) && winMin > 0) ? winMin : 15;
+                    deckPointsState.cmdPoints = !!(settings.enablePointsCommand && settings.enablePointsCommand.setting);
+                    deckPointsState.cmdLeaderboard = !!(settings.enableLeaderboardCommand && settings.enableLeaderboardCommand.setting);
+                    deckPointsState.cmdRewards = !!(settings.enableRewardsCommand && settings.enableRewardsCommand.setting);
+
+                    var unlocksEntry = settings[POINTS_UNLOCKS_KEY];
+                    var unlocks = null;
+                    try { unlocks = JSON.parse((unlocksEntry && typeof unlocksEntry.textparam1 === 'string') ? unlocksEntry.textparam1 : ''); } catch (e) { unlocks = null; }
+                    pointsUnlocks = Array.isArray(unlocks) ? unlocks.filter(function (u) {
+                        return u && typeof u === 'object' && isFinite(Number(u.threshold)) && typeof u.name === 'string';
+                    }).map(function (u) { return { threshold: Math.max(1, Math.round(Number(u.threshold))), name: u.name }; }) : [];
+
+                    // Tier NAMES — the S47 key stays a plain string[] forever
+                    // (S47 re-seeds the default if the shape ever breaks).
+                    var tiersEntry = settings[ALERT_TIERS_KEY];
+                    var tiers = null;
+                    try {
+                        var t = JSON.parse((tiersEntry && typeof tiersEntry.textparam1 === 'string') ? tiersEntry.textparam1 : '');
+                        if (Array.isArray(t) && t.length && t.every(function (x) { return typeof x === 'string' && x; })) tiers = t;
+                    } catch (e) { tiers = null; }
+                    deckTiers = tiers || ALERT_TIERS_DEFAULT.slice();
+
+                    var rulesEntry = settings[ALERT_TIER_RULES_KEY];
+                    var rules = null;
+                    try { rules = JSON.parse((rulesEntry && typeof rulesEntry.textparam1 === 'string') ? rulesEntry.textparam1 : ''); } catch (e) { rules = null; }
+                    deckTierRules = Array.isArray(rules) ? rules.filter(function (r) {
+                        return r && typeof r === 'object' && typeof r.tier === 'string' && Array.isArray(r.conditions);
+                    }) : [];
+
+                    var surfEntry = settings[CONTROL_SURFACES_KEY];
+                    var surfaces = null;
+                    try { surfaces = JSON.parse((surfEntry && typeof surfEntry.textparam1 === 'string') ? surfEntry.textparam1 : ''); } catch (e) { surfaces = null; }
+                    deckSurfaces = Array.isArray(surfaces) ? surfaces.filter(function (s) {
+                        return s && typeof s === 'object' && typeof s.type === 'string';
+                    }) : [];
+                } catch (e) { console.error('[arcade-shell] deck settings parse failed:', e); }
+            }
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        applySettings((response && response.settings) || {});
+                        // The session id comes off the app's own helper (a
+                        // getSettings read itself) — still before any frame.
+                        if (typeof window.getChatDockSessionId === 'function') {
+                            Promise.resolve(window.getChatDockSessionId()).then(function (id) {
+                                deckSessionId = id || '';
+                                resolve();
+                            }, function () { resolve(); });
+                            return;
+                        }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] deck settings load failed:', e); }
+            setDeckStatus('settings bridge unavailable — edits will not persist', true);
+            resolve();
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — SECTION: Control surfaces. A CHOOSER, not three side-by-side
+    // lanes (ruled round 6): the section asks "do you have a Touch Portal
+    // or a Stream Deck?" — one or the other per device; "+ Add another
+    // device" runs a second surface after setup. Lanes: Touch Portal
+    // (guided setup against the control API — no official TP plugin
+    // exists, the API is the door), Stream Deck (official plugin lane —
+    // js/streamdeck-remote-control.js is the app side of its protocol —
+    // plus the LOCAL setup page, since the stock setup frame is remote-
+    // only and blank offline), or Neither (the deck's own UI covers it).
+    // --------------------------------------------------------------------
+    function deckSaveSurfaces() {
+        saveDeckSetting('textparam1', CONTROL_SURFACES_KEY, JSON.stringify(deckSurfaces));
+    }
+
+    function deckAddSurface(type, name) {
+        deckSurfaces.push({
+            id: 's51-' + type + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6),
+            type: type,
+            name: name,
+            at: Date.now()
+        });
+        deckSaveSurfaces();
+    }
+
+    function renderDeckSurfaces(stage) {
+        var intro = document.createElement('p');
+        intro.className = 'arcade-evt-blurb';
+        intro.textContent = 'Physical control surfaces — a Touch Portal tablet or a Stream Deck — drive the deck through SSN’s control API. One device per setup; add another once the first is running.';
+        stage.appendChild(intro);
+
+        if (!deckSurfaces.length) {
+            renderDeckSurfaceChooser(stage, null);
+            return;
+        }
+
+        deckSurfaces.forEach(function (device) {
+            if (device.type === 'touchportal') renderDeckTouchPortal(stage, device);
+            else if (device.type === 'streamdeck') renderDeckStreamDeck(stage, device);
+            else renderDeckNeither(stage, device);
+        });
+
+        var addDoors = document.createElement('div');
+        addDoors.className = 'arcade-evt-doors';
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'arcade-btn arcade-btn--sm';
+        addBtn.textContent = '+ Add another device';
+        addBtn.setAttribute('aria-expanded', 'false');
+        addDoors.appendChild(addBtn);
+        stage.appendChild(addDoors);
+        var chooserHost = document.createElement('div');
+        stage.appendChild(chooserHost);
+        addBtn.addEventListener('click', function () {
+            var open = chooserHost.childNodes.length === 0;
+            if (open) {
+                renderDeckSurfaceChooser(chooserHost, addBtn);
+                addBtn.setAttribute('aria-expanded', 'true');
+            } else {
+                chooserHost.innerHTML = '';
+                addBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    function renderDeckSurfaceChooser(host, addBtnTrigger) {
+        var ask = document.createElement('div');
+        ask.className = 'arcade-evt-cond__title';
+        ask.textContent = 'Do you have a Touch Portal or a Stream Deck?';
+        host.appendChild(ask);
+
+        var grid = document.createElement('div');
+        grid.className = 'arcade-deck-chooser';
+        [
+            {
+                type: 'touchportal', name: 'Touch Portal', icon: '📱',
+                blurb: 'A phone/tablet running Touch Portal. No official SSN plugin exists — the guided setup wires TP against SSN’s control API with copy-paste action strings.'
+            },
+            {
+                type: 'streamdeck', name: 'Stream Deck', icon: '🎛️',
+                blurb: 'An Elgato Stream Deck. The official SSN plugin does the heavy lifting — a local setup page (works offline) walks the pairing.'
+            },
+            {
+                type: 'neither', name: 'Neither', icon: '🖥️',
+                blurb: 'No extra hardware — the deck’s own UI (sources rail, start/stop, event flows) covers the same ground.'
+            }
+        ].forEach(function (lane) {
+            var card = document.createElement('article');
+            card.className = 'arcade-el-card arcade-deck-chooser__card';
+            var head = document.createElement('div');
+            head.className = 'arcade-el-card__head';
+            var nm = document.createElement('h3');
+            nm.className = 'arcade-el-card__name';
+            nm.textContent = lane.icon + ' ' + lane.name;
+            head.appendChild(nm);
+            card.appendChild(head);
+            var blurb = document.createElement('p');
+            blurb.className = 'arcade-el-card__blurb';
+            blurb.textContent = lane.blurb;
+            card.appendChild(blurb);
+            var actions = document.createElement('div');
+            actions.className = 'arcade-el-card__actions';
+            var pick = document.createElement('button');
+            pick.type = 'button';
+            pick.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+            pick.textContent = lane.type === 'neither' ? 'Use the built-in controls' : 'Set up ' + lane.name;
+            pick.addEventListener('click', function () {
+                deckAddSurface(lane.type, lane.name);
+                renderDeckList();
+                renderDeckStage();
+            });
+            actions.appendChild(pick);
+            card.appendChild(actions);
+            grid.appendChild(card);
+        });
+        host.appendChild(grid);
+        if (addBtnTrigger) {
+            var cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'arcade-btn arcade-btn--sm';
+            cancel.textContent = 'Cancel';
+            cancel.addEventListener('click', function () {
+                host.innerHTML = '';
+                addBtnTrigger.setAttribute('aria-expanded', 'false');
+                addBtnTrigger.focus();
+            });
+            host.appendChild(cancel);
+        }
+    }
+
+    function deckSurfaceCard(stage, device, titleText) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = titleText;
+        head.appendChild(name);
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'arcade-btn arcade-btn--sm';
+        remove.textContent = 'Remove';
+        remove.title = 'Remove this device';
+        remove.addEventListener('click', function () {
+            if (remove.dataset.confirm !== '1') {
+                remove.dataset.confirm = '1';
+                remove.textContent = 'Remove — sure?';
+                return;
+            }
+            deckSurfaces = deckSurfaces.filter(function (d) { return d.id !== device.id; });
+            deckSaveSurfaces();
+            renderDeckList();
+            renderDeckStage();
+        });
+        head.appendChild(remove);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        card.appendChild(body);
+        stage.appendChild(card);
+        return body;
+    }
+
+    function deckCopyRow(body, label, displayText, copyText) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row arcade-deck-copyrow';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var val = document.createElement('code');
+        val.className = 'arcade-deck-copyrow__val';
+        val.textContent = displayText;
+        row.appendChild(val);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy ' + label);
+        btn.addEventListener('click', function () {
+            copyToClipboard(copyText).then(function () { flashButton(btn, 'Copied ✓'); });
+        });
+        row.appendChild(btn);
+        body.appendChild(row);
+    }
+
+    // The Touch Portal lane — guided setup against SSN's control API
+    // (api.md). Two transports, both honest:
+    //   HOSTED relay — any TP HTTP action, no plugin, needs internet:
+    //     GET https://io.socialstream.ninja/<session>/<action>/<target>/<value>
+    //   LOCAL relay — offline, same machine: the app's local server
+    //     (app menu → Enable Local Server) + a TP websocket-capable action
+    //     at ws://127.0.0.1:3000/join/<session>/<in>/<out> — in=2/out=1 so
+    //     TP hears the app's answers (background.js joins in=1/out=2).
+    // The TP-side import is DOCUMENTED, not bundled: no official TP plugin
+    // exists and TP's button-set format isn't shipped here — the strings
+    // below paste straight into TP's HTTP/websocket actions.
+    function renderDeckTouchPortal(stage, device) {
+        var body = deckSurfaceCard(stage, device, '📱 Touch Portal — guided setup');
+
+        var step1 = document.createElement('p');
+        step1.className = 'arcade-evt-blurb';
+        step1.textContent = '1 · Pick a transport. HOSTED works from any device with internet (TP’s built-in HTTP actions are enough). LOCAL works offline on this machine — enable the app’s local server (app menu → Enable Local Server) and the API/websocket toggle (Deck Settings → Backups & storage → ⚙️ Mechanics — the “allows external apps to control SSN” switch); TP needs a websocket-capable action.';
+        body.appendChild(step1);
+
+        var sid = deckSessionId || '';
+        var hostedTitle = document.createElement('div');
+        hostedTitle.className = 'arcade-evt-cond__title';
+        hostedTitle.textContent = 'Hosted relay — HTTP actions (session masked)';
+        body.appendChild(hostedTitle);
+        deckCopyRow(body, 'Next featured message', 'https://io.socialstream.ninja/' + deckSessionMasked() + '/nextInQueue', 'https://io.socialstream.ninja/' + sid + '/nextInQueue');
+        deckCopyRow(body, 'Toggle draw mode', 'https://io.socialstream.ninja/' + deckSessionMasked() + '/drawmode/null/toggle', 'https://io.socialstream.ninja/' + sid + '/drawmode/null/toggle');
+        deckCopyRow(body, 'Clear overlay', 'https://io.socialstream.ninja/' + deckSessionMasked() + '/clearOverlay', 'https://io.socialstream.ninja/' + sid + '/clearOverlay');
+
+        var localTitle = document.createElement('div');
+        localTitle.className = 'arcade-evt-cond__title';
+        localTitle.textContent = 'Local relay — websocket actions (offline; session masked)';
+        body.appendChild(localTitle);
+        deckCopyRow(body, 'Join URL (in=2, out=1)', 'ws://127.0.0.1:3000/join/' + deckSessionMasked() + '/2/1', 'ws://127.0.0.1:3000/join/' + sid + '/2/1');
+        deckCopyRow(body, 'Handshake test', '{"action":"getCapabilities"}', '{"action":"getCapabilities"}');
+        deckCopyRow(body, 'Next featured message', '{"action":"nextInQueue"}', '{"action":"nextInQueue"}');
+        deckCopyRow(body, 'Toggle draw mode', '{"action":"drawmode","value":"toggle"}', '{"action":"drawmode","value":"toggle"}');
+        var relayNote = document.createElement('div');
+        relayNote.className = 'arcade-evt-cond__hint';
+        relayNote.textContent = 'The local relay answers the handshake with a raw capabilities broadcast (it does not relay callback-tagged responses — send actions without a "get" token and read the broadcast).';
+        body.appendChild(relayNote);
+
+        var step2 = document.createElement('p');
+        step2.className = 'arcade-evt-blurb';
+        step2.textContent = '2 · In Touch Portal: add a button, give it an HTTP-request action (hosted URL) or a websocket send (join URL first, then the JSON action strings). The full action vocabulary is the bundle’s api.md — the strings above are the verified starters.';
+        body.appendChild(step2);
+
+        var testRow = document.createElement('div');
+        testRow.className = 'arcade-evt-doors';
+        var testBtn = document.createElement('button');
+        testBtn.type = 'button';
+        testBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        testBtn.textContent = 'Test the local API';
+        testRow.appendChild(testBtn);
+        body.appendChild(testRow);
+        var testStatus = document.createElement('div');
+        testStatus.className = 'arcade-evt-cond__hint';
+        testStatus.setAttribute('role', 'status');
+        testStatus.setAttribute('aria-live', 'polite');
+        testStatus.textContent = 'Probes ws://127.0.0.1:3000 exactly like a TP client would — join, send the handshake, await the answer.';
+        body.appendChild(testStatus);
+        testBtn.addEventListener('click', function () { deckTestLocalApi(testStatus); });
+    }
+
+    // The API-side TP proof, in-app: join the local relay as an external
+    // client (in=2/out=1), send the capability handshake, await the app's
+    // answer. Honest states at every failure point — never throws.
+    function deckTestLocalApi(statusEl) {
+        if (!deckSessionId) {
+            statusEl.textContent = 'No session ID yet — the app hasn’t finished booting; try again in a moment.';
+            return;
+        }
+        statusEl.textContent = 'Probing ws://127.0.0.1:3000 …';
+        var ws;
+        try {
+            ws = new WebSocket('ws://127.0.0.1:3000/join/' + deckSessionId + '/2/1');
+        } catch (e) {
+            statusEl.textContent = 'Could not open a websocket at all — ' + (e && e.message ? e.message : 'unknown error') + '.';
+            return;
+        }
+        var done = false;
+        var timer = setTimeout(function () {
+            if (done) return;
+            done = true;
+            try { ws.close(); } catch (e) { /* noop */ }
+            statusEl.textContent = 'No answer within 5s. Either the local server is off (app menu → Enable Local Server) or the API/websocket toggle is off (Backups & storage → ⚙️ Mechanics) — or use the hosted relay strings above.';
+        }, 5000);
+        ws.onopen = function () {
+            // No "get" token — the local relay eats callback-tagged
+            // responses (measured: its callback-registry branch returns
+            // before broadcasting); the answer arrives as a raw
+            // {type:'capabilities'} broadcast instead.
+            try { ws.send(JSON.stringify({ action: 'getCapabilities' })); } catch (e) { /* noop */ }
+        };
+        ws.onmessage = function (ev) {
+            var msg = null;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            if (!msg || msg.type !== 'capabilities') return;
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            var appSide = msg.ssapp && msg.ssapp.available;
+            statusEl.textContent = 'The API answered — capabilities received (' +
+                (appSide ? 'the app bridge is live' : 'the SSN action set is live') +
+                '). This is the exact round-trip a Touch Portal client makes.';
+            try { ws.close(); } catch (e) { /* noop */ }
+        };
+        ws.onerror = function () {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            statusEl.textContent = 'Connection failed — the local server is off. Enable it (app menu → Enable Local Server), or use the hosted relay strings above.';
+        };
+    }
+
+    // The Stream Deck lane — the official plugin (the app speaks its
+    // protocol via js/streamdeck-remote-control.js) + the LOCAL setup page
+    // embedded below. The stock setup frame is remote-only and renders
+    // blank offline (S42 census); the local page ships in the bundle and
+    // rides the same ssapp-streamdeck-* postMessage handshake.
+    function renderDeckStreamDeck(stage, device) {
+        var body = deckSurfaceCard(stage, device, '🎛️ Stream Deck — official plugin + local setup');
+
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'The official Social Stream Ninja plugin (Elgato Marketplace) pairs with this app — the app answers its capability/action protocol. The setup page below is the LOCAL copy: it works offline and shows the live handshake state.';
+        body.appendChild(line);
+
+        var frame = document.createElement('iframe');
+        frame.className = 'arcade-deck-embed__frame arcade-deck-streamdeck__frame';
+        frame.title = 'Stream Deck local setup';
+        frame.setAttribute('aria-label', 'Stream Deck local setup');
+        body.appendChild(frame);
+
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        resolver('streamdeck/index.html', { versionParam: 'v=1' }).then(function (resolved) {
+            if (!resolved || !resolved.url) return;
+            frame.dataset.ssappOrigin = resolved.origin || '';
+            frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] streamdeck local page resolve failed:', e); });
+
+        // The handshake: the page announces ssapp-streamdeck-ready; answer
+        // with the same ssapp-streamdeck-setup payload index.html sends the
+        // stock frame (session id + capabilities off the app bridge).
+        window.addEventListener('message', function onDeckSdMessage(event) {
+            if (!document.body.contains(frame)) {
+                window.removeEventListener('message', onDeckSdMessage);
+                return;
+            }
+            if (event.source !== frame.contentWindow) return;
+            if (!event.data || event.data.type !== 'ssapp-streamdeck-ready') return;
+            deckBuildStreamDeckPayload().then(function (payload) {
+                try {
+                    var origin = frame.dataset.ssappOrigin || '';
+                    frame.contentWindow.postMessage({ type: 'ssapp-streamdeck-setup', payload: payload }, /^https?:\/\//i.test(origin) ? origin : '*');
+                } catch (e) { /* noop */ }
+            });
+        });
+    }
+
+    function deckBuildStreamDeckPayload() {
+        return new Promise(function (resolve) {
+            var payload = { sessionId: deckSessionId || '', capabilities: {} };
+            try {
+                if (window.SSAppStreamDeckBridge && typeof window.SSAppStreamDeckBridge.handleCommand === 'function') {
+                    window.SSAppStreamDeckBridge.handleCommand({ action: 'getCapabilities' }).then(function (capResp) {
+                        payload.capabilities = (capResp && capResp.payload) || {};
+                        payload.bridgeVersion = payload.capabilities.bridgeVersion || (capResp && capResp.ok ? '1' : '');
+                        payload.apiVersion = payload.capabilities.apiVersion || '';
+                        resolve(payload);
+                    }, function () { resolve(payload); });
+                    return;
+                }
+            } catch (e) { /* fall through */ }
+            resolve(payload);
+        });
+    }
+
+    function renderDeckNeither(stage, device) {
+        var body = deckSurfaceCard(stage, device, '🖥️ Built-in controls');
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'No extra hardware needed — the deck’s own UI covers it: the sources rail starts and stops chats, event flows automate what happens on stream, and every overlay URL copies straight into OBS.';
+        body.appendChild(line);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var mainBtn = document.createElement('button');
+        mainBtn.type = 'button';
+        mainBtn.className = 'arcade-btn arcade-btn--sm';
+        mainBtn.textContent = 'Open Main';
+        mainBtn.addEventListener('click', function () { navigateArcadeTab('main'); });
+        doors.appendChild(mainBtn);
+        var flowsBtn = document.createElement('button');
+        flowsBtn.type = 'button';
+        flowsBtn.className = 'arcade-btn arcade-btn--sm';
+        flowsBtn.textContent = 'Open Flows';
+        flowsBtn.addEventListener('click', function () { navigateArcadeTab('eventflow'); });
+        doors.appendChild(flowsBtn);
+        body.appendChild(doors);
+    }
+
+    // --------------------------------------------------------------------
+    // S51 — SECTION: Points system (Rider 3 — THE one home for the
+    // community points area). Every points/engagement surface is reachable
+    // from this one section: earn rates, the unlocks table, alert priority
+    // tiers, points backup + the Botrix / StreamElements import lanes, the
+    // leaderboard door, and the engagement-analytics door. Framed for the
+    // community (the streamer showing chatters what their engagement
+    // builds), not as operator plumbing. The Games hub "Points & unlocks"
+    // row cross-links HERE (same destination, no duplicate config).
+    // Watch-time copy law (S52's measurement hasn't landed): this section
+    // says points are message-engagement based and makes NO watch-time
+    // accrual claim either way.
+    // --------------------------------------------------------------------
+    function renderDeckPoints(stage) {
+        var intro = document.createElement('p');
+        intro.className = 'arcade-evt-blurb';
+        intro.textContent = 'Your community’s points — what chatters earn for being part of the stream, what it unlocks, and the leaderboard they climb. Everything points & engagement lives in this one section.';
+        stage.appendChild(intro);
+        renderDeckPointsEarn(stage);
+        renderDeckPointsUnlocks(stage);
+        renderDeckPointsTiers(stage);
+        renderDeckPointsData(stage);
+        renderDeckPointsLeaderboard(stage);
+    }
+
+    function deckPointsCard(stage, titleText) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = titleText;
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        card.appendChild(body);
+        stage.appendChild(card);
+        return body;
+    }
+
+    function renderDeckPointsEarn(stage) {
+        var body = deckPointsCard(stage, 'Earn');
+
+        var toggleRow = document.createElement('div');
+        toggleRow.className = 'arcade-alert-row';
+        var toggleLabel = document.createElement('label');
+        toggleLabel.textContent = 'Points system';
+        toggleLabel.setAttribute('for', 'arcade-deck-points-toggle');
+        toggleRow.appendChild(toggleLabel);
+        var toggle = document.createElement('input');
+        toggle.type = 'checkbox';
+        toggle.id = 'arcade-deck-points-toggle';
+        toggle.checked = deckPointsState.enabled;
+        toggle.addEventListener('change', function () {
+            deckPointsState.enabled = toggle.checked;
+            saveDeckSetting('setting', 'enablePointsSystem', toggle.checked);
+            renderDeckList();
+        });
+        toggleRow.appendChild(toggle);
+        body.appendChild(toggleRow);
+
+        function rateRow(id, label, value, key) {
+            var row = document.createElement('div');
+            row.className = 'arcade-alert-row';
+            var lbl = document.createElement('label');
+            lbl.textContent = label;
+            lbl.setAttribute('for', id);
+            row.appendChild(lbl);
+            var input = document.createElement('input');
+            input.type = 'number';
+            input.id = id;
+            input.min = '1';
+            input.max = key === 'engagementWindow' ? '60' : '100';
+            input.step = '1';
+            input.value = String(value);
+            input.addEventListener('change', function () {
+                var v = Math.max(1, Math.round(Number(input.value) || 0));
+                input.value = String(v);
+                saveDeckSetting('numbersetting', key, v);
+                if (key === 'pointsPerEngagement') deckPointsState.per = v;
+                else deckPointsState.windowMin = v;
+            });
+            row.appendChild(input);
+            body.appendChild(row);
+        }
+        rateRow('arcade-deck-points-per', 'Points per engagement', deckPointsState.per, 'pointsPerEngagement');
+        rateRow('arcade-deck-points-window', 'Engagement window (minutes)', deckPointsState.windowMin, 'engagementWindow');
+
+        var ratesNote = document.createElement('div');
+        ratesNote.className = 'arcade-evt-cond__hint';
+        ratesNote.textContent = 'Points are message engagement — being in chat. Streak bonus: +10% per consecutive hour, capped at 2× (stock rules).';
+        body.appendChild(ratesNote);
+
+        var cmdTitle = document.createElement('div');
+        cmdTitle.className = 'arcade-evt-cond__title';
+        cmdTitle.textContent = 'Chat commands';
+        body.appendChild(cmdTitle);
+        [
+            { key: 'enablePointsCommand', label: '!points — check a balance', stateKey: 'cmdPoints' },
+            { key: 'enableLeaderboardCommand', label: '!leaderboard — link the board', stateKey: 'cmdLeaderboard' },
+            { key: 'enableRewardsCommand', label: '!rewards — list redemptions', stateKey: 'cmdRewards' }
+        ].forEach(function (cmd) {
+            var row = document.createElement('div');
+            row.className = 'arcade-alert-row';
+            var lbl = document.createElement('label');
+            lbl.textContent = cmd.label;
+            row.appendChild(lbl);
+            var input = document.createElement('input');
+            input.type = 'checkbox';
+            input.checked = deckPointsState[cmd.stateKey];
+            input.setAttribute('aria-label', cmd.label);
+            input.addEventListener('change', function () {
+                deckPointsState[cmd.stateKey] = input.checked;
+                saveDeckSetting('setting', cmd.key, input.checked);
+            });
+            row.appendChild(input);
+            body.appendChild(row);
+        });
+    }
+
+    function renderDeckPointsUnlocks(stage) {
+        var body = deckPointsCard(stage, 'Unlocks');
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'Threshold → effect name. When a chatter’s points cross a threshold, the named effect is what they’ve unlocked.';
+        body.appendChild(line);
+
+        var listEl = document.createElement('div');
+        listEl.className = 'arcade-game-unlocks';
+        body.appendChild(listEl);
+
+        function renderRows() {
+            listEl.innerHTML = '';
+            pointsUnlocks.forEach(function (unlock, idx) {
+                listEl.appendChild(buildUnlockRow(unlock, idx, pointsUnlocks, renderRows));
+            });
+            if (!pointsUnlocks.length) {
+                var empty = document.createElement('div');
+                empty.className = 'arcade-evt-cond__hint';
+                empty.textContent = 'No unlocks yet — set a points threshold and name what it means.';
+                listEl.appendChild(empty);
+            }
+        }
+        renderRows();
+
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'arcade-btn arcade-btn--sm';
+        addBtn.textContent = '+ Add unlock';
+        addBtn.addEventListener('click', function () {
+            var nextThreshold = pointsUnlocks.length ? (Math.max.apply(null, pointsUnlocks.map(function (u) { return u.threshold; })) * 2) : 100;
+            pointsUnlocks.push({ threshold: nextThreshold, name: '' });
+            savePointsUnlocks();
+            renderRows();
+        });
+        body.appendChild(addBtn);
+
+        var hint = document.createElement('div');
+        hint.className = 'arcade-evt-cond__hint';
+        hint.textContent = 'Names only for now — unlocks fire via event flows; the execution wiring is a follow-up task. Flows and overlays can already read this table through the settings chain (arcadePointsUnlocks).';
+        body.appendChild(hint);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var flowsBtn = document.createElement('button');
+        flowsBtn.type = 'button';
+        flowsBtn.className = 'arcade-btn arcade-btn--sm';
+        flowsBtn.textContent = 'Open Flows';
+        flowsBtn.addEventListener('click', function () { navigateArcadeTab('eventflow'); });
+        doors.appendChild(flowsBtn);
+        body.appendChild(doors);
+    }
+
+    // Alert priority tiers — the list S47's alert chips read (names) PLUS
+    // the promotion-condition policy (ruled round 7). Conditions use ONLY
+    // what EventFlow already evaluates — each kind cites the real
+    // evaluator in actions/EventFlowSystem.js; NO new evaluators:
+    //   platform        → event-trigger config.sources filter (:2240-2305)
+    //   firsttime       → messageProperties requiredProperties ['firsttime'] (:2841-2880)
+    //   returningDays   → messageProperties lastActivityFilter, mode 'older' (:2884+)
+    //   raidViewers     → eventRaid config.minViewers (:2281-2292)
+    //   donationAmount  → eventDonation config.minAmount (:2266-2279)
+    //   bitsMin         → eventCheer config.minBits (:2294-2305)
+    var DECK_TIER_CONDITION_KINDS = [
+        { kind: 'platform', label: 'Platform is…', value: 'sources' },
+        { kind: 'firsttime', label: 'First-time chatter', value: null },
+        { kind: 'returningDays', label: 'Returning after N quiet days', value: 'days' },
+        { kind: 'raidViewers', label: 'Raid with at least N viewers', value: 'min' },
+        { kind: 'donationAmount', label: 'Donation of at least N', value: 'min' },
+        { kind: 'bitsMin', label: 'Bits cheer of at least N', value: 'min' }
+    ];
+
+    function deckSaveTiers() {
+        saveDeckSetting('textparam1', ALERT_TIERS_KEY, JSON.stringify(deckTiers));
+    }
+    function deckSaveTierRules() {
+        saveDeckSetting('textparam1', ALERT_TIER_RULES_KEY, JSON.stringify(deckTierRules));
+    }
+
+    // Renaming a tier cascades into arcadeAlertVariants (S47's doc carries
+    // tier names on every event/custom record + the All-types default), so
+    // the Alerts surface's chips follow the new name instead of orphaning.
+    function deckCascadeTierRename(oldName, newName) {
+        if (!oldName || !newName || oldName === newName) return;
+        deckCmd({ getSettings: true }, function (response) {
+            try {
+                var entry = response && response.settings && response.settings[ALERT_VARIANTS_KEY];
+                var raw = (entry && typeof entry.textparam1 === 'string') ? entry.textparam1 : '';
+                if (!raw) return;
+                var doc = JSON.parse(raw);
+                var changed = false;
+                (function walk(node) {
+                    if (!node || typeof node !== 'object') return;
+                    if (node.tier === oldName) { node.tier = newName; changed = true; }
+                    Object.keys(node).forEach(function (k) { walk(node[k]); });
+                })(doc);
+                if (changed) saveDeckSetting('textparam1', ALERT_VARIANTS_KEY, JSON.stringify(doc));
+            } catch (e) { console.error('[arcade-shell] tier rename cascade failed:', e); }
+        });
+    }
+
+    function renderDeckPointsTiers(stage) {
+        var body = deckPointsCard(stage, 'Alert priority tiers');
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'The priority list the Alerts surface’s chips read. Tier names, and the conditions that promote an event into each tier — conditions limited to what Event Flow already evaluates; nothing here invents an evaluator.';
+        body.appendChild(line);
+
+        var listEl = document.createElement('div');
+        body.appendChild(listEl);
+
+        function renderTiers() {
+            listEl.innerHTML = '';
+            deckTiers.forEach(function (tierName, idx) {
+                var tierBlock = document.createElement('div');
+                tierBlock.className = 'arcade-deck-tier';
+
+                var row = document.createElement('div');
+                row.className = 'arcade-alert-row';
+                var nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.autocomplete = 'off';
+                nameInput.value = tierName;
+                nameInput.setAttribute('aria-label', 'Tier ' + (idx + 1) + ' name');
+                nameInput.addEventListener('change', function () {
+                    var v = nameInput.value.trim();
+                    if (!v || deckTiers.indexOf(v) !== -1) { nameInput.value = deckTiers[idx]; return; }
+                    var old = deckTiers[idx];
+                    deckTiers[idx] = v;
+                    deckTierRules.forEach(function (r) { if (r.tier === old) r.tier = v; });
+                    deckSaveTiers();
+                    deckSaveTierRules();
+                    deckCascadeTierRename(old, v);
+                    renderTiers();
+                });
+                row.appendChild(nameInput);
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'arcade-btn arcade-btn--sm';
+                remove.textContent = '×';
+                remove.title = 'Remove this tier';
+                remove.setAttribute('aria-label', 'Remove tier ' + tierName);
+                remove.addEventListener('click', function () {
+                    if (deckTiers.length <= 1) { setDeckStatus('at least one tier must stay', true); return; }
+                    var removed = deckTiers.splice(idx, 1)[0];
+                    deckTierRules = deckTierRules.filter(function (r) { return r.tier !== removed; });
+                    deckSaveTiers();
+                    deckSaveTierRules();
+                    setDeckStatus('tier "' + removed + '" removed — alert variants keep their last tier name until re-picked');
+                    renderTiers();
+                });
+                row.appendChild(remove);
+                tierBlock.appendChild(row);
+
+                // Promotion conditions for this tier.
+                var condHost = document.createElement('div');
+                condHost.className = 'arcade-deck-tier__conds';
+                tierBlock.appendChild(condHost);
+                renderConditions(condHost, tierName);
+                listEl.appendChild(tierBlock);
+            });
+        }
+
+        function renderConditions(condHost, tierName) {
+            condHost.innerHTML = '';
+            var rule = null;
+            deckTierRules.forEach(function (r) { if (r.tier === tierName) rule = r; });
+            var conditions = rule ? rule.conditions : [];
+            conditions.forEach(function (cond, cidx) {
+                condHost.appendChild(buildConditionRow(tierName, cond, cidx, function () { renderConditions(condHost, tierName); }));
+            });
+            var addRow = document.createElement('div');
+            addRow.className = 'arcade-evt-doors';
+            var addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'arcade-btn arcade-btn--sm';
+            addBtn.textContent = '+ Add condition';
+            addBtn.setAttribute('aria-label', 'Add a promotion condition to ' + tierName);
+            addBtn.addEventListener('click', function () {
+                if (!rule) {
+                    rule = { tier: tierName, conditions: [] };
+                    deckTierRules.push(rule);
+                }
+                rule.conditions.push({ kind: 'firsttime' });
+                deckSaveTierRules();
+                renderConditions(condHost, tierName);
+            });
+            addRow.appendChild(addBtn);
+            condHost.appendChild(addRow);
+            if (!conditions.length) {
+                var none = document.createElement('div');
+                none.className = 'arcade-evt-cond__hint';
+                none.textContent = 'No promotion conditions — events take this tier only by manual pick on the Alerts surface.';
+                condHost.appendChild(none);
+            }
+        }
+
+        function buildConditionRow(tierName, cond, cidx, onChanged) {
+            var row = document.createElement('div');
+            row.className = 'arcade-alert-row arcade-deck-cond';
+            var select = document.createElement('select');
+            select.setAttribute('aria-label', 'Condition type');
+            DECK_TIER_CONDITION_KINDS.forEach(function (k) {
+                var opt = document.createElement('option');
+                opt.value = k.kind;
+                opt.textContent = k.label;
+                select.appendChild(opt);
+            });
+            select.value = cond.kind;
+            row.appendChild(select);
+
+            var valueInput = document.createElement('input');
+            row.appendChild(valueInput);
+
+            function syncValueField() {
+                var kindMeta = null;
+                DECK_TIER_CONDITION_KINDS.forEach(function (k) { if (k.kind === select.value) kindMeta = k; });
+                if (kindMeta && kindMeta.value === 'sources') {
+                    valueInput.type = 'text';
+                    valueInput.placeholder = 'twitch, kick, youtube';
+                    valueInput.value = Array.isArray(cond.sources) ? cond.sources.join(', ') : '';
+                    valueInput.setAttribute('aria-label', 'Platforms (comma-separated)');
+                } else if (kindMeta && kindMeta.value) {
+                    valueInput.type = 'number';
+                    valueInput.min = '1';
+                    valueInput.step = '1';
+                    valueInput.value = String(Number(cond[kindMeta.value]) || (kindMeta.value === 'days' ? 7 : 10));
+                    valueInput.setAttribute('aria-label', 'Condition value');
+                } else {
+                    valueInput.type = 'text';
+                    valueInput.value = '';
+                    valueInput.placeholder = '—';
+                    valueInput.disabled = true;
+                    valueInput.setAttribute('aria-label', 'No value needed');
+                    return;
+                }
+                valueInput.disabled = false;
+            }
+            syncValueField();
+
+            select.addEventListener('change', function () {
+                var fresh = { kind: select.value };
+                cond.kind = fresh.kind;
+                delete cond.sources;
+                delete cond.days;
+                delete cond.min;
+                syncValueField();
+                pushCond();
+            });
+            valueInput.addEventListener('change', function () {
+                if (select.value === 'platform') {
+                    cond.sources = valueInput.value.split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+                    delete cond.days; delete cond.min;
+                } else if (select.value === 'returningDays') {
+                    cond.days = Math.max(1, Math.round(Number(valueInput.value) || 1));
+                    delete cond.sources; delete cond.min;
+                } else if (select.value !== 'firsttime') {
+                    cond.min = Math.max(1, Math.round(Number(valueInput.value) || 1));
+                    delete cond.sources; delete cond.days;
+                }
+                pushCond();
+            });
+            function pushCond() {
+                var rule = null;
+                deckTierRules.forEach(function (r) { if (r.tier === tierName) rule = r; });
+                if (rule) { rule.conditions[cidx] = cond; deckSaveTierRules(); }
+            }
+
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'arcade-btn arcade-btn--sm';
+            remove.textContent = '×';
+            remove.title = 'Remove this condition';
+            remove.setAttribute('aria-label', 'Remove this condition');
+            remove.addEventListener('click', function () {
+                var rule = null;
+                deckTierRules.forEach(function (r) { if (r.tier === tierName) rule = r; });
+                if (rule) {
+                    rule.conditions.splice(cidx, 1);
+                    if (!rule.conditions.length) deckTierRules = deckTierRules.filter(function (r) { return r !== rule; });
+                    deckSaveTierRules();
+                }
+                onChanged();
+            });
+            row.appendChild(remove);
+            return row;
+        }
+
+        renderTiers();
+
+        var addTierBtn = document.createElement('button');
+        addTierBtn.type = 'button';
+        addTierBtn.className = 'arcade-btn arcade-btn--sm';
+        addTierBtn.textContent = '+ Add tier';
+        addTierBtn.addEventListener('click', function () {
+            var n = deckTiers.length + 1;
+            var name = 'TIER ' + n;
+            while (deckTiers.indexOf(name) !== -1) { n++; name = 'TIER ' + n; }
+            deckTiers.push(name);
+            deckSaveTiers();
+            renderTiers();
+        });
+        body.appendChild(addTierBtn);
+
+        var hint = document.createElement('div');
+        hint.className = 'arcade-evt-cond__hint';
+        hint.textContent = 'First-time conditions need the stock first-timers setting on (the Alerts surface says the same). The Alerts surface’s priority-condition box wires these through real Event Flow triggers; this table is the policy home.';
+        body.appendChild(hint);
+    }
+
+    // Data import/export — Botrix (the EXISTING GUI path's plumbing: the
+    // same exportPointsData/importPointsData commands the stock popup
+    // buttons ride, ALWAYS Merge, berthed not rebuilt) + the NEW
+    // StreamElements loyalty lane (same shape as Botrix; SE values land in
+    // separate se* fields, never overwriting SSN points).
+    //
+    // SE export format — VERIFIED LIVE against SE's API 0018.06.04 (there
+    // is NO one-click dashboard export; the public loyalty endpoints ARE
+    // the export, the same ones community exporters use):
+    //   GET https://api.streamelements.com/kappa/v2/channels/<name>   → _id
+    //   GET …/kappa/v2/points/<_id>/top?limit=100&offset=0
+    //     → {"_total":N,"users":[{"username":"…","points":N}, …]}
+    //   GET …/points/<_id>/alltime?…   → same users[].points shape
+    //   GET …/points/<_id>/watchtime?… → users[].minutes (may be null)
+    // The lane accepts any of those JSON payloads (or a raw users array,
+    // or several merged into one file) and spec's exactly that for the
+    // operator in the UI copy.
+    // The points data plumbing is the background page's pointsSystem — the
+    // SAME object the stock popup's export/import/reset command handlers
+    // call (background.js:6005-6060). The shell reaches it directly through
+    // frame2 (the analytics-bridge pattern) instead of relaying a command:
+    // the relay's response to these cmds from the index context is not the
+    // handler's sendResponse (measured: the settings doc comes back), so
+    // direct calls are how the result lines stay HONEST. Zero new plumbing,
+    // zero IPC — the sendSync trap class doesn't apply here at all.
+    function deckPointsSystem() {
+        try {
+            var frame2 = document.getElementById('frame2');
+            var bg = frame2 && frame2.contentWindow;
+            if (bg && bg.pointsSystem) {
+                return Promise.resolve(typeof bg.pointsSystemReady === 'function' ? bg.pointsSystemReady() : null).then(function () {
+                    return bg.pointsSystem;
+                });
+            }
+        } catch (e) { console.error('[arcade-shell] points system reach failed:', e); }
+        return Promise.resolve(null);
+    }
+
+    function renderDeckPointsData(stage) {
+        var body = deckPointsCard(stage, 'Data — backup, Botrix, StreamElements');
+
+        var resultLine = document.createElement('div');
+        resultLine.className = 'arcade-evt-cond__hint';
+        resultLine.setAttribute('role', 'status');
+        resultLine.setAttribute('aria-live', 'polite');
+
+        // Export — the same exportAllPoints() the stock Export Points
+        // button's handler calls, blob-downloaded shell-side (the S30
+        // Blob + anchor idiom).
+        var exportRow = document.createElement('div');
+        exportRow.className = 'arcade-evt-doors';
+        var exportBtn = document.createElement('button');
+        exportBtn.type = 'button';
+        exportBtn.className = 'arcade-btn arcade-btn--sm';
+        exportBtn.textContent = 'Export points backup';
+        exportBtn.addEventListener('click', function () {
+            exportBtn.disabled = true;
+            deckPointsSystem().then(function (sys) {
+                exportBtn.disabled = false;
+                if (!sys) { resultLine.textContent = 'The points system is not reachable yet — try again in a moment.'; return; }
+                return sys.exportAllPoints().then(function (jsonData) {
+                    try {
+                        var blob = new Blob([jsonData], { type: 'application/json' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'points-backup-' + new Date().toISOString().split('T')[0] + '.json';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        var parsed = JSON.parse(jsonData);
+                        resultLine.textContent = 'Exported ' + (parsed.userCount || 0) + ' users.';
+                    } catch (e) {
+                        console.error('[arcade-shell] points export failed:', e);
+                        resultLine.textContent = 'Export failed — ' + e.message + '.';
+                    }
+                });
+            });
+        });
+        exportRow.appendChild(exportBtn);
+        body.appendChild(exportRow);
+
+        // Import — the same importPoints(json, 'merge') the stock Import
+        // Points button's handler calls. Converted Botrix exports arrive in
+        // this same SSN-backup shape (the Botrix converter's output), so
+        // both ride this one door; the merge ALWAYS keeps higher points and
+        // preserves reference fields (botrix*/se*), never mixing them into
+        // SSN points. Counts come off the real result object.
+        var importTitle = document.createElement('div');
+        importTitle.className = 'arcade-evt-cond__title';
+        importTitle.textContent = 'Import — SSN backup or converted Botrix export (always merges)';
+        body.appendChild(importTitle);
+        var importFile = document.createElement('input');
+        importFile.type = 'file';
+        importFile.accept = '.json';
+        importFile.id = 'arcade-deck-points-import-file';
+        importFile.setAttribute('aria-label', 'Choose a points backup or converted Botrix export (.json)');
+        body.appendChild(importFile);
+        var importBtn = document.createElement('button');
+        importBtn.type = 'button';
+        importBtn.className = 'arcade-btn arcade-btn--sm';
+        importBtn.textContent = 'Import points';
+        importBtn.addEventListener('click', function () {
+            var file = importFile.files && importFile.files[0];
+            if (!file) { resultLine.textContent = 'Choose a .json file first.'; return; }
+            var reader = new FileReader();
+            reader.onload = function () {
+                deckPointsSystem().then(function (sys) {
+                    if (!sys) { resultLine.textContent = 'The points system is not reachable yet — try again in a moment.'; return; }
+                    return sys.importPoints(String(reader.result || ''), 'merge').then(function (result) {
+                        if (result && result.success !== false) {
+                            resultLine.textContent = 'Imported: ' + (result.imported || 0) + ', Skipped: ' + (result.skipped || 0) +
+                                ' (a skip still merges reference fields — that’s expected).';
+                        } else {
+                            resultLine.textContent = 'Import failed — ' + ((result && (result.error || result.message)) || 'unknown error') + '.';
+                        }
+                    });
+                });
+            };
+            reader.onerror = function () { resultLine.textContent = 'Could not read that file.'; };
+            reader.readAsText(file);
+        });
+        body.appendChild(importBtn);
+
+        // StreamElements lane.
+        var seTitle = document.createElement('div');
+        seTitle.className = 'arcade-evt-cond__title';
+        seTitle.textContent = 'Import — StreamElements loyalty (always merges, lands in se* fields)';
+        body.appendChild(seTitle);
+        var seSpec = document.createElement('div');
+        seSpec.className = 'arcade-evt-cond__hint';
+        seSpec.textContent = 'SE has no one-click export — save the JSON from the public loyalty endpoints instead: resolve your channel id at api.streamelements.com/kappa/v2/channels/<channel>, then download …/kappa/v2/points/<id>/top (and /alltime, /watchtime) with ?limit=100&offset=0 pages. Feed any of those JSON files here — usernames with points and/or minutes are picked up. SE values land in separate se* fields and NEVER overwrite SSN points.';
+        body.appendChild(seSpec);
+        var seRow = document.createElement('div');
+        seRow.className = 'arcade-alert-row';
+        var sePlatLabel = document.createElement('label');
+        sePlatLabel.textContent = 'Platform the export belongs to';
+        sePlatLabel.setAttribute('for', 'arcade-deck-se-platform');
+        seRow.appendChild(sePlatLabel);
+        var sePlat = document.createElement('select');
+        sePlat.id = 'arcade-deck-se-platform';
+        ['twitch', 'kick', 'youtube'].forEach(function (p) {
+            var opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            sePlat.appendChild(opt);
+        });
+        seRow.appendChild(sePlat);
+        body.appendChild(seRow);
+        var seFile = document.createElement('input');
+        seFile.type = 'file';
+        seFile.accept = '.json';
+        seFile.id = 'arcade-deck-se-import-file';
+        seFile.setAttribute('aria-label', 'Choose a StreamElements loyalty export (.json)');
+        body.appendChild(seFile);
+        var seBtn = document.createElement('button');
+        seBtn.type = 'button';
+        seBtn.className = 'arcade-btn arcade-btn--sm';
+        seBtn.textContent = 'Import StreamElements';
+        seBtn.addEventListener('click', function () {
+            var file = seFile.files && seFile.files[0];
+            if (!file) { resultLine.textContent = 'Choose a StreamElements .json file first.'; return; }
+            var reader = new FileReader();
+            reader.onload = function () {
+                var converted = null;
+                try {
+                    converted = deckConvertSeExport(JSON.parse(String(reader.result || '')), sePlat.value);
+                } catch (e) { converted = null; }
+                if (!converted || !converted.users.length) {
+                    resultLine.textContent = 'That file doesn’t look like an SE loyalty export — expected a users array with username + points/minutes.';
+                    return;
+                }
+                deckPointsSystem().then(function (sys) {
+                    if (!sys) { resultLine.textContent = 'The points system is not reachable yet — try again in a moment.'; return; }
+                    return sys.importPoints(JSON.stringify(converted), 'merge').then(function (result) {
+                        if (result && result.success !== false) {
+                            resultLine.textContent = 'StreamElements: ' + converted.users.length + ' viewers read — imported: ' +
+                                (result.imported || 0) + ', skipped: ' + (result.skipped || 0) + ' (se* fields only; SSN points untouched).';
+                        } else {
+                            resultLine.textContent = 'StreamElements import failed — ' + ((result && (result.error || result.message)) || 'unknown error') + '.';
+                        }
+                    });
+                });
+            };
+            reader.onerror = function () { resultLine.textContent = 'Could not read that file.'; };
+            reader.readAsText(file);
+        });
+        body.appendChild(seBtn);
+
+        // Reset — the same resetAllPoints() the stock button's handler
+        // calls, two-click confirm (the S47 idiom; no window.confirm here).
+        var resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--danger';
+        resetBtn.textContent = 'Reset all points';
+        resetBtn.addEventListener('click', function () {
+            if (resetBtn.dataset.confirm !== '1') {
+                resetBtn.dataset.confirm = '1';
+                resetBtn.textContent = 'Reset ALL points — sure?';
+                return;
+            }
+            resetBtn.dataset.confirm = '';
+            resetBtn.textContent = 'Reset all points';
+            deckPointsSystem().then(function (sys) {
+                if (!sys) { resultLine.textContent = 'The points system is not reachable yet — try again in a moment.'; return; }
+                return sys.resetAllPoints().then(function () {
+                    resultLine.textContent = 'All user points have been reset.';
+                });
+            });
+        });
+        body.appendChild(resetBtn);
+
+        body.appendChild(resultLine);
+    }
+
+    // SE export → SSN backup shape. The merge in points.js treats se*
+    // fields as reference-only snapshots (latest export wins), so the
+    // converted records carry points:0 — SSN points are never overwritten.
+    // userKey matches PointsSystem.getUserKey: `${username}:${type}`.
+    function deckConvertSeExport(data, platform) {
+        var arr = Array.isArray(data) ? data : (data && Array.isArray(data.users) ? data.users : null);
+        if (!arr) return null;
+        var users = [];
+        arr.forEach(function (u) {
+            if (!u || !u.username) return;
+            var username = String(u.username);
+            var rec = {
+                username: username,
+                userKey: username + ':' + platform,
+                type: platform,
+                points: 0,
+                pointsSpent: 0
+            };
+            if (u.points !== undefined && u.points !== null && isFinite(Number(u.points))) rec.sePoints = Number(u.points);
+            if (u.pointsAlltime !== undefined && u.pointsAlltime !== null && isFinite(Number(u.pointsAlltime))) rec.sePointsAlltime = Number(u.pointsAlltime);
+            var minutes = (u.minutes !== undefined && u.minutes !== null) ? u.minutes : u.watchtimeMinutes;
+            if (minutes !== undefined && minutes !== null && isFinite(Number(minutes))) rec.seWatchtimeMinutes = Number(minutes);
+            users.push(rec);
+        });
+        return {
+            version: 1,
+            exported: Date.now(),
+            exportedDate: new Date().toISOString(),
+            userCount: users.length,
+            users: users
+        };
+    }
+
+    function renderDeckPointsLeaderboard(stage) {
+        var body = deckPointsCard(stage, 'Leaderboard & analytics');
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'The community sees their climb on the leaderboard overlay; you see the shape of it on Main’s analytics rail (top earners today).';
+        body.appendChild(line);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm';
+        copyBtn.textContent = 'Copy leaderboard URL';
+        copyBtn.addEventListener('click', function () {
+            var resolver = window.resolveSocialStreamPage;
+            if (typeof resolver !== 'function') { flashButton(copyBtn, 'Unavailable', 2200); return; }
+            var params = [];
+            if (deckSessionId) params.push('session=' + encodeURIComponent(deckSessionId));
+            resolver('leaderboard.html', { extraParams: params }).then(function (resolved) {
+                if (!resolved || !resolved.url) throw new Error('no url');
+                return copyToClipboard(resolved.url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
+            }).catch(function () { flashButton(copyBtn, 'Copy failed', 2200); });
+        });
+        doors.appendChild(copyBtn);
+        var mainBtn = document.createElement('button');
+        mainBtn.type = 'button';
+        mainBtn.className = 'arcade-btn arcade-btn--sm';
+        mainBtn.textContent = 'Engagement analytics → Main';
+        mainBtn.addEventListener('click', function () { navigateArcadeTab('main'); });
+        doors.appendChild(mainBtn);
+        var gamesBtn = document.createElement('button');
+        gamesBtn.type = 'button';
+        gamesBtn.className = 'arcade-btn arcade-btn--sm';
+        gamesBtn.textContent = 'Games hub';
+        gamesBtn.title = 'The Games hub “Points & unlocks” row cross-links right back here — same destination, no duplicate config';
+        gamesBtn.addEventListener('click', function () { navigateArcadeTab('games'); });
+        doors.appendChild(gamesBtn);
+        body.appendChild(doors);
+    }
+
+    // --------------------------------------------------------------------
     // Boot
     // --------------------------------------------------------------------
     function init() {
@@ -10846,6 +12544,7 @@
         buildGoalsPanel();    // S49 — goal bars; contents lazy (ensureGoalsPanelLive on first visit)
         buildFramesPanel();   // S50 — Frames & Cameras; contents lazy (ensureFramesPanelLive on first visit)
         buildTipjarPanel();   // S50 — the Tip Jar interior (payment rails); contents lazy (ensureTipjarPanelLive on first visit)
+        buildDeckSettingsPanel(); // S51 — Deck Settings; contents lazy (ensureDeckSettingsLive on first visit)
         if (CUSTOM_TABS.ai) buildAiPanel();
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer

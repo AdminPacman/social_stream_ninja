@@ -474,6 +474,24 @@ class PointsSystem {
                         }
                     }
 
+                    // StreamElements loyalty reference fields (S51 SE import lane —
+                    // same reference-only doctrine: NEVER mixed into SSN's own
+                    // `points`). Semantics differ from botrix on purpose: an SE
+                    // export is a REPEATABLE snapshot (the operator re-exports any
+                    // time), so the LATEST export's value wins; Botrix's was a
+                    // one-time historical rescue (fill-if-absent above).
+                    const seRefFields = ['sePoints', 'sePointsAlltime', 'seWatchtimeMinutes'];
+                    const mergedSeFields = {};
+                    let seFieldsWillChange = false;
+                    for (const field of seRefFields) {
+                        if (user[field] !== undefined) {
+                            mergedSeFields[field] = user[field];
+                            if (existing[field] !== user[field]) seFieldsWillChange = true;
+                        } else if (existing[field] !== undefined) {
+                            mergedSeFields[field] = existing[field];
+                        }
+                    }
+
                     let recordToSave;
 
                     if (user.points > existing.points) {
@@ -487,13 +505,14 @@ class PointsSystem {
                     } else {
                         skipped++;
                         // Existing points win, but still persist the merged watchtime/
-                        // botrix enrichment if it actually changes anything.
-                        recordToSave = (watchtimeWillChange || botrixFieldsWillChange) ? existing : null;
+                        // botrix/se enrichment if it actually changes anything.
+                        recordToSave = (watchtimeWillChange || botrixFieldsWillChange || seFieldsWillChange) ? existing : null;
                     }
 
                     if (recordToSave) {
                         recordToSave.watchtimeMinutes = mergedWatchtimeMinutes;
                         Object.assign(recordToSave, mergedBotrixFields);
+                        Object.assign(recordToSave, mergedSeFields);
                         await this.saveUserPoints(recordToSave);
                     }
                 }
