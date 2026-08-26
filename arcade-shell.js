@@ -205,6 +205,11 @@
 
     var ADDON_DOORS = [
         {
+            id: 'commands', name: 'Commands', addonType: 'chat', tab: 'commands',
+            cta: 'Open Commands',
+            blurb: 'Chat commands and timers — !command replies, repeating shoutouts, all backed by real event flows.'
+        },
+        {
             id: 'frames', name: 'Frames & Cameras', addonType: 'frames', tab: 'vdo',
             cta: 'Open Frames & Cameras',
             blurb: 'Remote cameras and guests — VDO room links bring phones and remote guests onto the stream.'
@@ -223,13 +228,18 @@
             id: 'flows', name: 'Event Flows', addonType: 'flows', tab: 'eventflow',
             cta: 'Open Flows',
             blurb: 'Triggers and actions — automate what happens on stream when chat events land.'
+        },
+        {
+            id: 'goals', name: 'Goal Bars', addonType: 'widgets', tab: 'goals',
+            cta: 'Open Goal Bars',
+            blurb: 'Progress bars for followers, viewers, subs, sats — real counts only, dashes when unknown. Preset sets for platform programs.'
         }
     ];
 
     // Door tabs keep no nav berth of their own — while one is open, the
     // Add-ons nav button carries the is-on mark (the door lives INSIDE the
     // add-ons world). Also whitelists door tabs for boot-restore.
-    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons' };
+    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons', commands: 'addons', goals: 'addons' };
 
     // --------------------------------------------------------------------
     // Analytics IPC bridge state (pacsarcade design-briefs/ssn-ui-overhaul/
@@ -520,21 +530,25 @@
         sheet.setAttribute('role', 'menu');
         sheet.setAttribute('aria-label', 'Arcade screens');
 
-        function addRow(label, onActivate, tabBtnId) {
+        function addRow(label, onActivate, tabBtnId, destTab, destPage) {
             var row = document.createElement('button');
             row.type = 'button';
             row.setAttribute('role', 'menuitem');
             if (tabBtnId) row.dataset.arcadeTabBtn = tabBtnId; // is-on rides setArcadeTab's existing [data-arcade-tab-btn] sweep
             row.textContent = label;
             row.addEventListener('click', function () {
-                closeSheet(true);
+                // H17-B — a pick closes WITHOUT returning focus to the burger;
+                // focus lands in the destination panel instead. Only close-
+                // without-pick (Escape/click-outside) returns to the trigger.
+                closeSheet(false);
                 onActivate();
+                focusArcadeDestination(destTab, destPage);
             });
             sheet.appendChild(row);
         }
 
         TABS.forEach(function (tab) {
-            addRow(tab.label, function () { navigateArcadeTab(tab.id); }, tab.id);
+            addRow(tab.label, function () { navigateArcadeTab(tab.id); }, tab.id, tab.id, null);
         });
 
         // The More▾ set folds in with the tabs — same stock trio + the S46
@@ -548,7 +562,7 @@
             addRow(item.label, function () {
                 setArcadeTab(null); // no nav berth is "on" for a More destination
                 clickStockNav(item.page);
-            });
+            }, null, null, item.page);
         });
         var sep2 = document.createElement('div');
         sep2.className = 'arcade-more-sep';
@@ -559,7 +573,7 @@
         note.textContent = 'Moved to Add-ons';
         sheet.appendChild(note);
         MORE_LEGACY_ITEMS.forEach(function (item) {
-            addRow(item.label, function () { navigateArcadeTab(item.tab); });
+            addRow(item.label, function () { navigateArcadeTab(item.tab); }, null, item.tab, null);
         });
 
         function isOpen() { return sheet.classList.contains('is-open'); }
@@ -1186,7 +1200,8 @@
     // unknown to both maps => navigateArcadeTab('ai') is a silent no-op,
     // same as any other unrecognized tab id.
     // S48: 'games' joins the custom set — the hub is its own in-shell panel.
-    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true };
+    // S49: 'commands' (chat commands + timers) and 'goals' (goal bars) too.
+    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -1222,6 +1237,8 @@
             if (tabId === 'style') ensureStylePanelLive(); // lazy: load saved blob + first preview on first visit
             if (tabId === 'alerts') ensureAlertsPanelLive(); // lazy: load saved param25 settings + first preview on first visit
             if (tabId === 'games') ensureGamesPanelLive(); // lazy (S48): load shelf/style/unlocks settings + first preview on first visit
+            if (tabId === 'commands') ensureCommandsPanelLive(); // lazy (S49): load surface flows on first visit
+            if (tabId === 'goals') ensureGoalsPanelLive(); // lazy (S49): load goals + first demo preview on first visit
             if (tabId === 'ai') runAiAreaGate(); // NOT lazy-once — a fresh challenge every open, no stored grants (design doc, 0018.06.01)
             return;
         }
@@ -1233,6 +1250,57 @@
         setArcadeTab(tabId);
     }
     window.arcadeNavigateTab = navigateArcadeTab; // exposed for debugging/CDP verification
+
+    // --------------------------------------------------------------------
+    // H17-B (TASK-46/S49 ruled rider) — after a hamburger-sheet pick,
+    // keyboard focus lands IN the destination panel (its first focusable
+    // control; the panel itself as the heading fallback), never back on the
+    // burger. Close-WITHOUT-pick (Escape, click-outside, re-clicking the
+    // trigger) still returns focus to the trigger. The Add-ons types drawer
+    // follows the same rule after a type pick (focus lands in the filtered
+    // card grid, not back on TYPE ▾).
+    // --------------------------------------------------------------------
+    var CUSTOM_TAB_PANEL = {
+        addons: '.arcade-addons', style: '.arcade-style', alerts: '.arcade-alerts',
+        games: '.arcade-games', commands: '.arcade-commands', goals: '.arcade-goals', ai: '.arcade-ai'
+    };
+
+    function focusFirstInteractiveIn(root, fallbackEl) {
+        if (!root) return false;
+        var candidates = root.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        for (var i = 0; i < candidates.length; i++) {
+            // offsetParent null = display:none/hidden ancestor (e.g. a filtered-out card) — skip
+            if (candidates[i].offsetParent === null) continue;
+            candidates[i].focus();
+            return true;
+        }
+        if (fallbackEl) {
+            if (!fallbackEl.hasAttribute('tabindex')) fallbackEl.setAttribute('tabindex', '-1');
+            fallbackEl.focus({ preventScroll: true });
+            return true;
+        }
+        return false;
+    }
+
+    function focusArcadeDestination(tabId, pageId) {
+        // One frame out, so the tab flip's CSS visibility applies before we
+        // measure what's focusable.
+        requestAnimationFrame(function () {
+            if (tabId && CUSTOM_TAB_PANEL[tabId]) {
+                var panel = document.querySelector(CUSTOM_TAB_PANEL[tabId]);
+                focusFirstInteractiveIn(panel, panel);
+                return;
+            }
+            // Stock destinations: the chat dock for Main, frame2 for the
+            // dashboard/event-flow views (index.html:11622), frame1 else.
+            var frame = null;
+            if (tabId === 'main' || pageId === 'chat') frame = document.getElementById('chat-dock-frame');
+            else if (pageId === 'dashboard' || pageId === 'event-flow-editor') frame = document.getElementById('frame2');
+            else frame = document.getElementById('frame1');
+            if (frame) frame.focus();
+        });
+    }
+
     // Per-message BFT stamp follow-up (0018.08.23): index.html calls this once
     // the #chat-dock-frame iframe finishes (re)loading, so a fresh/reloaded
     // dock gets the shell's ALREADY-KNOWN real height immediately instead of
@@ -1409,8 +1477,16 @@
             rowCount.textContent = String(addonTypeCount(t.id));
             row.appendChild(rowCount);
             row.addEventListener('click', function () {
-                closeTypesPop(true);
+                // H17-B — after a type pick, focus lands IN the filtered card
+                // grid (first visible card control; the stage as fallback),
+                // not back on the TYPE ▾ trigger. Close-without-pick still
+                // returns to the trigger.
+                closeTypesPop(false);
                 applyAddonsFilter(t.id);
+                focusFirstInteractiveIn(
+                    panel.querySelector('#arcade-addons-grid'),
+                    panel.querySelector('.arcade-addons-stage')
+                );
             });
             typesPop.appendChild(row);
         });
@@ -4328,7 +4404,8 @@
             '<div class="arcade-alerts-body">' +
             '<div class="arcade-evt-list-col">' +
             '<div class="arcade-evt-list" id="arcade-games-list" role="listbox" aria-label="Active games"></div>' +
-            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-games-add">+ Add game</button>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-games-add" ' +
+            'aria-haspopup="dialog" aria-expanded="false" aria-controls="arcade-game-picker">+ Add game</button>' +
             '</div>' +
             '<div class="arcade-alerts-stage">' +
             '<div class="arcade-alerts-preview">' +
@@ -4350,6 +4427,28 @@
             initGamesPreviewFrame();
         });
         panel.querySelector('#arcade-games-add').addEventListener('click', openGamePicker);
+
+        // H18-A (TASK-46/S49 ruled rider) — the shelf's role="listbox" is a
+        // promise: ArrowUp/ArrowDown/Home/End move the selection (aria-
+        // selected follows) instead of the role sitting half-kept. Rows are
+        // real buttons, so Tab already reaches them; arrows are the listbox
+        // contract on top. Selection re-renders the rows, so focus is re-
+        // landed on the fresh element for the same key afterwards.
+        var shelfList = panel.querySelector('#arcade-games-list');
+        shelfList.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) === -1) return;
+            var rows = Array.prototype.slice.call(shelfList.querySelectorAll('[data-arcade-game-key]'));
+            if (!rows.length) return;
+            e.preventDefault();
+            var idx = rows.findIndex(function (r) { return r.dataset.arcadeGameKey === gamesSelectedKey; });
+            if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = rows.length - 1;
+            else idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+            var key = rows[idx].dataset.arcadeGameKey;
+            selectGamesKey(key);
+            var fresh = shelfList.querySelector('[data-arcade-game-key="' + key + '"]');
+            if (fresh) fresh.focus();
+        });
     }
 
     // Lazy boot on first Games-tab visit — the S47 idiom: ONE getSettings
@@ -4870,9 +4969,19 @@
     // mode) off the same throwaway preview room — never a live session.
     // Frames load lazily as they scroll into view (seventeen live canvases
     // at once would jank the shell for no reason).
+    //
+    // H18-A (TASK-46/S49 ruled rider) — the cabinet gets the full house
+    // disclosure contract: focus moves INTO the dialog on open, Escape
+    // closes, focus returns to the "+ Add game" trigger on close-without-
+    // pick, the trigger carries aria-haspopup/aria-expanded/aria-controls,
+    // and click-outside still closes (that part S48 already had). A pick
+    // (Add to shelf) lands focus on the new shelf row — the destination.
     // --------------------------------------------------------------------
+    var gamePickerKeydown = null; // document Escape listener while the cabinet is open
+
     function openGamePicker() {
-        closeGamePicker();
+        closeGamePicker(false);
+        var trigger = document.getElementById('arcade-games-add');
         var back = document.createElement('div');
         back.className = 'arcade-evt-modal-back';
         back.id = 'arcade-game-picker';
@@ -4882,6 +4991,7 @@
         modal.setAttribute('aria-label', 'Add a game — the demo cabinet');
         var title = document.createElement('h3');
         title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1; // heading fallback for focus-into-dialog
         title.textContent = 'Add a game — the demo cabinet';
         modal.appendChild(title);
         var blurb = document.createElement('p');
@@ -4923,7 +5033,7 @@
             add.addEventListener('click', function () {
                 gamesShelf.push(game.id);
                 saveGameShelf();
-                closeGamePicker();
+                closeGamePicker(false); // a pick — focus goes to the destination, not the trigger
                 setGamesStatus('"' + game.name + '" landed on the shelf');
                 selectGamesKey(game.id);
                 if (gamesSelectedKey !== game.id) { // first selection — selectGamesKey no-ops when equal
@@ -4931,13 +5041,27 @@
                     renderGamesConfig();
                     initGamesPreviewFrame();
                 }
+                // H17-B analog — after the pick, focus lands on the new row.
+                var rowEl = document.querySelector('#arcade-games-list [data-arcade-game-key="' + game.id + '"]');
+                if (rowEl) rowEl.focus();
             });
             card.appendChild(add);
             grid.appendChild(card);
         });
         back.appendChild(modal);
-        back.addEventListener('click', function (e) { if (e.target === back) closeGamePicker(); });
+        back.addEventListener('click', function (e) { if (e.target === back) closeGamePicker(true); });
         document.body.appendChild(back);
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        gamePickerKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-game-picker')) {
+                e.stopPropagation();
+                closeGamePicker(true);
+            }
+        };
+        document.addEventListener('keydown', gamePickerKeydown);
+        // Focus lands IN the dialog on open — first card action, else the title.
+        var firstAction = modal.querySelector('.arcade-game-cab .arcade-btn');
+        (firstAction || title).focus();
 
         // Lazy demo loading: resolve each card's demo URL up front (cheap —
         // it's just URL composition), but only hand a frame its src once the
@@ -4981,9 +5105,18 @@
         entry.frame.src = entry.url;
     }
 
-    function closeGamePicker() {
+    function closeGamePicker(returnFocus) {
         var back = document.getElementById('arcade-game-picker');
         if (back) back.remove(); // the demo iframes die with the modal
+        if (gamePickerKeydown) {
+            document.removeEventListener('keydown', gamePickerKeydown);
+            gamePickerKeydown = null;
+        }
+        var trigger = document.getElementById('arcade-games-add');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            if (returnFocus) trigger.focus(); // close-without-pick returns to the trigger
+        }
     }
 
     // --------------------------------------------------------------------
@@ -5221,6 +5354,1301 @@
             });
         }).catch(function (e) {
             console.error('[arcade-shell] points pulse read failed:', e);
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // S49 — COMMANDS + TIMERS (TASK-46, ruled 0018.06.03 a₿; Lane 1 — the
+    // !golive pattern, generalized). A gallery door card ("Commands", Chat &
+    // Text) opens this custom tab: LEFT = the streamer's commands and timers
+    // as a left-list (the .arcade-evt-* idiom), RIGHT = the selected row's
+    // config. A command = name + (canned response | full event flow) +
+    // cooldown + role gate; a timer = every N minutes, post a message.
+    //
+    // NO PARALLEL BOT ENGINE: every row is backed by a REAL EventFlow flow,
+    // seeded/edited through the background page's own eventFlowSystem (the
+    // S47 withAlertFlowSystem bridge — generic, it is just frame2's engine).
+    // The machinery each field rides is stock, measured in
+    // actions/EventFlowSystem.js:
+    //   - command match   messageEquals trigger (exact, like !golive) — :2124
+    //   - role gate       userRole trigger (message[role], e.g. mod) — :2200
+    //   - cooldown        randomChance trigger with probability 1 + cooldownMs
+    //                     — the engine's ONLY cooldown mechanism (:2782-2839,
+    //                     editor-exposed as "Minimum time between triggers");
+    //                     probability 1 makes it a deterministic gate. In the
+    //                     editor the node honestly reads "100% chance (Ns
+    //                     cooldown)".
+    //   - canned response sendMessage action, destination 'reply' (back to the
+    //                     source tab, the stock auto-responder's semantic) —
+    //                     :3429; sanitizeMode 'safe'; reflection-flagged so
+    //                     the reply can't re-trigger flows.
+    //   - timer           timeInterval trigger (seconds) — :2437. The engine's
+    //                     1s scheduler runs in stock (background.js:18727),
+    //                     ticking active time-based flows with a null message;
+    //                     sendMessage destination 'all' needs no message
+    //                     context (:3480). THE TIMER GAP THE BRIEF ASKED ABOUT
+    //                     DOES NOT EXIST — the trigger ships and is live.
+    // Surface-owned flows carry id prefixes s49-cmd-/s49-tmr- and are
+    // regenerated wholesale on each edit (the surface OWNS their shape);
+    // a flow the operator restructured in the editor fails the shape check
+    // and the surface says so honestly instead of stomping it. !golive /
+    // !golive off appear as IMPORTED rows (detected by their messageEquals
+    // text) — read-only doors to their flows, never edited here.
+    //
+    // No settings keys minted for commands — the flow engine's IndexedDB IS
+    // the store (duplicating it into savedSync would be the parallel-engine
+    // smell the brief bans). Flow IDs are minted shell-side with entropy
+    // (mintAlertId — the S47 idiom) so the saveFlow Date.now() fallback
+    // collision can't bite.
+    // --------------------------------------------------------------------
+    var cmdRows = [];            // session cache: [{kind:'command'|'timer'|'imported', flowId, label, form, active, restructured}]
+    var cmdSelectedId = null;    // flowId of the selected row (session-only)
+    var commandsPanelLive = false;
+    var cmdSaveTimer = null;
+
+    function buildCommandsPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-commands';
+        panel.setAttribute('aria-label', 'Commands and timers');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">COMMANDS</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-cmd-status"></span>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-cmd-list" role="listbox" aria-label="Commands and timers"></div>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-cmd-add" ' +
+            'aria-haspopup="dialog" aria-expanded="false" aria-controls="arcade-cmd-add-modal">+ New command</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-evt-config arcade-evt-config--fill" id="arcade-cmd-config"></div>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(panel);
+
+        panel.querySelector('#arcade-cmd-add').addEventListener('click', openCmdPicker);
+
+        // Same H18-A listbox contract as the games shelf (S49 rider): arrows
+        // move the selection, aria-selected follows.
+        var list = panel.querySelector('#arcade-cmd-list');
+        list.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) === -1) return;
+            var rows = Array.prototype.slice.call(list.querySelectorAll('[data-arcade-cmd-id]'));
+            if (!rows.length) return;
+            e.preventDefault();
+            var idx = rows.findIndex(function (r) { return r.dataset.arcadeCmdId === cmdSelectedId; });
+            if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = rows.length - 1;
+            else idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+            var id = rows[idx].dataset.arcadeCmdId;
+            selectCmdRow(id);
+            var fresh = list.querySelector('[data-arcade-cmd-id="' + id + '"]');
+            if (fresh) fresh.focus();
+        });
+    }
+
+    function setCmdStatus(text, isError) {
+        var el = document.getElementById('arcade-cmd-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    // Lazy boot on first visit; re-entry re-reads (S47B doctrine — the editor
+    // may have changed flows since the last visit). Boot-restore races:
+    // frame2's eventFlowSystem only exists once its initPromise resolves, so
+    // an early "unavailable" answer retries briefly before the honest line.
+    var cmdLoadRetryTimer = null;
+    var cmdLoadRetries = 0;
+
+    function ensureCommandsPanelLive() {
+        loadCmdRows().then(function (ok) {
+            if (ok === false) { // engine not up yet — boot race, not a failure
+                if (cmdLoadRetries < 20 && !cmdLoadRetryTimer) {
+                    cmdLoadRetries++;
+                    cmdLoadRetryTimer = setTimeout(function () {
+                        cmdLoadRetryTimer = null;
+                        ensureCommandsPanelLive();
+                    }, 1000);
+                }
+                return;
+            }
+            cmdLoadRetries = 0;
+            commandsPanelLive = true;
+            if (!cmdSelectedId || !cmdRows.some(function (r) { return r.flowId === cmdSelectedId; })) {
+                cmdSelectedId = cmdRows.length ? cmdRows[0].flowId : null;
+            }
+            renderCmdList();
+            renderCmdConfig();
+        });
+    }
+
+    function loadCmdRows() {
+        return withAlertFlowSystem(function (fsys) {
+            var rows = [];
+            (fsys.flows || []).forEach(function (flow) {
+                if (!flow || typeof flow.id !== 'string') return;
+                if (flow.id.indexOf('s49-cmd-') === 0) {
+                    var parsed = parseCmdFlowShape(flow, 'command');
+                    rows.push({ kind: 'command', flowId: flow.id, flow: flow, label: parsed.ok ? parsed.form.name : flow.name, form: parsed.ok ? parsed.form : null, restructured: !parsed.ok, active: flow.active !== false });
+                } else if (flow.id.indexOf('s49-tmr-') === 0) {
+                    var parsedT = parseCmdFlowShape(flow, 'timer');
+                    rows.push({ kind: 'timer', flowId: flow.id, flow: flow, label: parsedT.ok ? timerRowLabel(parsedT.form) : flow.name, form: parsedT.ok ? parsedT.form : null, restructured: !parsedT.ok, active: flow.active !== false });
+                } else {
+                    // The S41 house flows (!golive / !golive off) — imported
+                    // by the operator, detected by their exact-match trigger.
+                    var trig = (flow.nodes || []).find(function (n) { return n && n.type === 'trigger' && n.triggerType === 'messageEquals'; });
+                    var text = trig && trig.config && typeof trig.config.text === 'string' ? trig.config.text.trim() : '';
+                    if (text === '!golive' || text === '!golive off') {
+                        rows.push({ kind: 'imported', flowId: flow.id, flow: flow, label: flow.name || text, active: flow.active !== false });
+                    }
+                }
+            });
+            cmdRows = rows;
+            return true;
+        }).catch(function (e) {
+            if (cmdLoadRetries < 20) return false; // boot race — the caller retries quietly
+            console.error('[arcade-shell] commands load failed:', e);
+            cmdRows = [];
+            setCmdStatus('flow system unavailable — commands cannot load', true);
+            return true; // final answer — stop retrying, show the honest state
+        });
+    }
+
+    function timerRowLabel(form) {
+        var msg = form.message.length > 28 ? form.message.slice(0, 28) + '…' : form.message;
+        return 'every ' + form.intervalMin + 'm — ' + (msg || '(empty message)');
+    }
+
+    // The surface-owned shape: trigger_1 (messageEquals|timeInterval) +
+    // optional trigger_2 (userRole) + optional trigger_3 (randomChance
+    // cooldown) + optional logic_1 (AND) + action_1 (sendMessage). Anything
+    // else = the operator restructured it in the editor — hands off.
+    var CMD_SHAPE_NODE_IDS = ['trigger_1', 'trigger_2', 'trigger_3', 'logic_1', 'action_1'];
+
+    function parseCmdFlowShape(flow, kind) {
+        var nodes = flow.nodes || [];
+        var foreign = nodes.some(function (n) { return !n || CMD_SHAPE_NODE_IDS.indexOf(n.id) === -1; });
+        if (foreign) return { ok: false };
+        var trig = nodes.find(function (n) { return n.id === 'trigger_1' && n.type === 'trigger'; });
+        var action = nodes.find(function (n) { return n.id === 'action_1' && n.type === 'action' && n.actionType === 'sendMessage'; });
+        if (!trig || !action) return { ok: false };
+        var roleNode = nodes.find(function (n) { return n.id === 'trigger_2' && n.triggerType === 'userRole'; });
+        var cdNode = nodes.find(function (n) { return n.id === 'trigger_3' && n.triggerType === 'randomChance'; });
+        if (kind === 'command') {
+            if (trig.triggerType !== 'messageEquals') return { ok: false };
+            return {
+                ok: true,
+                form: {
+                    name: (trig.config && trig.config.text) || '',
+                    response: (action.config && action.config.template) || '',
+                    cooldownSec: cdNode ? Math.round(((cdNode.config && cdNode.config.cooldownMs) || 0) / 1000) : 0,
+                    role: (roleNode && roleNode.config && roleNode.config.role) || ''
+                }
+            };
+        }
+        if (trig.triggerType !== 'timeInterval' || roleNode || cdNode) return { ok: false };
+        return {
+            ok: true,
+            form: {
+                intervalMin: Math.max(1, Math.round(((trig.config && trig.config.interval) || 1800) / 60)),
+                message: (action.config && action.config.template) || ''
+            }
+        };
+    }
+
+    function buildCmdFlowSpec(form) {
+        var nodes = [{ id: 'trigger_1', type: 'trigger', triggerType: 'messageEquals', x: 185, y: 50, config: { text: form.name } }];
+        var connections = [];
+        var heads = ['trigger_1'];
+        if (form.role) {
+            nodes.push({ id: 'trigger_2', type: 'trigger', triggerType: 'userRole', x: 430, y: 50, config: { role: form.role } });
+            heads.push('trigger_2');
+        }
+        if (form.cooldownSec > 0) {
+            nodes.push({ id: 'trigger_3', type: 'trigger', triggerType: 'randomChance', x: 670, y: 50, config: { probability: 1, cooldownMs: form.cooldownSec * 1000, maxPerMinute: 0, requireMessage: true } });
+            heads.push('trigger_3');
+        }
+        var head = 'trigger_1';
+        if (heads.length > 1) {
+            nodes.push({ id: 'logic_1', type: 'logic', logicType: 'AND', x: 300, y: 210, config: {} });
+            heads.forEach(function (h) { connections.push({ from: h, to: 'logic_1' }); });
+            head = 'logic_1';
+        }
+        nodes.push({ id: 'action_1', type: 'action', actionType: 'sendMessage', x: 300, y: 390, config: { template: form.response, destination: 'reply', sanitizeMode: 'safe', timeout: 1000 } });
+        connections.push({ from: head, to: 'action_1' });
+        return { nodes: nodes, connections: connections };
+    }
+
+    function buildTimerFlowSpec(form) {
+        return {
+            nodes: [
+                { id: 'trigger_1', type: 'trigger', triggerType: 'timeInterval', x: 185, y: 50, config: { interval: form.intervalMin * 60 } },
+                { id: 'action_1', type: 'action', actionType: 'sendMessage', x: 300, y: 250, config: { template: form.message, destination: 'all', sanitizeMode: 'safe', timeout: 1000 } }
+            ],
+            connections: [{ from: 'trigger_1', to: 'action_1' }]
+        };
+    }
+
+    // One save per edit, through the engine's own saveFlow (IndexedDB — no
+    // IPC, so the S48 sendSync trap class doesn't apply here). Debounced from
+    // the text inputs; the flow keeps its id and its place in the editor.
+    function saveCmdRow(row) {
+        if (!row || row.restructured || !row.form) return Promise.resolve();
+        return withAlertFlowSystem(function (fsys) {
+            var flow = fsys.flows.find(function (f) { return f.id === row.flowId; });
+            if (!flow) { setCmdStatus('flow missing — deleted in the editor?', true); return null; }
+            var spec = row.kind === 'timer' ? buildTimerFlowSpec(row.form) : buildCmdFlowSpec(row.form);
+            flow.nodes = spec.nodes;
+            flow.connections = spec.connections;
+            flow.name = row.kind === 'timer'
+                ? 'Timer: ' + timerRowLabel(row.form)
+                : 'Command: ' + (row.form.name || '(unnamed)');
+            flow.active = row.active;
+            return fsys.saveFlow(flow);
+        }).catch(function (e) {
+            console.error('[arcade-shell] command save failed:', e);
+            setCmdStatus('save failed — flow system unavailable', true);
+        });
+    }
+
+    function queueCmdSave(row) {
+        clearTimeout(cmdSaveTimer);
+        cmdSaveTimer = setTimeout(function () {
+            saveCmdRow(row).then(function () { setCmdStatus('saved'); });
+        }, 400);
+    }
+
+    function renderCmdList() {
+        var list = document.getElementById('arcade-cmd-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!cmdRows.length) {
+            var empty = document.createElement('div');
+            empty.className = 'arcade-src-empty arcade-fx-grid';
+            empty.textContent = 'No commands yet — “+ New command” seeds a real event flow.';
+            list.appendChild(empty);
+        }
+        cmdRows.forEach(function (row) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-evt-item';
+            btn.dataset.arcadeCmdId = row.flowId;
+            btn.setAttribute('role', 'option');
+            var selected = cmdSelectedId === row.flowId;
+            btn.classList.toggle('is-on', selected);
+            btn.setAttribute('aria-selected', String(selected));
+            var label = document.createElement('span');
+            label.className = 'arcade-evt-item__label';
+            var icon = row.kind === 'timer' ? '⏱ ' : (row.kind === 'imported' ? '📥 ' : '⌨️ ');
+            label.textContent = icon + row.label;
+            if (row.restructured) label.title = 'This flow was customized in the flow editor — edit it there';
+            btn.appendChild(label);
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state ' + (row.active ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+            state.textContent = row.active ? 'active' : 'off';
+            state.title = row.active ? 'The backing flow is active' : 'The backing flow is paused';
+            btn.appendChild(state);
+            btn.addEventListener('click', function () { selectCmdRow(row.flowId); });
+            list.appendChild(btn);
+        });
+        // Honest import hint — the S41 house flows only exist once the
+        // operator imports them (outbox task-38-s41 JSONs).
+        if (!cmdRows.some(function (r) { return r.kind === 'imported'; })) {
+            var hint = document.createElement('div');
+            hint.className = 'arcade-evt-cond__hint arcade-cmd-import-hint';
+            hint.textContent = 'The !golive house flows aren’t imported on this setup — they list here automatically once they are.';
+            list.appendChild(hint);
+        }
+    }
+
+    function selectCmdRow(flowId) {
+        if (cmdSelectedId === flowId) return;
+        cmdSelectedId = flowId;
+        renderCmdList();
+        renderCmdConfig();
+    }
+
+    function selectedCmdRow() {
+        return cmdRows.find(function (r) { return r.flowId === cmdSelectedId; }) || null;
+    }
+
+    function renderCmdConfig() {
+        var config = document.getElementById('arcade-cmd-config');
+        if (!config) return;
+        config.innerHTML = '';
+        var row = selectedCmdRow();
+        if (!row) {
+            var empty = document.createElement('p');
+            empty.className = 'arcade-evt-blurb';
+            empty.textContent = 'Select a command on the left, or “+ New command” to seed one.';
+            config.appendChild(empty);
+            return;
+        }
+
+        var head = document.createElement('div');
+        head.className = 'arcade-evt-config__head';
+        var name = document.createElement('span');
+        name.className = 'arcade-evt-config__name';
+        name.textContent = row.kind === 'timer' ? '⏱ Timer' : (row.kind === 'imported' ? '📥 Imported flow' : '⌨️ Command');
+        head.appendChild(name);
+        config.appendChild(head);
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-blurb';
+        blurb.textContent = row.kind === 'imported'
+            ? 'Imported house flow — read-only here; the door below opens it in the flow editor.'
+            : 'Backed by a real event flow (' + row.flowId + ') — edits here rewrite that flow; refine it further in the flow editor any time.';
+        config.appendChild(blurb);
+
+        if (row.kind === 'imported') {
+            var importDoors = document.createElement('div');
+            importDoors.className = 'arcade-evt-doors';
+            var openBtn2 = document.createElement('button');
+            openBtn2.type = 'button';
+            openBtn2.className = 'arcade-btn arcade-btn--sm';
+            openBtn2.textContent = 'Open in Flow editor';
+            openBtn2.addEventListener('click', function () { openAlertFlowInEditor(row.flowId); });
+            importDoors.appendChild(openBtn2);
+            config.appendChild(importDoors);
+            return;
+        }
+
+        if (row.restructured) {
+            var hands = document.createElement('div');
+            hands.className = 'arcade-evt-cond__hint';
+            hands.textContent = 'This flow was customized in the flow editor — the surface leaves it alone now. Edit it there.';
+            config.appendChild(hands);
+            var handsDoors = document.createElement('div');
+            handsDoors.className = 'arcade-evt-doors';
+            var handsBtn = document.createElement('button');
+            handsBtn.type = 'button';
+            handsBtn.className = 'arcade-btn arcade-btn--sm';
+            handsBtn.textContent = 'Open in Flow editor';
+            handsBtn.addEventListener('click', function () { openAlertFlowInEditor(row.flowId); });
+            handsDoors.appendChild(handsBtn);
+            config.appendChild(handsDoors);
+            appendCmdActiveAndDelete(config, row);
+            return;
+        }
+
+        if (row.kind === 'command') buildCmdForm(config, row);
+        else buildTimerForm(config, row);
+        appendCmdActiveAndDelete(config, row);
+    }
+
+    function buildCmdForm(config, row) {
+        var form = row.form;
+
+        var cmdField = document.createElement('div');
+        cmdField.className = 'arcade-alert-row';
+        var cmdLabel = document.createElement('label');
+        cmdLabel.textContent = 'Command';
+        cmdField.appendChild(cmdLabel);
+        var cmdInput = document.createElement('input');
+        cmdInput.type = 'text';
+        cmdInput.autocomplete = 'off';
+        cmdInput.placeholder = '!discord';
+        cmdInput.value = form.name;
+        cmdInput.title = 'Exact chat message that fires it — chatters type it verbatim';
+        cmdInput.addEventListener('input', function () {
+            var clean = sanitizeCmdName(cmdInput.value);
+            form.name = clean;
+            row.label = clean || '(unnamed command)';
+            renderCmdList();
+            queueCmdSave(row);
+        });
+        cmdInput.addEventListener('blur', function () { cmdInput.value = form.name; });
+        cmdField.appendChild(cmdInput);
+        config.appendChild(cmdField);
+        var cmdHint = document.createElement('div');
+        cmdHint.className = 'arcade-evt-cond__hint';
+        cmdHint.textContent = 'Exact match (stock messageEquals, same as !golive) — “!discord” fires, “!discord please” does not.';
+        config.appendChild(cmdHint);
+
+        var respField = document.createElement('div');
+        respField.className = 'arcade-alert-row arcade-alert-row--top';
+        var respLabel = document.createElement('label');
+        respLabel.textContent = 'Canned response';
+        respField.appendChild(respLabel);
+        var respInput = document.createElement('textarea');
+        respInput.rows = 3;
+        respInput.value = form.response;
+        respInput.placeholder = 'What the bot replies in chat';
+        respInput.title = 'Posted as a reply on the platform the command came from (stock sendMessage, destination reply)';
+        respInput.addEventListener('input', function () {
+            form.response = respInput.value;
+            queueCmdSave(row);
+        });
+        respField.appendChild(respInput);
+        config.appendChild(respField);
+
+        var cdField = document.createElement('div');
+        cdField.className = 'arcade-alert-row';
+        var cdLabel = document.createElement('label');
+        cdLabel.textContent = 'Cooldown (seconds)';
+        cdField.appendChild(cdLabel);
+        var cdInput = document.createElement('input');
+        cdInput.type = 'number';
+        cdInput.min = '0';
+        cdInput.step = '1';
+        cdInput.value = String(form.cooldownSec);
+        cdInput.title = 'Minimum seconds between fires — the engine’s own cooldown gate (0 = no cooldown)';
+        cdInput.addEventListener('change', function () {
+            var v = Math.max(0, Math.round(Number(cdInput.value) || 0));
+            cdInput.value = String(v);
+            form.cooldownSec = v;
+            queueCmdSave(row);
+        });
+        cdField.appendChild(cdInput);
+        config.appendChild(cdField);
+
+        var roleField = document.createElement('div');
+        roleField.className = 'arcade-alert-row';
+        var roleLabel = document.createElement('label');
+        roleLabel.textContent = 'Who can run it';
+        roleField.appendChild(roleLabel);
+        var roleSelect = document.createElement('select');
+        roleSelect.innerHTML = '<option value="">Everyone</option><option value="mod">Mods only</option>';
+        roleSelect.value = form.role;
+        roleSelect.title = 'Stock userRole trigger — the same gate !golive rides';
+        roleSelect.addEventListener('change', function () {
+            form.role = roleSelect.value;
+            queueCmdSave(row);
+        });
+        roleField.appendChild(roleSelect);
+        config.appendChild(roleField);
+    }
+
+    function buildTimerForm(config, row) {
+        var form = row.form;
+
+        var intField = document.createElement('div');
+        intField.className = 'arcade-alert-row';
+        var intLabel = document.createElement('label');
+        intLabel.textContent = 'Every (minutes)';
+        intField.appendChild(intLabel);
+        var intInput = document.createElement('input');
+        intInput.type = 'number';
+        intInput.min = '1';
+        intInput.step = '1';
+        intInput.value = String(form.intervalMin);
+        intInput.title = 'Stock timeInterval trigger — fires on the engine’s own scheduler';
+        intInput.addEventListener('change', function () {
+            var v = Math.max(1, Math.round(Number(intInput.value) || 0));
+            intInput.value = String(v);
+            form.intervalMin = v;
+            row.label = timerRowLabel(form);
+            renderCmdList();
+            queueCmdSave(row);
+        });
+        intField.appendChild(intInput);
+        config.appendChild(intField);
+
+        var msgField = document.createElement('div');
+        msgField.className = 'arcade-alert-row arcade-alert-row--top';
+        var msgLabel = document.createElement('label');
+        msgLabel.textContent = 'Message';
+        msgField.appendChild(msgLabel);
+        var msgInput = document.createElement('textarea');
+        msgInput.rows = 3;
+        msgInput.value = form.message;
+        msgInput.placeholder = 'e.g. Merch and tip links live at the store — type !store';
+        msgInput.title = 'Posted to every connected platform on the interval (stock sendMessage, destination all)';
+        msgInput.addEventListener('input', function () {
+            form.message = msgInput.value;
+            row.label = timerRowLabel(form);
+            renderCmdList();
+            queueCmdSave(row);
+        });
+        msgField.appendChild(msgInput);
+        config.appendChild(msgField);
+
+        var liveHint = document.createElement('div');
+        liveHint.className = 'arcade-evt-cond__hint';
+        liveHint.textContent = 'Posts to every connected platform on the interval while the app is running — timers don’t know live state; toggle it off when you’re done.';
+        config.appendChild(liveHint);
+    }
+
+    function appendCmdActiveAndDelete(config, row) {
+        var activeRow = document.createElement('label');
+        activeRow.className = 'arcade-clock-seconds arcade-cmd-active';
+        var activeInput = document.createElement('input');
+        activeInput.type = 'checkbox';
+        activeInput.checked = row.active;
+        activeInput.addEventListener('change', function () {
+            row.active = activeInput.checked;
+            if (!row.restructured) queueCmdSave(row);
+            else {
+                // Restructured flows only get their active flag touched —
+                // never a node rewrite.
+                withAlertFlowSystem(function (fsys) {
+                    var flow = fsys.flows.find(function (f) { return f.id === row.flowId; });
+                    if (flow) { flow.active = row.active; return fsys.saveFlow(flow); }
+                    return null;
+                }).catch(function (e) { console.error('[arcade-shell] command active-toggle failed:', e); });
+            }
+            renderCmdList();
+        });
+        activeRow.appendChild(activeInput);
+        var activeSpan = document.createElement('span');
+        activeSpan.textContent = 'active (the flow fires)';
+        activeRow.appendChild(activeSpan);
+        config.appendChild(activeRow);
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'arcade-btn arcade-btn--sm';
+        openBtn.textContent = 'Open in Flow editor';
+        openBtn.addEventListener('click', function () { openAlertFlowInEditor(row.flowId); });
+        doors.appendChild(openBtn);
+        if (row.kind !== 'imported') {
+            var delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'arcade-btn arcade-btn--sm arcade-evt-remove';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', function () {
+                if (!delBtn.dataset.armed) { // confirm-on-second-click, the S47 idiom
+                    delBtn.dataset.armed = '1';
+                    delBtn.textContent = 'Click again to delete the flow';
+                    setTimeout(function () {
+                        delBtn.dataset.armed = '';
+                        if (document.body.contains(delBtn)) delBtn.textContent = 'Delete';
+                    }, 3000);
+                    return;
+                }
+                withAlertFlowSystem(function (fsys) { return fsys.deleteFlow(row.flowId); }).then(function () {
+                    cmdRows = cmdRows.filter(function (r) { return r.flowId !== row.flowId; });
+                    cmdSelectedId = cmdRows.length ? cmdRows[0].flowId : null;
+                    renderCmdList();
+                    renderCmdConfig();
+                    setCmdStatus('flow deleted');
+                }).catch(function (e) {
+                    console.error('[arcade-shell] command delete failed:', e);
+                    setCmdStatus('delete failed — flow system unavailable', true);
+                });
+            });
+            doors.appendChild(delBtn);
+        }
+        config.appendChild(doors);
+    }
+
+    function sanitizeCmdName(value) {
+        var clean = String(value || '').replace(/\s+/g, '').toLowerCase();
+        if (clean && clean.charAt(0) !== '!') clean = '!' + clean;
+        return clean.slice(0, 32);
+    }
+
+    // "+ New command" picker — Command or Timer. Built to the H18-A house
+    // disclosure contract from birth: focus in on open, Escape closes, focus
+    // returns to the trigger on close-without-pick, aria-expanded/controls on
+    // the trigger, click-outside closes.
+    var cmdPickerKeydown = null;
+
+    function closeCmdPicker(returnFocus) {
+        var existing = document.getElementById('arcade-cmd-add-modal');
+        if (existing) existing.remove();
+        if (cmdPickerKeydown) {
+            document.removeEventListener('keydown', cmdPickerKeydown);
+            cmdPickerKeydown = null;
+        }
+        var trigger = document.getElementById('arcade-cmd-add');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            if (returnFocus) trigger.focus();
+        }
+    }
+
+    function openCmdPicker() {
+        closeCmdPicker(false);
+        var trigger = document.getElementById('arcade-cmd-add');
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-cmd-add-modal';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-label', 'New command or timer');
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
+        title.textContent = 'New command or timer';
+        modal.appendChild(title);
+        var sub = document.createElement('p');
+        sub.className = 'arcade-evt-modal__blurb';
+        sub.textContent = 'Either kind lands as a real event flow you can refine in the flow editor.';
+        modal.appendChild(sub);
+        modal.appendChild(buildAddEventPick('⌨️ Command', 'Chat types !something, the bot replies — cooldown and a role gate if you want them.', function () {
+            addCmdRow('command');
+        }));
+        modal.appendChild(buildAddEventPick('⏱ Timer', 'Every N minutes, post a message to every connected platform (the store shoutout pattern).', function () {
+            addCmdRow('timer');
+        }));
+        var cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'arcade-btn arcade-btn--sm';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', function () { closeCmdPicker(true); });
+        modal.appendChild(cancel);
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeCmdPicker(true); });
+        document.body.appendChild(back);
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        cmdPickerKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-cmd-add-modal')) {
+                e.stopPropagation();
+                closeCmdPicker(true);
+            }
+        };
+        document.addEventListener('keydown', cmdPickerKeydown);
+        var firstPick = modal.querySelector('.arcade-evt-modal__pick');
+        (firstPick || title).focus();
+    }
+
+    function addCmdRow(kind) {
+        closeCmdPicker(false); // a pick — focus lands on the new row, not the trigger
+        var flowId = mintAlertId(kind === 'timer' ? 's49-tmr' : 's49-cmd');
+        var form = kind === 'timer'
+            ? { intervalMin: 30, message: '' }
+            : { name: '!newcmd', response: '', cooldownSec: 0, role: '' };
+        var flow = {
+            id: flowId,
+            name: kind === 'timer' ? 'Timer: every 30m' : 'Command: !newcmd',
+            description: 'Seeded by the Arcade Commands surface (S49) — refine freely; heavy edits hand it back to the surface read-only.',
+            active: false, // starts OFF — an empty response/message should never fire; the operator arms it
+            nodes: [],
+            connections: []
+        };
+        var spec = kind === 'timer' ? buildTimerFlowSpec(form) : buildCmdFlowSpec(form);
+        flow.nodes = spec.nodes;
+        flow.connections = spec.connections;
+        withAlertFlowSystem(function (fsys) { return fsys.saveFlow(flow); }).then(function () {
+            var row = { kind: kind, flowId: flowId, flow: flow, label: kind === 'timer' ? timerRowLabel(form) : form.name, form: form, restructured: false, active: false };
+            cmdRows.push(row);
+            cmdSelectedId = flowId;
+            renderCmdList();
+            renderCmdConfig();
+            setCmdStatus(kind === 'timer' ? 'timer seeded — set its message, then switch it active' : 'command seeded — set its response, then switch it active');
+            var rowEl = document.querySelector('#arcade-cmd-list [data-arcade-cmd-id="' + flowId + '"]');
+            if (rowEl) rowEl.focus();
+        }).catch(function (e) {
+            console.error('[arcade-shell] command seed failed:', e);
+            setCmdStatus('flow system unavailable — nothing added', true);
+        });
+    }
+
+
+    // --------------------------------------------------------------------
+    // S49 — GOAL BARS (TASK-46, Lane 2 — NEW BUILD; the census confirms
+    // stock ships no goal-bar overlay). A gallery door card ("Goal Bars",
+    // Widgets) opens this custom tab: LEFT = the streamer's goals as a
+    // left-list + the platform-program set imports, RIGHT = an isolated demo
+    // preview on TOP (goal-bar.html?demo=… — zero network, no session) and
+    // the selected goal's config BELOW. Copy overlay URL composes the REAL
+    // session URL (never &demo), the ruled mirror of the preview.
+    //
+    // REAL NUMBERS ONLY: the overlay (goal-bar.html, a new house file) draws
+    // current values from what the app already receives — the meta-store
+    // broadcasts (viewer_updates, and follower_updates via the small
+    // background.js publish seam this task adds — see the file's header),
+    // observed sub events, and tip events; sats/custom goals advance
+    // manually via the starting-count the config bakes into the URL. Unknown
+    // values render dash-face + empty bar, NEVER an estimate (honest-time
+    // law). The "Right now" line in the config reads the shell's own
+    // analytics bridge (arcadeAnalytics.followerCounts/viewerCounts — real
+    // metaDataStore readings, the same source the Main rail uses).
+    //
+    // TYPE SUPPORT (measured, not assumed):
+    //   followers  absolute totals per platform — metaDataStore
+    //              follower_update entries (background.js:6783), broadcast
+    //              as follower_updates by the S49 publish seam.
+    //   viewers    live concurrent per platform — the stock viewer_updates
+    //              broadcast (background.js:6797, documented sample payload
+    //              in the bundle AGENTS.md). CURRENT reading — no 30-day
+    //              average exists anywhere in the app, and none is faked.
+    //   subs       observed subscription events this session (event names
+    //              from multi-alerts.js:55-80) + the manual starting count.
+    //   sats       tip events (hasDonation leading-number, the tipjar-mini
+    //              convention) + the manual starting count.
+    //   custom     manual counter — the starting count is the whole value.
+    //
+    // Setting key (textparam1, canonical saveSetting via the S48 async
+    // saveGameSetting idiom — writes can land while the preview frame
+    // churns):  arcadeGoals  JSON array [{id,type,label,target,current,
+    // source,fill,ruleset}]. Reserved arcadeAlert*/arcadeStylePresets/
+    // arcadeGame*/arcadePointsUnlocks keys untouched.
+    //
+    // PLATFORM RULESETS — preset goal SETS imported as a group of bars,
+    // encoded as DATA below with a source URL + accessed date per set
+    // (requirements change; the report cites where each number came from).
+    // Stream-hours/days bars import as MANUAL counters — the app holds no
+    // cumulative stream-time source, so the honest mechanic is the streamer
+    // advancing them, not an invented tracker.
+    // --------------------------------------------------------------------
+    var GOAL_TYPES = [
+        { id: 'followers', label: 'Followers' },
+        { id: 'viewers', label: 'Viewers (live)' },
+        { id: 'subs', label: 'Subs (this session)' },
+        { id: 'sats', label: 'Sats / tips' },
+        { id: 'custom', label: 'Custom counter' }
+    ];
+
+    var GOAL_RULESETS = [
+        {
+            id: 'twitch-affiliate', name: 'Twitch Affiliate',
+            source: 'https://help.twitch.tv/s/article/joining-the-affiliate-program',
+            accessed: '2026-08-26',
+            note: 'Rolling 30-day window (25 followers / 4 hours / 4 days / 3 avg viewers — the 2026 bar; the classic 50-follower bar was lowered). The followers/viewers bars read live counts — Twitch judges the 30-day window, the app has no windowed-average source.',
+            goals: [
+                { type: 'followers', source: 'twitch', label: 'Twitch followers', target: 25 },
+                { type: 'viewers', source: 'twitch', label: 'Twitch viewers (live now)', target: 3 },
+                { type: 'custom', source: '', label: 'Stream hours (manual)', target: 4 },
+                { type: 'custom', source: '', label: 'Stream days (manual)', target: 4 }
+            ]
+        },
+        {
+            id: 'kick-affiliate', name: 'Kick Affiliate',
+            source: 'https://help.kick.com/en/articles/12273402-how-to-become-a-kick-affiliate-how-kick-streaming-works',
+            accessed: '2026-08-26',
+            note: '75 followers + 5 streamed hours; the 5-hour requirement is cumulative per Kick’s help article.',
+            goals: [
+                { type: 'followers', source: 'kick', label: 'Kick followers', target: 75 },
+                { type: 'custom', source: '', label: 'Stream hours (manual)', target: 5 }
+            ]
+        }
+    ];
+
+    var GOALS_KEY = 'arcadeGoals';
+    var goalsDoc = [];            // [{id,type,label,target,current,source,fill,ruleset?}]
+    var goalsSelectedId = null;
+    var goalsPanelLive = false;
+
+    function buildGoalsPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-goals';
+        panel.setAttribute('aria-label', 'Goal bars');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">GOAL BARS</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-goals-status"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--primary" id="arcade-goals-copy">Copy overlay URL</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-goals-list" role="listbox" aria-label="Goals"></div>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-goals-add">+ New goal</button>' +
+            '<div class="arcade-goal-sets" id="arcade-goal-sets"></div>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-alerts-preview">' +
+            '<div class="arcade-alerts-preview-bar">' +
+            '<span class="arcade-style-hint" id="arcade-goals-preview-hint">The preview is a zero-network demo of the look — the overlay only counts what your session really sees.</span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-goals-reload">Reload preview</button>' +
+            '</div>' +
+            '<iframe id="arcade-goals-preview-frame" title="Goal bar preview — zero-network demo"></iframe>' +
+            '</div>' +
+            '<div class="arcade-evt-config" id="arcade-goals-config"></div>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(panel);
+
+        panel.querySelector('#arcade-goals-copy').addEventListener('click', function (e) {
+            copyGoalsOverlayUrl(e.currentTarget);
+        });
+        panel.querySelector('#arcade-goals-reload').addEventListener('click', function () {
+            initGoalsPreviewFrame();
+        });
+        panel.querySelector('#arcade-goals-add').addEventListener('click', function () {
+            addGoal({ type: 'custom', label: 'New goal', target: 100, current: 0, source: '', fill: '' });
+        });
+
+        // Program-set import buttons (data-driven — one per GOAL_RULESETS entry).
+        var setsHost = panel.querySelector('#arcade-goal-sets');
+        var setsTitle = document.createElement('div');
+        setsTitle.className = 'arcade-evt-cond__title';
+        setsTitle.textContent = 'Import a program set';
+        setsHost.appendChild(setsTitle);
+        GOAL_RULESETS.forEach(function (set) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm arcade-goal-set__btn';
+            btn.textContent = '＋ ' + set.name;
+            btn.title = set.note + ' — source: ' + set.source + ' (accessed ' + set.accessed + ')';
+            btn.addEventListener('click', function () { importGoalRuleset(set); });
+            setsHost.appendChild(btn);
+        });
+
+        // Same H18-A listbox contract as the other S49 shelves.
+        var list = panel.querySelector('#arcade-goals-list');
+        list.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) === -1) return;
+            var rows = Array.prototype.slice.call(list.querySelectorAll('[data-arcade-goal-id]'));
+            if (!rows.length) return;
+            e.preventDefault();
+            var idx = rows.findIndex(function (r) { return r.dataset.arcadeGoalId === goalsSelectedId; });
+            if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = rows.length - 1;
+            else idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+            var id = rows[idx].dataset.arcadeGoalId;
+            selectGoalRow(id);
+            var fresh = list.querySelector('[data-arcade-goal-id="' + id + '"]');
+            if (fresh) fresh.focus();
+        });
+    }
+
+    function setGoalsStatus(text, isError) {
+        var el = document.getElementById('arcade-goals-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    function ensureGoalsPanelLive() {
+        loadGoalsSettings().then(function () {
+            goalsPanelLive = true;
+            if (!goalsSelectedId || !goalsDoc.some(function (g) { return g.id === goalsSelectedId; })) {
+                goalsSelectedId = goalsDoc.length ? goalsDoc[0].id : null;
+            }
+            renderGoalsList();
+            renderGoalsConfig();
+            initGoalsPreviewFrame();
+        });
+    }
+
+    function loadGoalsSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var entry = settings[GOALS_KEY];
+                            var doc = null;
+                            try { doc = JSON.parse((entry && typeof entry.textparam1 === 'string') ? entry.textparam1 : ''); } catch (e) { doc = null; }
+                            goalsDoc = (Array.isArray(doc) ? doc : []).filter(function (g) {
+                                return g && typeof g === 'object' && typeof g.id === 'string' && goalTypeMeta(g.type);
+                            }).map(function (g) {
+                                return {
+                                    id: g.id,
+                                    type: g.type,
+                                    label: typeof g.label === 'string' ? g.label : 'Goal',
+                                    target: Math.max(1, Math.round(Number(g.target) || 0) || 100),
+                                    current: Math.max(0, Number(g.current) || 0),
+                                    source: typeof g.source === 'string' ? g.source : '',
+                                    fill: typeof g.fill === 'string' ? g.fill : '',
+                                    ruleset: typeof g.ruleset === 'string' ? g.ruleset : ''
+                                };
+                            });
+                        } catch (e) { console.error('[arcade-shell] goals settings parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] goals settings load failed:', e); }
+            setGoalsStatus('settings bridge unavailable — edits will not persist', true);
+            resolve();
+        });
+    }
+
+    function saveGoals() { saveGameSetting(GOALS_KEY, JSON.stringify(goalsDoc)); } // S48 async idiom — preview churn safe
+
+    function goalTypeMeta(typeId) {
+        return GOAL_TYPES.find(function (t) { return t.id === typeId; }) || null;
+    }
+
+    function selectedGoal() {
+        return goalsDoc.find(function (g) { return g.id === goalsSelectedId; }) || null;
+    }
+
+    function addGoal(spec) {
+        var goal = {
+            id: mintAlertId('s49-goal'),
+            type: spec.type,
+            label: spec.label,
+            target: Math.max(1, Math.round(Number(spec.target) || 0) || 100),
+            current: Math.max(0, Number(spec.current) || 0),
+            source: spec.source || '',
+            fill: spec.fill || '',
+            ruleset: spec.ruleset || ''
+        };
+        goalsDoc.push(goal);
+        saveGoals();
+        goalsSelectedId = goal.id;
+        renderGoalsList();
+        renderGoalsConfig();
+        initGoalsPreviewFrame();
+        setGoalsStatus('"' + goal.label + '" added');
+        var rowEl = document.querySelector('#arcade-goals-list [data-arcade-goal-id="' + goal.id + '"]');
+        if (rowEl) rowEl.focus();
+        return goal;
+    }
+
+    function importGoalRuleset(set) {
+        var added = 0;
+        set.goals.forEach(function (spec) {
+            var dupe = goalsDoc.some(function (g) {
+                return g.ruleset === set.id && g.type === spec.type && g.target === spec.target && g.label === spec.label;
+            });
+            if (dupe) return;
+            added++;
+            addGoal({
+                type: spec.type, label: spec.label, target: spec.target,
+                current: 0, source: spec.source || '', fill: '', ruleset: set.id
+            });
+        });
+        setGoalsStatus(added
+            ? set.name + ' — ' + added + ' bar' + (added === 1 ? '' : 's') + ' imported'
+            : set.name + ' is already imported');
+    }
+
+    function renderGoalsList() {
+        var list = document.getElementById('arcade-goals-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!goalsDoc.length) {
+            var empty = document.createElement('div');
+            empty.className = 'arcade-src-empty arcade-fx-grid';
+            empty.textContent = 'No goals yet — “+ New goal”, or import a program set below.';
+            list.appendChild(empty);
+        }
+        goalsDoc.forEach(function (goal) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-evt-item';
+            btn.dataset.arcadeGoalId = goal.id;
+            btn.setAttribute('role', 'option');
+            var selected = goalsSelectedId === goal.id;
+            btn.classList.toggle('is-on', selected);
+            btn.setAttribute('aria-selected', String(selected));
+            var label = document.createElement('span');
+            label.className = 'arcade-evt-item__label';
+            label.textContent = '🎯 ' + goal.label;
+            btn.appendChild(label);
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state arcade-evt-state--off';
+            var meta = goalTypeMeta(goal.type);
+            state.textContent = meta ? meta.label : goal.type;
+            state.title = 'target ' + goal.target + (goal.source ? ' · ' + goal.source : '');
+            btn.appendChild(state);
+            btn.addEventListener('click', function () { selectGoalRow(goal.id); });
+            list.appendChild(btn);
+        });
+    }
+
+    function selectGoalRow(id) {
+        if (goalsSelectedId === id) return;
+        goalsSelectedId = id;
+        renderGoalsList();
+        renderGoalsConfig();
+        initGoalsPreviewFrame();
+    }
+
+    // The "Right now" honest line — real counts off the shell's own
+    // analytics bridge (metaDataStore readings, never estimates). Unknown
+    // stays a dash.
+    function goalRightNowText(goal) {
+        if (goal.type !== 'followers' && goal.type !== 'viewers') return null;
+        var counts = goal.type === 'followers' ? arcadeAnalytics.followerCounts : arcadeAnalytics.viewerCounts;
+        var ready = goal.type === 'followers' ? arcadeAnalytics.followersReady : arcadeAnalytics.viewersReady;
+        if (!ready) return '— (no reading yet)';
+        var total = 0, seen = false;
+        Object.keys(counts).forEach(function (k) {
+            if (goal.source && k.toLowerCase() !== goal.source) return;
+            var n = parseInt(counts[k], 10);
+            if (isFinite(n)) { total += n; seen = true; }
+        });
+        if (!seen) return '— (no ' + (goal.source || 'platform') + ' reading yet)';
+        return total.toLocaleString('en-US') + (goal.source ? ' on ' + goal.source : ' across platforms');
+    }
+
+    function renderGoalsConfig() {
+        var config = document.getElementById('arcade-goals-config');
+        if (!config) return;
+        config.innerHTML = '';
+        var goal = selectedGoal();
+        if (!goal) {
+            var empty = document.createElement('p');
+            empty.className = 'arcade-evt-blurb';
+            empty.textContent = 'Select a goal on the left, or “+ New goal”.';
+            config.appendChild(empty);
+            return;
+        }
+
+        var head = document.createElement('div');
+        head.className = 'arcade-evt-config__head';
+        var name = document.createElement('span');
+        name.className = 'arcade-evt-config__name';
+        name.textContent = '🎯 ' + goal.label;
+        head.appendChild(name);
+        config.appendChild(head);
+
+        var rightNow = goalRightNowText(goal);
+        if (rightNow !== null) {
+            var nowLine = document.createElement('p');
+            nowLine.className = 'arcade-evt-blurb';
+            nowLine.innerHTML = 'Right now: <span class="arcade-fx-ticker"></span>';
+            nowLine.querySelector('.arcade-fx-ticker').textContent = rightNow;
+            config.appendChild(nowLine);
+        }
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-blurb';
+        blurb.textContent = {
+            followers: 'Reads the app’s real follower totals — dash-faced until a platform reports.',
+            viewers: 'Live concurrent viewers right now — a current reading, never a 30-day average.',
+            subs: 'Counts subscription events the overlay sees this session, on top of the starting count.',
+            sats: 'Tip events add their amount on top of the starting count (same naive leading-number rule as Tip Jar Mini).',
+            custom: 'Manual counter — the starting count you set here is the value. You advance it.'
+        }[goal.type] || '';
+        config.appendChild(blurb);
+
+        // Label
+        var labelRow = document.createElement('div');
+        labelRow.className = 'arcade-alert-row';
+        var labelLabel = document.createElement('label');
+        labelLabel.textContent = 'Label';
+        labelRow.appendChild(labelLabel);
+        var labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.autocomplete = 'off';
+        labelInput.value = goal.label;
+        labelInput.addEventListener('input', debounce(function () {
+            goal.label = labelInput.value.slice(0, 60);
+            saveGoals();
+            renderGoalsList();
+            queueGoalsPreviewReload();
+        }, 300));
+        labelRow.appendChild(labelInput);
+        config.appendChild(labelRow);
+
+        // Type
+        var typeRow = document.createElement('div');
+        typeRow.className = 'arcade-alert-row';
+        var typeLabel = document.createElement('label');
+        typeLabel.textContent = 'Type';
+        typeRow.appendChild(typeLabel);
+        var typeSelect = document.createElement('select');
+        typeSelect.dataset.goalField = 'type';
+        GOAL_TYPES.forEach(function (t) {
+            var opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = t.label;
+            typeSelect.appendChild(opt);
+        });
+        typeSelect.value = goal.type;
+        typeSelect.addEventListener('change', function () {
+            goal.type = typeSelect.value;
+            saveGoals();
+            renderGoalsList();
+            renderGoalsConfig();
+            initGoalsPreviewFrame();
+        });
+        typeRow.appendChild(typeSelect);
+        config.appendChild(typeRow);
+
+        // Platform (followers/viewers only)
+        if (goal.type === 'followers' || goal.type === 'viewers') {
+            var srcRow = document.createElement('div');
+            srcRow.className = 'arcade-alert-row';
+            var srcLabel = document.createElement('label');
+            srcLabel.textContent = 'Platform';
+            srcRow.appendChild(srcLabel);
+            var srcSelect = document.createElement('select');
+            srcSelect.dataset.goalField = 'source';
+            [['', 'All platforms (summed)'], ['twitch', 'Twitch'], ['kick', 'Kick'], ['youtube', 'YouTube']].forEach(function (pair) {
+                var opt = document.createElement('option');
+                opt.value = pair[0];
+                opt.textContent = pair[1];
+                srcSelect.appendChild(opt);
+            });
+            srcSelect.value = goal.source;
+            srcSelect.addEventListener('change', function () {
+                goal.source = srcSelect.value;
+                saveGoals();
+                renderGoalsConfig();
+                initGoalsPreviewFrame();
+            });
+            srcRow.appendChild(srcSelect);
+            config.appendChild(srcRow);
+        }
+
+        // Target
+        var targetRow = document.createElement('div');
+        targetRow.className = 'arcade-alert-row';
+        var targetLabel = document.createElement('label');
+        targetLabel.textContent = 'Target';
+        targetRow.appendChild(targetLabel);
+        var targetInput = document.createElement('input');
+        targetInput.type = 'number';
+        targetInput.min = '1';
+        targetInput.step = '1';
+        targetInput.value = String(goal.target);
+        targetInput.addEventListener('change', function () {
+            var v = Math.max(1, Math.round(Number(targetInput.value) || 0));
+            targetInput.value = String(v);
+            goal.target = v;
+            saveGoals();
+            renderGoalsList();
+            initGoalsPreviewFrame();
+        });
+        targetRow.appendChild(targetInput);
+        config.appendChild(targetRow);
+
+        // Starting count (subs/sats/custom)
+        if (goal.type === 'subs' || goal.type === 'sats' || goal.type === 'custom') {
+            var curRow = document.createElement('div');
+            curRow.className = 'arcade-alert-row';
+            var curLabel = document.createElement('label');
+            curLabel.textContent = 'Starting count';
+            curRow.appendChild(curLabel);
+            var curInput = document.createElement('input');
+            curInput.type = 'number';
+            curInput.min = '0';
+            curInput.step = '1';
+            curInput.value = String(goal.current);
+            curInput.title = 'Baked into the overlay URL — the overlay adds what it sees on top';
+            curInput.addEventListener('change', function () {
+                var v = Math.max(0, Math.round(Number(curInput.value) || 0));
+                curInput.value = String(v);
+                goal.current = v;
+                saveGoals();
+                initGoalsPreviewFrame();
+            });
+            curRow.appendChild(curInput);
+            config.appendChild(curRow);
+            var curHint = document.createElement('div');
+            curHint.className = 'arcade-evt-cond__hint';
+            curHint.textContent = 'Baked into the URL — after changing it, copy the overlay URL again for OBS.';
+            config.appendChild(curHint);
+        }
+
+        // Fill color (optional style knob, scoped)
+        var fillRow = document.createElement('div');
+        fillRow.className = 'arcade-alert-row';
+        var fillLabel = document.createElement('label');
+        fillLabel.textContent = 'Fill color';
+        fillRow.appendChild(fillLabel);
+        var fillInput = document.createElement('input');
+        fillInput.type = 'text';
+        fillInput.autocomplete = 'off';
+        fillInput.placeholder = '#35d0ff (default)';
+        fillInput.value = goal.fill;
+        fillInput.title = 'Any CSS color — rides the overlay’s own &fillcolor= param';
+        fillInput.addEventListener('input', debounce(function () {
+            goal.fill = fillInput.value.trim().slice(0, 40);
+            saveGoals();
+            queueGoalsPreviewReload();
+        }, 300));
+        fillRow.appendChild(fillInput);
+        config.appendChild(fillRow);
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'arcade-btn arcade-btn--sm arcade-evt-remove';
+        removeBtn.textContent = 'Remove goal';
+        removeBtn.addEventListener('click', function () {
+            if (!removeBtn.dataset.armed) { // confirm-on-second-click, S47 idiom
+                removeBtn.dataset.armed = '1';
+                removeBtn.textContent = 'Click again to remove';
+                setTimeout(function () {
+                    removeBtn.dataset.armed = '';
+                    if (document.body.contains(removeBtn)) removeBtn.textContent = 'Remove goal';
+                }, 3000);
+                return;
+            }
+            goalsDoc = goalsDoc.filter(function (g) { return g.id !== goal.id; });
+            saveGoals();
+            goalsSelectedId = goalsDoc.length ? goalsDoc[0].id : null;
+            renderGoalsList();
+            renderGoalsConfig();
+            initGoalsPreviewFrame();
+        });
+        doors.appendChild(removeBtn);
+        config.appendChild(doors);
+    }
+
+    // --------------------------------------------------------------------
+    // Preview (isolated demo — goal-bar.html?demo=partial, ZERO network, no
+    // session at all) and Copy overlay URL (the real session, never &demo) —
+    // the ruled mirror pair.
+    // --------------------------------------------------------------------
+    var goalsPreviewTimer = null;
+
+    function queueGoalsPreviewReload() {
+        clearTimeout(goalsPreviewTimer);
+        goalsPreviewTimer = setTimeout(initGoalsPreviewFrame, 500);
+    }
+
+    function goalParams(goal, forLive) {
+        var params = [];
+        params.push('type=' + encodeURIComponent(goal.type));
+        params.push('label=' + encodeURIComponent(goal.label));
+        params.push('target=' + encodeURIComponent(String(goal.target)));
+        if (goal.source) params.push('source=' + encodeURIComponent(goal.source));
+        if (goal.fill) params.push('fillcolor=' + encodeURIComponent(goal.fill));
+        if (goal.type === 'subs' || goal.type === 'sats' || goal.type === 'custom') {
+            params.push('current=' + encodeURIComponent(String(goal.current)));
+        }
+        if (!forLive) params.push('demo=partial'); // preview = zero-network demo of the look
+        var langParams = (typeof window.getLanguageExtraParams === 'function') ? window.getLanguageExtraParams() : [];
+        return params.concat(langParams);
+    }
+
+    function initGoalsPreviewFrame() {
+        var frame = document.getElementById('arcade-goals-preview-frame');
+        if (!frame) return;
+        var goal = selectedGoal();
+        if (!goal) { frame.removeAttribute('src'); return; }
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        // No session param at all — demo mode never joins anything (the
+        // overlay's own honest no-session state is bypassed by &demo).
+        resolver('goal-bar.html', { extraParams: goalParams(goal, false) }).then(function (resolved) {
+            if (resolved && resolved.url) frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] goals preview resolve failed:', e); });
+    }
+
+    function buildGoalsOverlayUrl() {
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return Promise.reject(new Error('overlay resolver unavailable'));
+        var goal = selectedGoal();
+        if (!goal) return Promise.reject(new Error('no goal selected'));
+        function withSession(sessionId) {
+            var params = [];
+            if (sessionId) params.push('session=' + encodeURIComponent(sessionId));
+            params = params.concat(goalParams(goal, true));
+            return resolver('goal-bar.html', { extraParams: params }).then(function (resolved) {
+                return resolved && resolved.url;
+            });
+        }
+        if (typeof window.getChatDockSessionId === 'function') {
+            try {
+                return Promise.resolve(window.getChatDockSessionId()).then(withSession, function () { return withSession(null); });
+            } catch (e) {
+                return withSession(null);
+            }
+        }
+        return withSession(null);
+    }
+
+    function copyGoalsOverlayUrl(btn) {
+        if (!selectedGoal()) {
+            setGoalsStatus('select a goal first', true);
+            return;
+        }
+        buildGoalsOverlayUrl().then(function (url) {
+            if (!url) throw new Error('no url');
+            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
+        }).catch(function (e) {
+            console.error('[arcade-shell] copy goal overlay url failed:', e);
+            flashButton(btn, 'Copy failed', 2200);
         });
     }
 
@@ -8462,6 +9890,8 @@
         buildStylePanel();
         buildAlertsPanel();
         buildGamesPanel(); // S48 — the hub panel exists from boot; contents lazy (ensureGamesPanelLive on first visit)
+        buildCommandsPanel(); // S49 — commands + timers; contents lazy (ensureCommandsPanelLive on first visit)
+        buildGoalsPanel();    // S49 — goal bars; contents lazy (ensureGoalsPanelLive on first visit)
         if (CUSTOM_TABS.ai) buildAiPanel();
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pac's Arcade — Goal Bar</title>
+<!--
+  ============================================================================
+  PAC'S ARCADE — GOAL BAR (goal-bar.html)   [S49, TASK-46 — Lane 2, NEW BUILD]
+
+  OBS browser source. A single progress bar: label · current/target · fill.
+  DISPLAY-ONLY. Real numbers or dashes, never an estimate (house honest-time
+  law): every value this page shows was either observed on the session feed
+  or baked into the URL by the operator. Unknown renders a dash-face + an
+  empty bar.
+
+  WHERE EACH TYPE'S NUMBER COMES FROM (measured, no invention):
+    followers  follower_updates broadcasts — aggregated per-platform totals
+               from background.js's metaDataStore (publish seam added S49;
+               the counts themselves are real per-platform reports, e.g.
+               Twitch's Helix poll, Kick's follow summary).
+    viewers    viewer_updates broadcasts — the stock aggregated live-viewer
+               counts (background.js publishViewerCountsFromMetaStore;
+               documented sample payload in the bundle AGENTS.md). A CURRENT
+               reading — never a 30-day average.
+    subs       subscription events observed on the session feed (event-name
+               set below, from multi-alerts.js:55-80) counted from page load,
+               on top of &current= (your manual starting count).
+    sats       tip events (hasDonation/donoValue leading number — the same
+               naive extraction tipjar-mini.html documents) added on top of
+               &current=.
+    custom     &current= is the whole value — you advance it.
+
+  Transport: the SAME house session-connection pattern as tipjar-mini.html /
+  hype.html — a hidden vdo.socialstream.ninja P2P bridge iframe (session
+  join) delivering the identical message shape every SSN overlay consumes.
+  No new pipeline invented. In demo mode there is NO network at all.
+
+  THIS PAGE DOES NO WALLET / ON-CHAIN / PAYMENT OPERATIONS OF ANY KIND.
+  "Sats" here means a number on a bar, not money movement.
+
+  ── FULL URL PARAM LIST ──────────────────────────────────────────────────────
+  session / s / id   SSN session ID (REQUIRED for live mode — no default room
+                      is guessed; missing it renders an honest "no session"
+                      state rather than silently joining a shared room)
+  type        followers | viewers | subs | sats | custom   (default custom)
+  label       text label above the bar (default "Goal")
+  target      numeric goal (default 100; minimum 1)
+  current     manual starting count (subs/sats/custom; default 0)
+  source      platform filter for followers/viewers, e.g. "twitch", "kick"
+              (default "" — all platforms summed)
+  demo        zero | partial | unknown — a clearly-fake static state for
+              styling/screenshots; NO session join, NO network at all
+  fillcolor   CSS color for the bar fill (default #35d0ff — the house cyan)
+  bg          CSS color OR "transparent" (default transparent — OBS-safe)
+  width       px max-width of the widget (default 340)
+  pad         px inner padding (default 14)
+  radius      px outer corner radius (default 14)
+  css / b64css  house CSS-override params, same as every other overlay page
+  password    P2P bridge password, same convention as every SSN overlay
+  ─────────────────────────────────────────────────────────────────────────────
+  Honest states: dash-face + empty bar until a real value exists (followers/
+  viewers before the first broadcast; any type with no session). prefers-
+  reduced-motion: the fill transition is removed — updates just appear.
+  ============================================================================
+-->
+<style>
+  :root {
+    --bg: transparent;
+    --line: #2a3040;
+    --text: #e8eaf0;
+    --text-dim: #9aa3b5;
+    --fill: #35d0ff;   /* house cyan — a goal is not money (gold stays locked) */
+    --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono-font: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--ui-font); }
+
+  #widget {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--bg);
+    border-radius: var(--radius, 14px);
+    padding: var(--pad, 14px);
+    max-width: var(--width, 340px);
+    color: var(--text);
+  }
+  #head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  #label {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* tabular-nums — the S44 ticker rule: numbers never jiggle the layout */
+  #value {
+    font-family: var(--mono-font);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  #value .cur { color: var(--text); font-weight: 700; }
+  #value.is-dash .cur { color: var(--text-dim); font-weight: 400; }
+
+  #bar {
+    height: 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  #barFill {
+    height: 100%;
+    width: 0%;
+    background: var(--fill);
+    border-radius: 999px;
+    transition: width 600ms ease;
+  }
+  #widget.reduced-motion #barFill { transition: none; }
+
+  #note {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  #note.hidden { display: none; }
+
+  /* Demo mode wears a visible DEMO ribbon — a styled fake never masquerades
+     as a live reading. */
+  #demoTag {
+    display: none;
+    align-self: flex-end;
+    font: 700 9px/1 var(--ui-font);
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 2px 5px;
+  }
+  #widget.demo #demoTag { display: inline-block; }
+</style>
+</head>
+<body>
+<div id="widget">
+  <div id="head">
+    <span id="label">Goal</span>
+    <span id="value"><span class="cur">—</span> / <span class="tgt">—</span></span>
+  </div>
+  <div id="bar"><div id="barFill"></div></div>
+  <div id="note" class="hidden"></div>
+  <span id="demoTag">DEMO</span>
+</div>
+
+<script>
+"use strict";
+/* Chrome-80-friendly ES5, per the bundle's agent notes. */
+var P = new URLSearchParams(window.location.search);
+
+function param(name, fallback) {
+  var v = P.get(name);
+  return (v === null || v === "") ? fallback : v;
+}
+function num(v, fallback) {
+  var n = parseFloat(v);
+  return isNaN(n) ? fallback : n;
+}
+
+var VALID_TYPES = { followers: 1, viewers: 1, subs: 1, sats: 1, custom: 1 };
+var DEMO_STATES = { zero: 1, partial: 1, unknown: 1 };
+var demoMode = DEMO_STATES[param("demo", "")] ? param("demo", "") : null;
+
+var cfg = {
+  type: VALID_TYPES[param("type", "custom")] ? param("type", "custom") : "custom",
+  label: param("label", "Goal"),
+  target: Math.max(1, Math.round(num(param("target", "100"), 100))),
+  current: Math.max(0, num(param("current", "0"), 0)),
+  source: param("source", "").toLowerCase(),
+  fillcolor: param("fillcolor", ""),
+  bg: param("bg", "transparent"),
+  width: param("width", ""),
+  pad: param("pad", ""),
+  radius: param("radius", ""),
+  password: param("password", "false")
+};
+var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---- house CSS-override params (&css= / &b64css=), same as every overlay */
+if (P.has("css")) {
+  var cssLink = document.createElement("link");
+  cssLink.rel = "stylesheet"; cssLink.type = "text/css"; cssLink.media = "screen";
+  cssLink.href = decodeURI(P.get("css"));
+  document.head.appendChild(cssLink);
+}
+(function () {
+  var b64 = P.get("b64css") || P.get("base64css") || P.get("cssbase64") || P.get("cssb64");
+  if (!b64) return;
+  try {
+    var css = decodeURIComponent(atob(b64));
+    var style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+  } catch (e) { console.error(e); }
+})();
+
+/* ---- apply styling ------------------------------------------------------ */
+var w = document.getElementById("widget");
+var root = document.documentElement.style;
+if (reducedMotion) w.classList.add("reduced-motion");
+if (demoMode) w.classList.add("demo");
+root.setProperty("--width", (cfg.width || "340") + "px");
+root.setProperty("--pad", (cfg.pad || "14") + "px");
+root.setProperty("--radius", (cfg.radius || "14") + "px");
+root.setProperty("--bg", cfg.bg === "transparent" ? "transparent" : cfg.bg);
+if (cfg.fillcolor) root.setProperty("--fill", cfg.fillcolor);
+
+var labelEl = document.getElementById("label");
+var valueEl = document.getElementById("value");
+var curEl = valueEl.querySelector(".cur");
+var tgtEl = valueEl.querySelector(".tgt");
+var barFillEl = document.getElementById("barFill");
+var noteEl = document.getElementById("note");
+labelEl.textContent = cfg.label;
+tgtEl.textContent = cfg.target.toLocaleString(undefined);
+
+/* ---- state + render -------------------------------------------------------
+   value === null means UNKNOWN — the dash-face, never an estimate. */
+var value = (cfg.type === "followers" || cfg.type === "viewers") ? null : cfg.current;
+
+function render() {
+  if (value === null) {
+    curEl.textContent = "—";
+    valueEl.classList.add("is-dash");
+    barFillEl.style.width = "0%";
+    return;
+  }
+  curEl.textContent = Math.round(value).toLocaleString(undefined);
+  valueEl.classList.remove("is-dash");
+  var pct = Math.max(0, Math.min(100, (value / cfg.target) * 100));
+  barFillEl.style.width = pct + "%";
+}
+
+function setNote(text) {
+  if (!text) { noteEl.classList.add("hidden"); return; }
+  noteEl.textContent = text;
+  noteEl.classList.remove("hidden");
+}
+
+/* ---- subscription event names (multi-alerts.js:55-80, trimmed to the ones
+   that mean "a sub happened", with the same alias coverage) ------------- */
+var SUB_EVENTS = {
+  "new_subscriber": 1, "new-subscriber": 1, "subscription": 1,
+  "subscription_gift": 1, "subgift": 1, "resub": 1,
+  "sponsorship": 1, "new_member": 1, "new_membership": 1, "newmember": 1,
+  "giftpurchase": 1, "giftredemption": 1
+};
+
+/* ---- donation extraction — the tipjar-mini convention, verbatim --------- */
+function getDonationRaw(data) {
+  return data.hasDonation || data.donation || data.donationAmount || data.donoValue || "";
+}
+function extractLeadingNumber(text) {
+  var m = String(text || "").match(/[\d,]+(?:\.\d+)?/);
+  if (!m) return 0;
+  var n = parseFloat(m[0].replace(/,/g, ""));
+  return isNaN(n) || n <= 0 ? 0 : n;
+}
+
+/* ---- aggregated-count handling (viewer_updates / follower_updates) ------ */
+function sumMeta(meta) {
+  if (!meta || typeof meta !== "object") return null;
+  var total = 0, seen = false;
+  for (var k in meta) {
+    if (!Object.prototype.hasOwnProperty.call(meta, k)) continue;
+    if (cfg.source && String(k).toLowerCase() !== cfg.source) continue;
+    var n = parseInt(meta[k], 10);
+    if (isFinite(n)) { total += n; seen = true; }
+  }
+  return seen ? total : null;
+}
+
+function processInput(data) {
+  if (!data || typeof data !== "object") return;
+  var evt = typeof data.event === "string" ? data.event.toLowerCase() : "";
+  if (cfg.type === "viewers" && evt === "viewer_updates") {
+    /* The broadcast is a COMPLETE snapshot of what the app currently holds —
+       assign-always, including null: a platform that disappears from the
+       store wipes the bar back to the honest dash (stale values are never
+       kept; the house honest-time law). */
+    value = sumMeta(data.meta);
+    render();
+    return;
+  }
+  if (cfg.type === "followers" && evt === "follower_updates") {
+    value = sumMeta(data.meta);
+    render();
+    return;
+  }
+  if (cfg.type === "subs" && SUB_EVENTS[evt]) {
+    value += 1;
+    render();
+    return;
+  }
+  if (cfg.type === "sats") {
+    var raw = getDonationRaw(data);
+    if (!raw) return;
+    var n = extractLeadingNumber(raw);
+    if (n > 0) { value += n; render(); }
+  }
+  /* custom: nothing on the feed advances it — the URL is the truth. */
+}
+
+/* ---- demo states: clearly-fake, static, ZERO network --------------------- */
+if (demoMode) {
+  if (demoMode === "zero") value = 0;
+  else if (demoMode === "partial") value = Math.max(1, Math.round(cfg.target * 0.4));
+  else value = null; // unknown — the honest dash-face
+  render();
+  if (demoMode === "unknown") setNote("No reading yet — the bar waits for real numbers.");
+} else {
+  /* ---- session resolution — REQUIRED, no default room is guessed -------- */
+  var roomID = P.get("session") || P.get("s") || P.get("id") || "";
+  if (!roomID) {
+    value = null;
+    render();
+    setNote("No session configured");
+  } else {
+    render();
+
+    /* P2P bridge — same vdo.socialstream.ninja pattern as tipjar-mini.html /
+       hype.html, same iframe + message-listener shape; the label marks this
+       feed. This iframe is the page's ONLY network use in live mode. */
+    var iframe = document.createElement("iframe");
+    iframe.src = "https://vdo.socialstream.ninja/?ln&salt=vdo.ninja&password=" +
+      encodeURIComponent(cfg.password) + "&solo&view=" + roomID +
+      "&novideo&noaudio&label=goalbar&cleanoutput&room=" + roomID;
+    iframe.style.width = "0px";
+    iframe.style.height = "0px";
+    iframe.style.position = "fixed";
+    iframe.style.left = "-100px";
+    iframe.style.top = "-100px";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+    iframe.style.visibility = "hidden";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.setAttribute("tabindex", "-1");
+    document.body.appendChild(iframe);
+    window.addEventListener("message", function (e) {
+      if (e.source !== iframe.contentWindow) return;
+      if (e.data && typeof e.data === "object" && e.data.dataReceived && typeof e.data.dataReceived === "object") {
+        if ("overlayNinja" in e.data.dataReceived) {
+          processInput(e.data.dataReceived.overlayNinja);
+        }
+      }
+    });
+  }
+}
+</script>
+</body>
+</html>
