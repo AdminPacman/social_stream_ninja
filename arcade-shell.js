@@ -4356,7 +4356,7 @@
         { id: 'chatgarden', file: 'games/chatgarden.html', emoji: '🌻', name: 'Chat Garden', blurb: 'Viewers grow virtual plants by chatting.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
         { id: 'pixelbattle', file: 'games/pixelbattle.html', emoji: '🎨', name: 'Pixel Battle', blurb: 'Collaborative pixel art, one chat message at a time.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
         { id: 'memorylane', file: 'games/memorylane.html', emoji: '📷', name: 'Memory Lane', blurb: 'Nostalgic photo stories drawn from chat.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
-        { id: 'rhythmpulse', file: 'games/rhythmpulse.html', emoji: '🎵', name: 'Rhythm Pulse', blurb: 'Chat builds musical beats together.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'rhythmpulse', file: 'games/rhythmpulse.html', emoji: '🎵', name: 'Rhythm Pulse', blurb: 'Chat builds musical beats together.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false, sound: true },
         { id: 'petrace', file: 'games/petrace.html', emoji: '🏁', name: 'Pet Race', blurb: 'Viewers join the race and their pets run for the finish.', cmds: ['!join'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
         { id: 'wordchain', file: 'games/wordchain.html', emoji: '🔤', name: 'Word Chain', blurb: 'A word-puzzle chain carried by chat.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false, transparent: true },
         { id: 'emojitower', file: 'games/emojitower.html', emoji: '🏗️', name: 'Emoji Tower', blurb: 'Chat drops emojis onto a growing tower — gravity is rude.', cmds: ['!drop'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
@@ -4879,12 +4879,14 @@
         if (game.dark && st.dark) params.push('darkmode');
         var suffix = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
         if (game.cmdsuffix && suffix) params.push('cmdsuffix=' + encodeURIComponent(suffix));
+        if (game.sound) params.push('nosound'); // TASK-66 — previews are silent too (quiet-cabinet law, same class)
         return params;
     }
 
     function initGamesPreviewFrame() {
         var frame = document.getElementById('arcade-games-preview-frame');
         if (!frame || !gamesPanelLive) return;
+        frame.setAttribute('allow', "autoplay 'none'"); // TASK-66 — preview demos are silent (master-mute floor)
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') {
             setGamesPreviewHint('preview unavailable (app helpers not found)');
@@ -5014,6 +5016,23 @@
     // (Add to shelf) lands focus on the new shelf row — the destination.
     // --------------------------------------------------------------------
     var gamePickerKeydown = null; // document Escape listener while the cabinet is open
+    var cabSoundOn = false;       // TASK-66 — cabinet sound is OFF by default; the toggle is per-cabinet, never persisted
+
+    // The quiet-cabinet law (TASK-66): demo frames are SILENT by default.
+    // Two layers: a cabinet-level master mute (Permissions-Policy autoplay
+    // 'none' — the floor, catches anything that would autoplay audio) and a
+    // per-game param where the game really supports one (rhythmpulse reads
+    // &nosound — it's the one game with Web Audio, grep-verified).
+    function cabFrameAllow() {
+        return cabSoundOn ? 'autoplay *' : "autoplay 'none'";
+    }
+
+    function cabDemoParams(game) {
+        var params = ['session=' + encodeURIComponent(gamesPreviewRoom)];
+        if (game.demo) params.push('demo'); // the cabinet always demos
+        if (game.sound && !cabSoundOn) params.push('nosound');
+        return params;
+    }
 
     function openGamePicker() {
         closeGamePicker(false);
@@ -5032,8 +5051,34 @@
         modal.appendChild(title);
         var blurb = document.createElement('p');
         blurb.className = 'arcade-evt-modal__blurb';
-        blurb.textContent = 'Every cabinet runs the game’s own isolated demo — never your live session.';
+        blurb.textContent = 'Every cabinet runs the game’s own isolated demo — never your live session. Demos are silent by default.';
         modal.appendChild(blurb);
+        var soundBtn = document.createElement('button');
+        soundBtn.type = 'button';
+        soundBtn.className = 'arcade-btn arcade-btn--sm arcade-game-cab__sound';
+        soundBtn.setAttribute('aria-pressed', 'false');
+        soundBtn.textContent = '🔇 Cabinet sound: off';
+        soundBtn.title = 'Default silent — unmute the demos on this cabinet only (never saved)';
+        soundBtn.addEventListener('click', function () {
+            cabSoundOn = !cabSoundOn;
+            soundBtn.setAttribute('aria-pressed', String(cabSoundOn));
+            soundBtn.textContent = cabSoundOn ? '🔊 Cabinet sound: on' : '🔇 Cabinet sound: off';
+            // The allow attribute only applies at navigation — re-src every
+            // loaded demo so the flip takes effect honestly.
+            pendingFrames.forEach(function (entry) {
+                entry.frame.setAttribute('allow', cabFrameAllow());
+                if (entry.loaded) {
+                    entry.loaded = false;
+                    var params = cabDemoParams(entry.game);
+                    resolver(entry.game.file, { extraParams: params }).then(function (resolved) {
+                        if (!resolved || !resolved.url) return;
+                        entry.url = resolved.url;
+                        loadCabFrame(entry);
+                    });
+                }
+            });
+        });
+        modal.appendChild(soundBtn);
         var grid = document.createElement('div');
         grid.className = 'arcade-game-cabinet';
         modal.appendChild(grid);
@@ -5056,6 +5101,7 @@
             frame.className = 'arcade-game-cab__demo';
             frame.title = game.name + ' — demo';
             frame.setAttribute('loading', 'lazy');
+            frame.setAttribute('allow', cabFrameAllow()); // quiet-cabinet master mute
             card.appendChild(frame);
             pendingFrames.push({ frame: frame, game: game });
             var cabBlurb = document.createElement('div');
@@ -5105,8 +5151,7 @@
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') return;
         pendingFrames.forEach(function (entry) {
-            var params = ['session=' + encodeURIComponent(gamesPreviewRoom)];
-            if (entry.game.demo) params.push('demo'); // the cabinet always demos
+            var params = cabDemoParams(entry.game);
             resolver(entry.game.file, { extraParams: params }).then(function (resolved) {
                 if (!resolved || !resolved.url) return;
                 entry.url = resolved.url;
@@ -6706,7 +6751,9 @@
     // arcadeGameShelf/arcadeGameCmdSuffix/arcadeGameStyle/arcadePointsUnlocks/
     // arcadeGoals) untouched.
     // --------------------------------------------------------------------
-    var HOUSE_VDO_BASE = 'https://vdo.pacsarcade.com/'; // S41 gate-scoped repoint (vdo.html:356 rides the same host)
+    var HOUSE_VDO_BASE = 'https://vdo.pacsarcade.com/'; // S41 gate-scoped repoint — since TASK-66 the DEFAULT value of the VDO-instance setting, not the only value
+    var STOCK_VDO_BASE = 'https://vdo.ninja/';          // Steve's hosted instance — always selectable
+    var VDO_BASE_KEY = 'arcadeVdoBase';                 // NEW (TASK-66) — canonical setting: '' = house default, else a validated https URL
     var FRAMES_GUESTS_KEY = 'arcadeFrameGuests';
     var FRAME_STYLE_KEY = 'arcadeFrameStyle';
     var TIP_RAILS_KEY = 'arcadeTipRails';
@@ -6727,6 +6774,7 @@
     var frameStyleDoc = { preset: FRAME_PRESET_DEFAULT, color: '#33d6ff', width: 4, radius: 10 };
     var tipRails = { lightning: '', npub: '', lud16: '' };
     var framesRoom = '';             // derived from the session id every visit — never persisted
+    var framesVdoBaseSetting = '';   // '' = house default; else a validated https://…/ URL (the arcadeVdoBase setting)
     var framesSelectedKey = FRAMES_DEVICE_KEY;
     var framesScopedGuest = '';      // guest slug the Frames zone is scoped to ('' = any source)
     var tipjarSelectedKey = TIPJAR_RAILS_KEY;
@@ -6751,15 +6799,30 @@
         return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
     }
 
+    // TASK-66 — the VDO instance is a CHOICE, not a constant. Shape law:
+    // https only, host (+optional port), root path. Anything else is refused
+    // honestly — the composed links never carry a shape we didn't validate.
+    function validateVdoBase(raw) {
+        var v = String(raw || '').trim();
+        if (!v) return '';
+        if (v.length > 120) return null;
+        if (!/^https:\/\/[a-z0-9.-]+(?::[0-9]{2,5})?\/?$/i.test(v)) return null;
+        return v.replace(/\/?$/, '/');
+    }
+
+    function vdoBase() {
+        return framesVdoBaseSetting || HOUSE_VDO_BASE;
+    }
+
     function guestInviteUrl(name) {
         if (!framesRoom) return '';
-        return HOUSE_VDO_BASE + '?room=' + encodeURIComponent(framesRoom) +
+        return vdoBase() + '?room=' + encodeURIComponent(framesRoom) +
             '&push=' + encodeURIComponent(guestSlug(name)) + '&webcam&label=' + encodeURIComponent(name);
     }
 
     function guestSoloUrl(name) {
         if (!framesRoom) return '';
-        return HOUSE_VDO_BASE + '?room=' + encodeURIComponent(framesRoom) +
+        return vdoBase() + '?room=' + encodeURIComponent(framesRoom) +
             '&view=' + encodeURIComponent(guestSlug(name)) + '&solo&cleanoutput';
     }
 
@@ -6807,6 +6870,10 @@
                                     radius: Math.max(0, Math.min(32, Math.round(Number(styleDoc.radius) || 0)))
                                 };
                             }
+                            var vdoEntry = settings[VDO_BASE_KEY];
+                            var vdoRaw = (vdoEntry && typeof vdoEntry.textparam1 === 'string') ? vdoEntry.textparam1 : '';
+                            var vdoValid = validateVdoBase(vdoRaw);
+                            framesVdoBaseSetting = (vdoValid === null) ? '' : vdoValid; // a corrupt stored shape falls back to the house default honestly
                         } catch (e) { console.error('[arcade-shell] frames settings parse failed:', e); }
                         resolve();
                     });
@@ -6985,7 +7052,7 @@
         host.appendChild(title);
         var hint = document.createElement('p');
         hint.className = 'arcade-style-hint';
-        hint.textContent = 'Open the camera link on the device (or scan the QR) and it starts broadcasting; the OBS link is the receive side for your browser source. Links are house-VDO (vdo.pacsarcade.com).';
+        hint.textContent = 'Open the camera link on the device (or scan the QR) and it starts broadcasting; the OBS link is the receive side for your browser source. Links ride your chosen VDO instance (' + vdoBase() + ' — Deck Settings → Connections).';
         host.appendChild(hint);
         var frameWrap = document.createElement('div');
         frameWrap.className = 'arcade-frames-device';
@@ -6996,8 +7063,18 @@
         host.appendChild(frameWrap);
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver === 'function') {
-            resolver('vdo.html', { extraParams: [] }).then(function (resolved) {
-                if (resolved && resolved.url) frame.src = resolved.url;
+            // TASK-66 — the embedded vdo page reads &base= (validated there,
+            // falling back to its built-in house default); the page mints its
+            // own publish id, so its links/QR are masked by the same dress.
+            resolver('vdo.html', { extraParams: ['base=' + encodeURIComponent(vdoBase())] }).then(function (resolved) {
+                if (resolved && resolved.url) {
+                    frame.dataset.ssappOrigin = resolved.origin || '';
+                    frame.addEventListener('load', function () {
+                        injectDressIntoFrame(frame, 'arcade-dress-vdo', DRESS_VDO_CSS);
+                        maskSessionIdSurfaces(frame.contentDocument, null);
+                    });
+                    frame.src = resolved.url;
+                }
             }).catch(function (e) { console.error('[arcade-shell] device page resolve failed:', e); });
         }
         // HONESTY FENCE H11 (S41 lane 4, verbatim law) — carried on the UI.
@@ -7124,7 +7201,14 @@
         input.type = 'text';
         input.readOnly = true;
         input.value = url;
-        input.setAttribute('aria-label', labelText);
+        input.setAttribute('aria-label', labelText + ' — hidden, focus or hover to reveal, click to copy');
+        input.title = 'Click to copy';
+        // TASK-66 — the room inside these links derives from the session id,
+        // so the whole link goes quiet (the copy still carries the real one).
+        input.classList.add('arcade-masked-value');
+        input.addEventListener('click', function () {
+            copyToClipboard(url).then(function () { setFramesStatus('Copied ✓ — ' + labelText.toLowerCase()); });
+        });
         row.appendChild(input);
         var copyBtn = document.createElement('button');
         copyBtn.type = 'button';
@@ -10521,7 +10605,15 @@
         '.glowingButton { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; color: #f2f0ea; }',
         '.glowingButton:before, .glowingButton:after { background: rgba(53, 208, 255, 0.16); border-radius: 6px; }',
         '#searchInput { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; color: #f2f0ea; }',
-        '#searchInput::placeholder { color: #9ba1ad; }'
+        '#searchInput::placeholder { color: #9ba1ad; }',
+        /* TASK-66 — the session id goes quiet: the mask class (JS pass adds it
+           wherever the id renders) + the raw session field itself, which
+           popup.js fills asynchronously (popup.js:3984) — CSS catches the
+           late set with zero timing. */
+        '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;cursor:pointer;}',
+        '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}',
+        '#sessionid{filter:blur(6px);transition:filter .15s ease;}',
+        '#sessionid:hover,#sessionid:focus{filter:none;}'
     ].join('\n');
 
     var DRESS_DASHBOARD_CSS = [
@@ -10583,9 +10675,15 @@
            real text, 4.5:1 law. */
         '#connection-status .status-item[style] { color: #9ba1ad !important; }',
         '.status-warning { background-color: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }',
-        '#session-id { filter: blur(6px); border-radius: 3px; }',
-        '#session-id:hover { filter: none; }',
-        '#debugOutput { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; }',
+        '#session-id { filter: blur(6px); border-radius: 3px; cursor: pointer; }',
+        '#session-id:hover, #session-id:focus { filter: none; }',
+        /* TASK-66 — the boot JSON inside #debugOutput prints the id in
+           plaintext (the S32 trap): token CSS can't mask log TEXT, so the
+           whole log pane goes quiet with the same hover/focus peek. */
+        '#debugOutput { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; filter: blur(6px); transition: filter .15s ease; }',
+        '#debugOutput:hover, #debugOutput:focus { filter: none; }',
+        '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;cursor:pointer;}',
+        '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}',
         '.log-message { color: #9ba1ad; }',
         '.error-message { background: rgba(229, 104, 107, 0.10); color: #e5686b; border-left-color: #e5686b; }',
         '.message { background: #191c22; border-left-color: #35d0ff; }',
@@ -10633,7 +10731,15 @@
         /* the stock hero art (media/vdo.png) ships with an invalid inline style
            (`style="calc(50vw - 40px)"`, ignored) and renders at natural size —
            cap it to its panel. */
-        '.qr-code-panel img { max-width: 100%; height: auto; border-radius: 6px; }'
+        '.qr-code-panel img { max-width: 100%; height: auto; border-radius: 6px; }',
+        /* TASK-66 — the page's own publish id is a credential too (a QR IS the
+           id): links and the code go quiet with the house peek idiom. */
+        '#guest-link, #obs-link { filter: blur(6px); transition: filter .15s ease; }',
+        '#guest-link:hover, #guest-link:focus, #obs-link:hover, #obs-link:focus { filter: none; }',
+        '#qrcode { filter: blur(8px); transition: filter .15s ease; border-radius: 6px; }',
+        '#qrcode:hover, #qrcode:focus, #qrcode:focus-within { filter: none; }',
+        '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;cursor:pointer;}',
+        '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}'
     ].join('\n');
 
     var DRESS_WELCOME_CSS = [
@@ -10690,10 +10796,132 @@
         });
     }
 
+    // --------------------------------------------------------------------
+    // TASK-66 — the session id goes quiet on EVERY surface. The S51 blur
+    // idiom (mask class + hover/focus peek) generalized into one pass that
+    // runs inside any same-origin stock document: text nodes and input
+    // VALUES carrying the id (or its lowercase/derived-room forms — the S50
+    // mask-sweep trap) get the mask class; text carriers also get keyboard
+    // focusability + click-to-copy (copies the REAL id). Stock pages fill
+    // some of these asynchronously, so callers re-run the pass on a short
+    // schedule — the pass is idempotent (dataset guard).
+    // --------------------------------------------------------------------
+    var shellSessionIdCache = '';
+    function withShellSessionId(cb) {
+        if (shellSessionIdCache) { cb(shellSessionIdCache); return; }
+        try {
+            if (typeof window.getChatDockSessionId === 'function') {
+                Promise.resolve(window.getChatDockSessionId()).then(function (id) {
+                    shellSessionIdCache = String(id || '');
+                    cb(shellSessionIdCache);
+                }, function () { cb(''); });
+                return;
+            }
+        } catch (e) { /* fall through */ }
+        cb('');
+    }
+
+    function maskSessionIdSurfaces(doc, root) {
+        if (!doc) return;
+        withShellSessionId(function (id) {
+            if (!id) return;
+            // S50 sweep list: the id, its lowercase form, and the derived
+            // guest-room id (ssn-<lower>) — any of them IS the session.
+            var clean = id.toLowerCase().replace(/[^a-z0-9]/g, '');
+            var needles = [id];
+            if (id.toLowerCase() !== id) needles.push(id.toLowerCase());
+            if (clean) needles.push('ssn-' + clean.slice(0, 32));
+            var scope = root || doc.body;
+            if (!scope) return;
+            var mark = function (el) {
+                if (!el || el.nodeType !== 1) return;
+                if (el.dataset && el.dataset.arcadeMasked === '1') return;
+                el.classList.add('arcade-deck-masked');
+                if (el.dataset) el.dataset.arcadeMasked = '1';
+                if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+                    if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+                    el.setAttribute('aria-label', 'Hidden session value — focus or hover to reveal, click to copy');
+                    el.addEventListener('click', function () {
+                        copyToClipboard(id).then(function () {
+                            var old = el.title;
+                            el.title = 'Copied ✓';
+                            setTimeout(function () { el.title = old; }, 1200);
+                        });
+                    });
+                } else if (el.readOnly) {
+                    el.addEventListener('click', function () {
+                        copyToClipboard(id).then(function () {
+                            var old = el.title;
+                            el.title = 'Copied ✓';
+                            setTimeout(function () { el.title = old; }, 1200);
+                        });
+                    });
+                }
+            };
+            try {
+                var walker = doc.createTreeWalker(scope, 4 /* SHOW_TEXT */, null);
+                var node;
+                var touched = [];
+                while ((node = walker.nextNode())) {
+                    if (!node.nodeValue) continue;
+                    var hit = needles.some(function (n) { return node.nodeValue.indexOf(n) !== -1; });
+                    if (hit && touched.indexOf(node.parentElement) === -1) {
+                        touched.push(node.parentElement);
+                    }
+                }
+                touched.forEach(mark);
+                Array.prototype.slice.call(scope.querySelectorAll('input, textarea')).forEach(function (input) {
+                    try {
+                        var v = String(input.value || '');
+                        if (v && needles.some(function (n) { return v.indexOf(n) !== -1; })) mark(input);
+                    } catch (e) { /* noop */ }
+                });
+                // Known stock carriers that NEED keyboard access for the
+                // peek (CSS alone can't add tabindex): the dashboard id span
+                // + the boot-JSON log pane (both blurred by DRESS CSS).
+                ['session-id', 'debugOutput', 'qrcode'].forEach(function (elId) {
+                    var el = doc.getElementById(elId);
+                    if (el && !el.hasAttribute('tabindex')) el.tabIndex = 0;
+                });
+                var sidSpan = doc.getElementById('session-id');
+                if (sidSpan && sidSpan.dataset.arcadeMaskedCopy !== '1') {
+                    sidSpan.dataset.arcadeMaskedCopy = '1';
+                    sidSpan.setAttribute('aria-label', 'Session ID — hidden, focus or hover to reveal, click to copy');
+                    sidSpan.addEventListener('click', function () {
+                        copyToClipboard(id).then(function () {
+                            var old = sidSpan.title;
+                            sidSpan.title = 'Copied ✓';
+                            setTimeout(function () { sidSpan.title = old; }, 1200);
+                        });
+                    });
+                }
+            } catch (e) { /* masking is best-effort dressing, never fatal */ }
+        });
+    }
+
+    // Re-run schedule for stock pages that fill session values AFTER load
+    // (popup.js:3984, the dashboard boot JSON, vdo.html's updateLinks).
+    function maskStockFrame(frame) {
+        if (!frame) return;
+        var run = function () {
+            try { maskSessionIdSurfaces(frame.contentDocument, null); } catch (e) { /* cross-origin skip */ }
+        };
+        run();
+        setTimeout(run, 1200);
+        setTimeout(run, 3000);
+    }
+
     function installStockFrameDressing() {
         dressStockFrame('frame1', 'arcade-dress-popup', DRESS_POPUP_CSS);
         dressStockFrame('frame2', 'arcade-dress-dashboard', DRESS_DASHBOARD_CSS);
         dressStockFrame('frame3', 'arcade-dress-vdo', DRESS_VDO_CSS);
+        // TASK-66 — the mask pass rides the same frames (load + re-runs).
+        ['frame1', 'frame2', 'frame3'].forEach(function (frameId) {
+            var frame = document.getElementById(frameId);
+            if (!frame) return;
+            maskStockFrame(frame);
+            frame.addEventListener('load', function () { maskStockFrame(frame); });
+        });
 
         // welcomeFrame is created/destroyed on demand by libs.js's
         // manageWelcomePage() (only while zero sources are configured) — watch
@@ -10781,7 +11009,7 @@
     var deckTiers = ALERT_TIERS_DEFAULT.slice(); // names — SAME string[] shape S47 seeds/reads
     var deckTierRules = [];          // [{ tier, conditions:[{kind, ...}] }]
     var deckSurfaces = [];           // [{ id, type:'touchportal'|'streamdeck'|'neither', name, at }]
-    var deckDiagnosticsView = 'dashboard'; // 'dashboard' | 'sessions'
+    var deckDiagnosticsView = 'dashboard'; // 'dashboard' | 'sessions' | 'interface' (TASK-66)
 
     // Every S51 write rides the canonical saveSetting IPC — ASYNC, no
     // callback, + one idempotent retry (the S48 sendSync/iframe-churn trap;
@@ -10985,7 +11213,12 @@
 
         if (deckSelectedSection === 'diagnostics') {
             renderDeckDiagnosticsSubNav();
-            deckSetStockStage(deckDiagnosticsView);
+            if (deckDiagnosticsView === 'interface') {
+                deckSetStockStage(null);
+                renderDeckInterface(stage);
+            } else {
+                deckSetStockStage(deckDiagnosticsView);
+            }
             return;
         }
         if (deckSelectedSection === DECK_STOCKLIB_KEY) {
@@ -11009,7 +11242,8 @@
         sub.innerHTML = '';
         [
             { id: 'dashboard', label: 'Status and Logs' },
-            { id: 'sessions', label: 'Sessions' }
+            { id: 'sessions', label: 'Sessions' },
+            { id: 'interface', label: 'Interface' }
         ].forEach(function (view) {
             var btn = document.createElement('button');
             btn.type = 'button';
@@ -11019,11 +11253,136 @@
             btn.addEventListener('click', function () {
                 deckDiagnosticsView = view.id;
                 renderDeckDiagnosticsSubNav();
-                deckSetStockStage(deckDiagnosticsView);
-                deckFocusStockStage('diagnostics');
+                if (view.id === 'interface') {
+                    deckSetStockStage(null);
+                    var stage = document.getElementById('arcade-deck-stage');
+                    if (stage) {
+                        stage.innerHTML = '';
+                        renderDeckInterface(stage);
+                        focusFirstInteractiveIn(stage, stage); // H17-B — focus lands IN the destination
+                    }
+                } else {
+                    deckSetStockStage(deckDiagnosticsView);
+                    deckFocusStockStage('diagnostics');
+                }
             });
             sub.appendChild(btn);
         });
+    }
+
+    // --------------------------------------------------------------------
+    // TASK-66 (H22 ruled) — the Interface row. Arcade is the DEFAULT shell;
+    // this is the honest door back to Steve's original. The mechanism: the
+    // shell engages at BOOT (index.html's body.arcade-shell switch), so a
+    // switch persists a boot-read flag — canonical saveSetting for the
+    // record + a localStorage mirror the synchronous boot script can read
+    // without IPC — then reloads the window (the whole app re-boots, the
+    // same gesture as a relaunch). Byte-identity law: the switched-stock
+    // path is cmp-proven identical to base stock, exactly like SSN_SHELL=stock.
+    // --------------------------------------------------------------------
+    var SHELL_INTERFACE_KEY = 'arcadeShellInterface'; // canonical record: 'arcade' | 'stock'
+    var SHELL_INTERFACE_LS = 'ssnShellInterface';     // boot-read mirror (index.html reads it synchronously)
+
+    function currentShellInterface() {
+        try {
+            var envShell = '';
+            if (typeof process !== 'undefined' && process && process.env && process.env.SSN_SHELL) {
+                envShell = String(process.env.SSN_SHELL).toLowerCase();
+            }
+            if (envShell === 'stock' || envShell === 'arcade') return { mode: envShell, source: 'env' };
+        } catch (e) { /* noop */ }
+        var ls = '';
+        try { ls = String(localStorage.getItem(SHELL_INTERFACE_LS) || '').toLowerCase(); } catch (e) { /* noop */ }
+        if (ls === 'stock') return { mode: 'stock', source: 'switch' };
+        if (ls === 'arcade') return { mode: 'arcade', source: 'switch' };
+        return { mode: 'arcade', source: 'default' };
+    }
+
+    function renderDeckInterface(stage) {
+        var cur = currentShellInterface();
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Interface';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+
+        var line = document.createElement('p');
+        line.className = 'arcade-evt-blurb';
+        line.textContent = 'Arcade is this fork’s default chrome — an additive layer over the same app. Stock is Steve’s original UI, byte-for-byte unchanged. Switching reloads the window: everything re-boots in the other interface. From Stock, the way back is launching once with SSN_SHELL=arcade (the environment wins) and re-picking Arcade here.';
+        body.appendChild(line);
+
+        var group = document.createElement('div');
+        group.className = 'arcade-frames-presets';
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Interface choice');
+        [
+            { id: 'arcade', label: 'Arcade (default)' },
+            { id: 'stock', label: 'Stock (Steve’s original)' }
+        ].forEach(function (opt) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm';
+            btn.textContent = opt.label;
+            btn.setAttribute('aria-pressed', String(cur.mode === opt.id));
+            btn.addEventListener('click', function () { deckSwitchInterface(opt.id, btn); });
+            group.appendChild(btn);
+        });
+        body.appendChild(group);
+
+        var state = document.createElement('div');
+        state.className = 'arcade-evt-cond__hint';
+        state.textContent = cur.source === 'env'
+            ? ('Currently: ' + cur.mode + ' — pinned by the SSN_SHELL environment variable at launch; the switch is ignored while that variable is set.')
+            : (cur.source === 'switch' ? ('Currently: ' + cur.mode + ' — chosen here.') : 'Currently: arcade — the fork default (nothing chosen yet).');
+        body.appendChild(state);
+
+        var confirmLine = document.createElement('div');
+        confirmLine.className = 'arcade-evt-cond__hint';
+        confirmLine.id = 'arcade-interface-confirm';
+        body.appendChild(confirmLine);
+
+        card.appendChild(body);
+        stage.appendChild(card);
+    }
+
+    function deckSwitchInterface(mode, btn) {
+        var cur = currentShellInterface();
+        var note = document.getElementById('arcade-interface-confirm');
+        if (cur.source === 'env') {
+            // The env var wins AT BOOT, but the flag stays writable — this is
+            // the honest door back from a stock flag: launch once with
+            // SSN_SHELL=arcade, re-pick Arcade here, and the next env-less
+            // launch follows the flag again.
+            saveDeckSetting('textparam1', SHELL_INTERFACE_KEY, mode);
+            try { localStorage.setItem(SHELL_INTERFACE_LS, mode); } catch (e) { /* noop */ }
+            if (note) note.textContent = 'Saved "' + mode + '" for launches without SSN_SHELL. This window stays ' + cur.mode + ' — the environment variable pins it until you launch without it.';
+            return;
+        }
+        if (cur.mode === mode) {
+            if (note) note.textContent = 'Already running ' + mode + '.';
+            return;
+        }
+        if (btn.dataset.confirm !== '1') { // two-click confirm, S47 idiom
+            btn.dataset.confirm = '1';
+            btn.textContent = mode === 'stock' ? 'Switch to Stock — reload now?' : 'Switch to Arcade — reload now?';
+            if (note) note.textContent = mode === 'stock'
+                ? 'The window reloads into Steve’s original interface. The way back: launch once with SSN_SHELL=arcade (the environment wins) and re-pick Arcade here. Same app, other chrome — settings, sources and flows are untouched.'
+                : 'The window reloads into the arcade interface. Same app, other chrome — settings, sources and flows are untouched.';
+            return;
+        }
+        // Canonical record + the boot-read mirror, then reload. The setting
+        // write rides the S48 async idiom; the localStorage mirror is what
+        // index.html's synchronous boot switch actually reads.
+        saveDeckSetting('textparam1', SHELL_INTERFACE_KEY, mode);
+        try { localStorage.setItem(SHELL_INTERFACE_LS, mode); } catch (e) { /* noop */ }
+        if (note) note.textContent = 'Reloading into ' + mode + '…';
+        setTimeout(function () { window.location.reload(); }, 250);
     }
 
     // --------------------------------------------------------------------
@@ -11078,13 +11437,11 @@
         if (!doc || !doc.body) return;
 
         // Dress first (same CSS the shell injects into frame1 — the var is
-        // a pre-joined string, same as injectDressIntoFrame consumes), plus
-        // the embed's own filter/mask rules.
+        // a pre-joined string, same as injectDressIntoFrame consumes). The
+        // mask-class rules ride inside DRESS_POPUP_CSS itself (TASK-66).
         var style = doc.createElement('style');
         style.id = 'arcade-deck-embed-css';
-        style.textContent = DRESS_POPUP_CSS + '\n' +
-            '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;}' +
-            '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}';
+        style.textContent = DRESS_POPUP_CSS;
         doc.head.appendChild(style);
 
         var root = doc.createElement('div');
@@ -11132,34 +11489,12 @@
             if (input) input.checked = true;
         });
 
-        // Session-ID mask law: blur any text node / input value carrying the
-        // id (reveal on hover/focus). Throwaway-profile ids scrub too — the
-        // mask is content-based, not profile-based.
-        if (deckSessionId) deckMaskSessionInDoc(doc, root);
-    }
-
-    function deckMaskSessionInDoc(doc, root) {
-        var id = deckSessionId;
-        if (!id) return;
-        try {
-            var walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */, null);
-            var node;
-            var touched = [];
-            while ((node = walker.nextNode())) {
-                if (node.nodeValue && node.nodeValue.indexOf(id) !== -1) {
-                    var el = node.parentElement;
-                    if (el && touched.indexOf(el) === -1) {
-                        el.classList.add('arcade-deck-masked');
-                        touched.push(el);
-                    }
-                }
-            }
-            Array.prototype.slice.call(root.querySelectorAll('input, textarea')).forEach(function (input) {
-                try {
-                    if (input.value && String(input.value).indexOf(id) !== -1) input.classList.add('arcade-deck-masked');
-                } catch (e) { /* noop */ }
-            });
-        } catch (e) { /* masking is best-effort dressing, never fatal */ }
+        // Session-ID mask law (TASK-66 shared pass): blur any text node /
+        // input value carrying the id, reveal on hover/focus, click-to-copy
+        // the real id. Re-runs catch popup.js's async value fills.
+        maskSessionIdSurfaces(doc, root);
+        setTimeout(function () { maskSessionIdSurfaces(doc, root); }, 1200);
+        setTimeout(function () { maskSessionIdSurfaces(doc, root); }, 3000);
     }
 
     // --------------------------------------------------------------------
@@ -11189,7 +11524,12 @@
         idValue.className = 'arcade-deck-masked arcade-deck-sessionid';
         idValue.tabIndex = 0;
         idValue.textContent = deckSessionId || '—';
-        idValue.setAttribute('aria-label', 'Session ID — hidden, focus or hover to reveal');
+        idValue.setAttribute('aria-label', 'Session ID — hidden, focus or hover to reveal, click to copy');
+        idValue.title = 'Click to copy';
+        idValue.addEventListener('click', function () {
+            if (!deckSessionId) return;
+            copyToClipboard(deckSessionId).then(function () { setDeckStatus('Session ID copied ✓'); });
+        });
         idRow.appendChild(idValue);
         body.appendChild(idRow);
 
@@ -11211,27 +11551,186 @@
         maskNote.textContent = 'Masked by default — hover or keyboard-focus the value to peek. Masked beats rotated: keep it out of screenshots and the ID keeps working.';
         body.appendChild(maskNote);
 
-        // Rotate door — a runbook pointer, deliberately not an action.
+        // Rotate — a REAL action since TASK-66, gated behind the REQUIRED
+        // notice. The mechanism is the stock one (the same canonical
+        // sidUpdated message popup.js sends from #sessionid,
+        // background.js:6255): mint a fresh id, hand it to the background
+        // page via the S48 async idiom (no sendSync during iframe churn).
+        // What automation CAN'T do stays a runbook door: sweeping the old id
+        // out of OBS scene JSONs and webhook dashboards is the operator's act.
         var rotateBtn = document.createElement('button');
         rotateBtn.type = 'button';
         rotateBtn.className = 'arcade-btn arcade-btn--sm';
-        rotateBtn.textContent = 'How to rotate your session ID';
+        rotateBtn.textContent = 'Rotate session ID…';
         rotateBtn.setAttribute('aria-expanded', 'false');
         btnRow.appendChild(rotateBtn);
         var rotateCard = document.createElement('div');
-        rotateCard.className = 'arcade-evt-cond__hint';
+        rotateCard.className = 'arcade-deck-rotate';
         rotateCard.hidden = true;
-        rotateCard.textContent = 'Rotation is a runbook, not a button: mint a new session, then sweep every place the old one lives — OBS scene JSONs, webhook URLs, overlay browser sources (pacscenes don’t carry the ID). Full runbook: pacsarcade/rtfm/ssn-session-rotation.md. The stock group below carries the session fields themselves (password, link obscuring) — its own “please do not change your session ID” warning stands.';
         body.appendChild(rotateCard);
         rotateBtn.addEventListener('click', function () {
             rotateCard.hidden = !rotateCard.hidden;
             rotateBtn.setAttribute('aria-expanded', String(!rotateCard.hidden));
+            if (!rotateCard.hidden) renderDeckRotateCard(rotateCard);
         });
 
         card.appendChild(body);
         stage.appendChild(card);
 
         buildDeckPopupEmbed(stage, 'session', 'Stock session options — password and link obscuring, berthed in place.');
+    }
+
+    // Mint a fresh session id in the stock shape (background.js:592
+    // generateStreamID: 10 chars, ambiguity-stripped alphabet, the "AD"
+    // adblocker dodge) — same format the app mints on first run.
+    function mintSessionId() {
+        var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+        var text = '';
+        try {
+            var buf = new Uint8Array(10);
+            (window.crypto || {}).getRandomValues(buf);
+            for (var i = 0; i < 10; i++) text += alphabet.charAt(buf[i] % alphabet.length);
+        } catch (e) {
+            for (var j = 0; j < 10; j++) text += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+        }
+        return text.replace(/AD|Ad|ad|aD/g, 'vdAv');
+    }
+
+    function renderDeckRotateCard(host) {
+        host.innerHTML = '';
+        var notice = document.createElement('p');
+        notice.className = 'arcade-deck-rotate__notice';
+        notice.textContent = '⚠️ Rotating changes your overlay URLs — every OBS source using the old session must be updated (each browser source’s ?session=, plus any webhook URLs). The runbook: pacsarcade/rtfm/ssn-session-rotation.md.';
+        host.appendChild(notice);
+        var row = document.createElement('div');
+        row.className = 'arcade-evt-doors';
+        var confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--danger';
+        confirmBtn.textContent = 'I understand — rotate now';
+        row.appendChild(confirmBtn);
+        var collapseBtn = document.createElement('button');
+        collapseBtn.type = 'button';
+        collapseBtn.className = 'arcade-btn arcade-btn--sm';
+        collapseBtn.textContent = 'Keep my current session';
+        collapseBtn.addEventListener('click', function () {
+            host.hidden = true;
+            var btn = null;
+            // collapse back behind the door
+            var doors = host.parentElement ? host.parentElement.querySelectorAll('button') : [];
+            Array.prototype.forEach.call(doors, function (b) { if (b.textContent === 'Rotate session ID…') btn = b; });
+            if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.focus(); }
+        });
+        row.appendChild(collapseBtn);
+        host.appendChild(row);
+        confirmBtn.addEventListener('click', function () { deckRotateSession(host); });
+    }
+
+    function deckRotateSession(host) {
+        if (!deckSessionId) { setDeckStatus('No session yet — the app is still booting', true); return; }
+        var oldId = deckSessionId;
+        var newId = mintSessionId();
+        if (!newId || newId === oldId) { setDeckStatus('Mint failed — nothing changed', true); return; }
+        setDeckStatus('Rotating…');
+        host.innerHTML = '';
+        var working = document.createElement('p');
+        working.className = 'arcade-evt-cond__hint';
+        working.textContent = 'Handing the new session to the app…';
+        host.appendChild(working);
+        // Canonical stock rotation message — the same one popup.js sends
+        // (background.js:6255 validates, persists, and re-arms the bridge).
+        // S48 async idiom: no callback + one idempotent retry.
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                var payload = { cmd: 'sidUpdated', target: null, streamID: newId };
+                window.ninjafy.sendMessage(null, payload);
+                setTimeout(function () {
+                    try { window.ninjafy.sendMessage(null, payload); } catch (e) { /* noop */ }
+                }, 600);
+            }
+        } catch (e) { console.error('[arcade-shell] rotate send failed:', e); }
+        // Re-read the app's truth after the write settles — the surface only
+        // shows what the app actually reports, never the wish.
+        setTimeout(function () {
+            shellSessionIdCache = ''; // the mask pass cache must follow the rotation
+            try {
+                Promise.resolve(window.getChatDockSessionId ? window.getChatDockSessionId() : '').then(function (fresh) {
+                    fresh = String(fresh || '');
+                    if (fresh && fresh !== oldId) {
+                        deckSessionId = fresh;
+                        renderDeckRotateSuccess(host, fresh);
+                        renderDeckStageSessionValue();
+                        setDeckStatus('Session rotated ✓');
+                    } else {
+                        working.textContent = 'The app still reports the old session — the rotation did not land. Nothing else changed; the runbook covers the manual path (pacsarcade/rtfm/ssn-session-rotation.md).';
+                        setDeckStatus('Rotate did not land — see the card', true);
+                    }
+                }, function () {
+                    working.textContent = 'Could not re-read the session — check Deck Settings → Session & rooms after a moment.';
+                });
+            } catch (e) {
+                working.textContent = 'Could not re-read the session — check Deck Settings → Session & rooms after a moment.';
+            }
+        }, 1600);
+    }
+
+    function renderDeckRotateSuccess(host, freshId) {
+        host.innerHTML = '';
+        var done = document.createElement('p');
+        done.className = 'arcade-deck-rotate__done';
+        done.textContent = 'Rotated ✓ — the old session is dead. Now update every OBS source and webhook that carried it (runbook: pacsarcade/rtfm/ssn-session-rotation.md).';
+        host.appendChild(done);
+        var idRow = document.createElement('div');
+        idRow.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = 'New session ID';
+        idRow.appendChild(lbl);
+        var val = document.createElement('span');
+        val.className = 'arcade-deck-masked arcade-deck-sessionid';
+        val.tabIndex = 0;
+        val.textContent = freshId;
+        val.setAttribute('aria-label', 'New session ID — hidden, focus or hover to reveal, click to copy');
+        val.title = 'Click to copy';
+        val.addEventListener('click', function () {
+            copyToClipboard(freshId).then(function () { setDeckStatus('New session ID copied ✓'); });
+        });
+        idRow.appendChild(val);
+        host.appendChild(idRow);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var copyIdBtn = document.createElement('button');
+        copyIdBtn.type = 'button';
+        copyIdBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyIdBtn.textContent = 'Copy new session ID';
+        copyIdBtn.addEventListener('click', function () {
+            copyToClipboard(freshId).then(function () { flashButton(copyIdBtn, 'Copied ✓'); });
+        });
+        doors.appendChild(copyIdBtn);
+        var copyDockBtn = document.createElement('button');
+        copyDockBtn.type = 'button';
+        copyDockBtn.className = 'arcade-btn arcade-btn--sm';
+        copyDockBtn.textContent = 'Copy new dock URL';
+        copyDockBtn.title = 'The combined-chat overlay URL with the fresh session — every other overlay URL re-mints from its own Copy button';
+        copyDockBtn.addEventListener('click', function () {
+            var resolver = window.resolveSocialStreamPage;
+            if (typeof resolver !== 'function') { flashButton(copyDockBtn, 'Unavailable', 2200); return; }
+            resolver('dock.html', { extraParams: ['session=' + encodeURIComponent(freshId)] }).then(function (resolved) {
+                if (!resolved || !resolved.url) throw new Error('no url');
+                return copyToClipboard(resolved.url).then(function () { flashButton(copyDockBtn, 'Copied ✓'); });
+            }).catch(function () { flashButton(copyDockBtn, 'Copy failed', 2200); });
+        });
+        doors.appendChild(copyDockBtn);
+        host.appendChild(doors);
+        copyIdBtn.focus(); // H17-B — the flow lands on the re-copy path
+    }
+
+    // Keep the session card's masked value honest after a rotation without a
+    // full panel re-render.
+    function renderDeckStageSessionValue() {
+        var vals = document.querySelectorAll('.arcade-settings .arcade-deck-sessionid');
+        Array.prototype.forEach.call(vals, function (v) {
+            v.textContent = deckSessionId || '—';
+        });
     }
 
     // --------------------------------------------------------------------
@@ -11271,6 +11770,100 @@
         body.appendChild(obsNote);
         card.appendChild(body);
         stage.appendChild(card);
+
+        // TASK-66 — the VDO instance is a choice (Lane 3). The house repoint
+        // is the DEFAULT value of this setting, not the only value: composed
+        // guest/device links (Frames & Cameras) and the embedded vdo page
+        // (&base=) all read it.
+        var vdoCard = document.createElement('article');
+        vdoCard.className = 'arcade-alert-card';
+        var vdoHead = document.createElement('div');
+        vdoHead.className = 'arcade-alert-card__head';
+        var vdoName = document.createElement('h3');
+        vdoName.className = 'arcade-alert-card__name';
+        vdoName.textContent = 'VDO instance';
+        vdoHead.appendChild(vdoName);
+        vdoCard.appendChild(vdoHead);
+        var vdoBody = document.createElement('div');
+        vdoBody.className = 'arcade-alert-card__body';
+        var vdoLine = document.createElement('p');
+        vdoLine.className = 'arcade-evt-blurb';
+        vdoLine.textContent = 'Camera/guest links (Frames & Cameras) ride this VDO.Ninja instance. Pac’s Arcade is the default; Steve’s hosted vdo.ninja always works; your own clone needs its full https URL.';
+        vdoBody.appendChild(vdoLine);
+        var vdoGroup = document.createElement('div');
+        vdoGroup.className = 'arcade-frames-presets';
+        vdoGroup.setAttribute('role', 'group');
+        vdoGroup.setAttribute('aria-label', 'VDO instance choice');
+        var vdoChoices = [
+            { id: 'house', label: 'Pac’s Arcade (default)', value: '' },
+            { id: 'stock', label: 'vdo.ninja (Steve’s)', value: STOCK_VDO_BASE },
+            { id: 'custom', label: 'Your own clone', value: null }
+        ];
+        var customRow = document.createElement('div');
+        customRow.className = 'arcade-frames-linkrow';
+        var customInput = document.createElement('input');
+        customInput.type = 'text';
+        customInput.id = 'arcade-vdo-custom';
+        customInput.autocomplete = 'off';
+        customInput.placeholder = 'https://vdo.example.com/';
+        customInput.setAttribute('aria-label', 'Custom VDO instance URL');
+        var isCustom = framesVdoBaseSetting !== '' && framesVdoBaseSetting !== STOCK_VDO_BASE;
+        if (isCustom) customInput.value = framesVdoBaseSetting;
+        customRow.appendChild(customInput);
+        var customSave = document.createElement('button');
+        customSave.type = 'button';
+        customSave.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        customSave.textContent = 'Use this instance';
+        customRow.appendChild(customSave);
+        function vdoPressed() {
+            var pressedId = framesVdoBaseSetting === '' ? 'house' : (framesVdoBaseSetting === STOCK_VDO_BASE ? 'stock' : 'custom');
+            Array.prototype.forEach.call(vdoGroup.children, function (b) {
+                b.setAttribute('aria-pressed', String(b.dataset.vdoChoice === pressedId));
+            });
+            customRow.hidden = pressedId !== 'custom';
+        }
+        vdoChoices.forEach(function (opt) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'arcade-btn arcade-btn--sm';
+            b.dataset.vdoChoice = opt.id;
+            b.textContent = opt.label;
+            b.addEventListener('click', function () {
+                if (opt.value === null) { // custom — reveal the row; nothing saves until "Use this instance"
+                    Array.prototype.forEach.call(vdoGroup.children, function (x) { x.setAttribute('aria-pressed', 'false'); });
+                    b.setAttribute('aria-pressed', 'true');
+                    customRow.hidden = false;
+                    customInput.focus();
+                    return;
+                }
+                framesVdoBaseSetting = opt.value;
+                saveDeckSetting('textparam1', VDO_BASE_KEY, framesVdoBaseSetting);
+                vdoPressed();
+                setDeckStatus(opt.value === '' ? 'VDO instance: Pac’s Arcade (default)' : 'VDO instance: vdo.ninja (Steve’s)');
+            });
+            vdoGroup.appendChild(b);
+        });
+        vdoBody.appendChild(vdoGroup);
+        customSave.addEventListener('click', function () {
+            var valid = validateVdoBase(customInput.value);
+            if (valid === null || valid === '') {
+                setDeckStatus('That URL doesn’t parse — shape: https://host/ (no paths, no query)', true);
+                customInput.focus();
+                return;
+            }
+            framesVdoBaseSetting = valid;
+            saveDeckSetting('textparam1', VDO_BASE_KEY, framesVdoBaseSetting);
+            vdoPressed();
+            setDeckStatus('VDO instance: ' + valid);
+        });
+        vdoBody.appendChild(customRow);
+        var vdoNote = document.createElement('div');
+        vdoNote.className = 'arcade-evt-cond__hint';
+        vdoNote.textContent = 'Honest note: self-hosting VDO.Ninja is its own project (the static files plus a signaling handshake) — docs.vdo.ninja/servers. The choice only changes which deployment the composed links point at.';
+        vdoBody.appendChild(vdoNote);
+        vdoCard.appendChild(vdoBody);
+        stage.appendChild(vdoCard);
+        vdoPressed();
 
         buildDeckPopupEmbed(stage, 'connections', 'Connection-level stock groups — OBS WebSocket, opt-in chat services, experimental transport.');
     }
@@ -11403,6 +11996,13 @@
                     deckSurfaces = Array.isArray(surfaces) ? surfaces.filter(function (s) {
                         return s && typeof s === 'object' && typeof s.type === 'string';
                     }) : [];
+
+                    // TASK-66 — the VDO instance choice (Connections card +
+                    // Frames & Cameras read the same canonical key).
+                    var vdoEntry = settings[VDO_BASE_KEY];
+                    var vdoRaw = (vdoEntry && typeof vdoEntry.textparam1 === 'string') ? vdoEntry.textparam1 : '';
+                    var vdoValid = validateVdoBase(vdoRaw);
+                    framesVdoBaseSetting = (vdoValid === null) ? '' : vdoValid;
                 } catch (e) { console.error('[arcade-shell] deck settings parse failed:', e); }
             }
             try {
