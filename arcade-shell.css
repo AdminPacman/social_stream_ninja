@@ -1310,6 +1310,55 @@ body.arcade-shell .arcade-game-unlock__arrow {
   body.arcade-shell .arcade-game-cabinet { grid-template-columns: 1fr; }
 }
 
+/* ---------------------------------------------------------------------------
+   S49 (TASK-46) — Commands + Goal Bars. Both panels ride the S47/S48 layout
+   (.arcade-alerts-body/stage, .arcade-evt-*) — only the display gates, the
+   config-fill variant, and the small set-import block are new. Same scoped-
+   panel recipe as .arcade-games. The cabinet text-spill containment is the
+   ruled one-line cosmetic rider (demo text clipping inside the card edge).
+   --------------------------------------------------------------------------- */
+body.arcade-shell .arcade-game-cab { overflow: hidden; } /* cosmetic rider — contain demo text spill */
+
+body.arcade-shell .arcade-commands,
+body.arcade-shell .arcade-goals {
+  display: none;
+  position: fixed;
+  top: var(--arc-topbar-h);
+  left: 0; right: 0; bottom: 0;
+  z-index: 1500;
+  background: var(--arc-void);
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+body.arcade-shell[data-arcade-tab="commands"] .arcade-commands { display: flex; }
+body.arcade-shell[data-arcade-tab="goals"] .arcade-goals { display: flex; }
+
+/* Commands has no visual overlay — the config fills the whole stage. */
+body.arcade-shell .arcade-evt-config--fill { flex: 1; }
+
+body.arcade-shell .arcade-cmd-import-hint { padding: 6px 8px 2px; }
+body.arcade-shell .arcade-cmd-active { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0; }
+
+/* Textarea rows — label hugs the top, not the vertical middle. */
+body.arcade-shell .arcade-alert-row--top { align-items: flex-start; }
+body.arcade-shell .arcade-alert-row--top label { padding-top: 6px; }
+body.arcade-shell .arcade-alert-row textarea {
+  flex: 1; min-height: 56px; padding: 6px 8px; box-sizing: border-box;
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  font: 400 12px/1.4 var(--arc-font-ui);
+  resize: vertical;
+}
+
+/* The program-set import block under the goals list. */
+body.arcade-shell .arcade-goal-sets {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px solid var(--arc-edge);
+}
+body.arcade-shell .arcade-goal-set__btn { justify-content: center; }
+
 @media (max-width: 900px) {
   body.arcade-shell .arcade-alerts-body { flex-direction: column; overflow-y: auto; }
   body.arcade-shell .arcade-evt-list-col { width: 100%; flex-shrink: 0; }
