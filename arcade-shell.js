@@ -43,6 +43,15 @@
         { page: 'sessions', label: 'Sessions' }
     ];
 
+    // S48 (TASK-45 — the Games hub + the points loop): 'games' leaves
+    // ARCADE_TAB_PAGE and becomes a CUSTOM_TAB with its own in-shell panel
+    // (the hub). Two consequences fall out of that one move: the stock
+    // streams page is never driven for games (so the stock Welcome
+    // interstitial zero-source profiles get on that page is not inherited —
+    // the trap the S46 report flagged), and the popup scroll memory no
+    // longer has a games entry to restore. Door card, More▾ hatch entry,
+    // and DOOR_PARENT all keep working — they drive the same tab id.
+
     // Transition hatch (S46): direct entries to the surfaces whose rail tabs
     // left the nav, until muscle memory re-trains to the Add-ons doors.
     var MORE_LEGACY_ITEMS = [
@@ -1097,7 +1106,7 @@
     // before navigating away and restored right after navigating in;
     // first visit to a tab falls back to an honest per-tab default
     // (Games -> the #games section, Settings -> the top of the popup).
-    var POPUP_SCROLL_TABS = { games: true, settings: true };
+    var POPUP_SCROLL_TABS = { settings: true }; // S48: games left the popup page (custom hub panel) — only settings still maps there
     var popupScrollMemory = {};
 
     function getReadyFrame1() {
@@ -1138,8 +1147,6 @@
                 var remembered = popupScrollMemory[tabId];
                 if (typeof remembered === 'number') {
                     ready.contentWindow.scrollTo(0, remembered);
-                } else if (tabId === 'games') {
-                    ready.contentWindow.location.hash = 'games';
                 } else {
                     ready.contentWindow.scrollTo(0, 0);
                 }
@@ -1161,7 +1168,6 @@
     // (or duplicate) which internal function does what.
     var ARCADE_TAB_PAGE = {
         main: 'chat',
-        games: 'streams',
         vdo: 'vdo-ninja',
         eventflow: 'event-flow-editor',
         settings: 'streams'
@@ -1179,7 +1185,8 @@
     // passes at boot, in init(). No signer on this seat => 'ai' stays
     // unknown to both maps => navigateArcadeTab('ai') is a silent no-op,
     // same as any other unrecognized tab id.
-    var CUSTOM_TABS = { addons: true, style: true, alerts: true };
+    // S48: 'games' joins the custom set — the hub is its own in-shell panel.
+    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -1214,6 +1221,7 @@
             setArcadeTab(tabId);
             if (tabId === 'style') ensureStylePanelLive(); // lazy: load saved blob + first preview on first visit
             if (tabId === 'alerts') ensureAlertsPanelLive(); // lazy: load saved param25 settings + first preview on first visit
+            if (tabId === 'games') ensureGamesPanelLive(); // lazy (S48): load shelf/style/unlocks settings + first preview on first visit
             if (tabId === 'ai') runAiAreaGate(); // NOT lazy-once — a fresh challenge every open, no stored grants (design doc, 0018.06.01)
             return;
         }
@@ -1221,7 +1229,7 @@
         if (!pageId) return;
         savePopupScroll(document.body.dataset.arcadeTab); // capture the tab we're LEAVING
         clickStockNav(pageId);
-        restorePopupScroll(tabId); // no-op for tabs other than games/settings
+        restorePopupScroll(tabId); // no-op for tabs other than settings (games is a custom panel since S48)
         setArcadeTab(tabId);
     }
     window.arcadeNavigateTab = navigateArcadeTab; // exposed for debugging/CDP verification
@@ -4158,6 +4166,1065 @@
     }
 
     // --------------------------------------------------------------------
+    // S48 — THE GAMES HUB + THE POINTS LOOP (TASK-45, ruled 0018.06.03 a₿;
+    // dispatch rider: reuse the S47 Alerts interior — top-preview/bottom-
+    // config, grouped left list, .arcade-evt-*/.arcade-alert-row shapes —
+    // new .arcade-game-* classes extend, never fork, that idiom).
+    //
+    // LANE 1 — the hub. 'games' is a CUSTOM_TAB (own in-shell panel), so the
+    // stock streams page is never driven for it and the stock Welcome
+    // interstitial zero-source profiles get there is NOT inherited (the trap
+    // the S46 report flagged — avoided by construction, not by a workaround).
+    // LEFT = the streamer's shelf of ACTIVE games + "+ Add game" (a picker
+    // pop-window whose cards each run the game's OWN demo — the arcade demo-
+    // cabinet). RIGHT = BIG isolated preview on TOP, config below.
+    //
+    // THE GAMES REGISTRY below is the stock picker's own 18 options
+    // (popup.html:13881-13898), each capability MEASURED from the bundle
+    // source, not assumed:
+    //   - demo:      the page reads &demo (all but battle.html — battle's
+    //                simulateWebSocket() attract runs unconditionally at
+    //                boot, battle.html:1841, so its preview demos anyway).
+    //   - cmdsuffix: the page reads &cmdsuffix (battle.html:184,
+    //                chaosmode:346, chickenroyale:226, dancingparade:230,
+    //                emojitower:261, petrace:322, treasurehunt:304) — the
+    //                census-cited pattern the editable start command
+    //                generalizes. The 11 command-less games take every chat
+    //                message as play, so there is no command to edit.
+    //   - chroma:    the page reads &chroma (green-screen key ground) — 11
+    //                games. dancingparade's body is transparent BY DESIGN
+    //                (its :22 background — the popup's chroma toggle for it
+    //                writes a param the page never reads, a dead toggle
+    //                upstream). battle/colorwars/emojitower/petrace/
+    //                wordchain read NO transparency param — said honestly,
+    //                no per-game hacks (ruled).
+    //   - dark:      the page reads &darkmode — same 11 as chroma.
+    //   - avatar:    the page renders the chatter's profile picture off
+    //                data.chatimg — battle.html:419 (addPlayer(chatname,
+    //                chatimg…)) and chickenroyale:1993/2007 only.
+    //                dancingparade's dancers are emoji characters + name
+    //                labels — no pfp path. Nothing is wired beyond this.
+    //   - font:      NO stock game reads a font-size/font-family URL param
+    //                and none supports &css/&b64css (grep-verified) — the
+    //                style commons say so honestly instead of fake-wiring.
+    //
+    // PREVIEW ISOLATION GUARANTEE: game pages append their vdo bridge iframe
+    // UNCONDITIONALLY (demo mode included — e.g. dancingparade:529-538) and
+    // fall back to a hardcoded 'test' room sessionless, so an isolated
+    // preview can never ride the real session OR the fallback. Every hub
+    // preview/picker-demo URL therefore carries a RANDOM throwaway room
+    // (gamesPreviewRoom — an empty room nobody publishes to) plus &demo
+    // where the page reads it. Copy-overlay-URL is the mirror image: the
+    // REAL chat-dock session, the stored per-game options, NEVER &demo and
+    // never the preview room.
+    //
+    // LANE 2 — the points loop surfaced. points.js already accrues (message
+    // engagement + the house watch-time patch): measured earn model =
+    // pointsPerEngagement (default 1) per engagementWindow (default 15 min),
+    // streak bonus floor(streak × 0.1 × base) capped at 2×, streak breaks
+    // after 1h quiet (points.js:83-89, :242-269). The pinned "Points &
+    // unlocks" shelf row opens: the EARN card (real current rates off
+    // getSettings, edit door to Deck Settings), the UNLOCKS table
+    // (threshold → effect name, streamer-edited, arcadePointsUnlocks — v1
+    // renders the ledger and says honestly the EXECUTION wiring is a
+    // follow-up task; flows/overlays read it through the canonical settings
+    // chain), and the leaderboard overlay door (stock leaderboard.html —
+    // &demo stays preview-only, ruled). The Main-tab pulse tile reads REAL
+    // IndexedDB rows off the analytics bridge (window.pointsSystem is a
+    // background-page global, points.js:815) — today's earners computed
+    // from each record's engagementHistory (one entry per awarded window,
+    // capped at 100 ≈ 25h at the default window, so a day is always whole);
+    // streak bonuses aren't attributable per day, so the tile says "base"
+    // and never dresses the number up.
+    //
+    // Setting keys (all textparam1, canonical saveSetting — the reserved
+    // arcadeAlert*/arcadeStylePresets keys are untouched):
+    //   arcadeGameShelf      JSON array of active game ids (shelf order)
+    //   arcadeGameCmdSuffix  JSON map id -> sanitized suffix
+    //   arcadeGameStyle      JSON map id -> {chroma, dark, demo}
+    //   arcadePointsUnlocks  JSON array [{threshold, name}]
+    // --------------------------------------------------------------------
+    var GAMES = [
+        { id: 'spampower', file: 'games.html', emoji: '⚡', name: 'Spam Power', blurb: 'Chat activity powers the core — the harder chat spams, the higher the charge.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'battle', file: 'battle.html', emoji: '⚔️', name: 'Battlefield Mayhem', blurb: 'Automated chat combat — viewers join, move, and taunt; computer players fill the arena (its built-in attract mode is the demo).', cmds: ['!join', '!left', '!right', '!up', '!down', '!say'], cmdsuffix: true, demo: false, chroma: false, dark: false, avatar: true },
+        { id: 'emojirain', file: 'games/emojirain.html', emoji: '🌧️', name: 'Emoji Rain', blurb: 'Emojis from chat fall down the screen — image emotes included (house patch).', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'chatwars', file: 'games/chatwars.html', emoji: '⚔️', name: 'Chat Wars', blurb: 'Team territory battle — every chatter fights for their side.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'wordstorm', file: 'games/wordstorm.html', emoji: '🌪️', name: 'Word Storm', blurb: 'A collective word cloud built out of chat messages.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'chaosmode', file: 'games/chaosmode.html', emoji: '💀', name: 'Chaos Mode', blurb: 'Visual madness — chat triggers explosions, glitches, shakes and portals.', cmds: ['!explode', '!glitch', '!shake', '!portal'], cmdsuffix: true, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'colorsymphony', file: 'games/colorsymphony.html', emoji: '🎵', name: 'Color Symphony', blurb: 'Chat messages paint musical colors across the screen.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'chatgarden', file: 'games/chatgarden.html', emoji: '🌻', name: 'Chat Garden', blurb: 'Viewers grow virtual plants by chatting.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'pixelbattle', file: 'games/pixelbattle.html', emoji: '🎨', name: 'Pixel Battle', blurb: 'Collaborative pixel art, one chat message at a time.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'memorylane', file: 'games/memorylane.html', emoji: '📷', name: 'Memory Lane', blurb: 'Nostalgic photo stories drawn from chat.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'rhythmpulse', file: 'games/rhythmpulse.html', emoji: '🎵', name: 'Rhythm Pulse', blurb: 'Chat builds musical beats together.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
+        { id: 'petrace', file: 'games/petrace.html', emoji: '🏁', name: 'Pet Race', blurb: 'Viewers join the race and their pets run for the finish.', cmds: ['!join'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'wordchain', file: 'games/wordchain.html', emoji: '🔤', name: 'Word Chain', blurb: 'A word-puzzle chain carried by chat.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'emojitower', file: 'games/emojitower.html', emoji: '🏗️', name: 'Emoji Tower', blurb: 'Chat drops emojis onto a growing tower — gravity is rude.', cmds: ['!drop'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'colorwars', file: 'games/colorwars.html', emoji: '🎨', name: 'Color Wars', blurb: 'Territory painting — chat claims the canvas color by color.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'treasurehunt', file: 'games/treasurehunt.html', emoji: '🏴‍☠️', name: 'Treasure Hunt', blurb: 'Grid exploration — chat digs for treasure square by square.', cmds: ['!dig'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'dancingparade', file: 'games/dancingparade.html', emoji: '💃', name: 'Dancing Parade', blurb: 'A lower-third parade — join and your dancer struts across. Transparent by design.', cmds: ['!join', '!dance', '!leave'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false, transparentByDesign: true },
+        { id: 'chickenroyale', file: 'games/chickenroyale.html', emoji: '🍗', name: 'Chicken Royale', blurb: '3D battle royale — last chicken standing takes the island.', cmds: ['!join', '!start'], cmdsuffix: true, demo: true, chroma: true, dark: true, avatar: true }
+    ];
+
+    var GAME_POINTS_KEY = '__points__'; // the pinned shelf row's selection key
+    var GAME_SHELF_KEY = 'arcadeGameShelf';
+    var GAME_CMDSUFFIX_KEY = 'arcadeGameCmdSuffix';
+    var GAME_STYLE_KEY = 'arcadeGameStyle';
+    var POINTS_UNLOCKS_KEY = 'arcadePointsUnlocks';
+
+    var gamesPanelLive = false;
+    var gamesShelf = [];        // ordered active game ids
+    var gameCmdSuffix = {};     // id -> suffix (raw; sanitized at compose time)
+    var gameStyleDoc = {};      // id -> { chroma:bool, dark:bool, demo:bool }
+    var pointsUnlocks = [];     // [{ threshold:number, name:string }]
+    var pointsEarnState = { enabled: null, per: null, windowMin: null };
+    var gamesSelectedKey = null;
+    var gamesPreviewToken = 0;
+    var gamesRemoveArmTimer = null;
+    // The isolated preview room — a RANDOM throwaway label, never the real
+    // session and never the games' hardcoded 'test' fallback (see the
+    // PREVIEW ISOLATION GUARANTEE above).
+    var gamesPreviewRoom = 'arcade-game-preview-' + Math.random().toString(36).slice(2, 8);
+
+    function findGame(id) {
+        for (var i = 0; i < GAMES.length; i++) { if (GAMES[i].id === id) return GAMES[i]; }
+        return null;
+    }
+
+    // The same sanitize every cmdsuffix-capable game applies to the param
+    // (lowercase, strip non [a-z0-9]) — applied at compose time so the URL
+    // always matches what the game will actually answer to.
+    function sanitizeGameCmdSuffix(raw) {
+        return String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function gameStyleFor(id) {
+        var st = gameStyleDoc[id];
+        return (st && typeof st === 'object') ? st : {};
+    }
+
+    function setGamesStatus(text, isError) {
+        var el = document.getElementById('arcade-games-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    function setGamesPreviewHint(text) {
+        var el = document.getElementById('arcade-games-preview-hint');
+        if (el) el.textContent = text;
+    }
+
+    function buildGamesPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-games';
+        panel.setAttribute('aria-label', 'Games hub — shelf, demos, and the points loop');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">GAMES</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-games-status"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--primary" id="arcade-games-copy">Copy overlay URL</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-games-list" role="listbox" aria-label="Active games"></div>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-games-add">+ Add game</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-alerts-preview">' +
+            '<div class="arcade-alerts-preview-bar">' +
+            '<span class="arcade-style-hint" id="arcade-games-preview-hint">Add a game to preview it here — every preview is an isolated demo, never your live session.</span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-games-reload">Reload preview</button>' +
+            '</div>' +
+            '<iframe id="arcade-games-preview-frame" title="Game preview — isolated demo"></iframe>' +
+            '</div>' +
+            '<div class="arcade-evt-config" id="arcade-games-config"></div>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(panel);
+
+        panel.querySelector('#arcade-games-copy').addEventListener('click', function (e) {
+            copyGamesOverlayUrl(e.currentTarget);
+        });
+        panel.querySelector('#arcade-games-reload').addEventListener('click', function () {
+            initGamesPreviewFrame();
+        });
+        panel.querySelector('#arcade-games-add').addEventListener('click', openGamePicker);
+    }
+
+    // Lazy boot on first Games-tab visit — the S47 idiom: ONE getSettings
+    // read hydrates shelf + cmd suffixes + per-game style + unlocks + the
+    // earn card's real rates, then list + config + first preview. Re-entry
+    // IS a surface render (S47B doctrine): re-read so edits made in Deck
+    // Settings since the last visit show honestly.
+    function ensureGamesPanelLive() {
+        loadGamesSettings().then(function () {
+            if (!gamesPanelLive) {
+                gamesPanelLive = true;
+                if (!gamesSelectedKey || (gamesSelectedKey !== GAME_POINTS_KEY && gamesShelf.indexOf(gamesSelectedKey) === -1)) {
+                    gamesSelectedKey = gamesShelf.length ? gamesShelf[0] : GAME_POINTS_KEY;
+                }
+            }
+            renderGamesList();
+            renderGamesConfig();
+            initGamesPreviewFrame();
+        });
+    }
+
+    function loadGamesSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var shelfEntry = settings[GAME_SHELF_KEY];
+                            var shelf = null;
+                            try { shelf = JSON.parse((shelfEntry && typeof shelfEntry.textparam1 === 'string') ? shelfEntry.textparam1 : ''); } catch (e) { shelf = null; }
+                            gamesShelf = Array.isArray(shelf) ? shelf.filter(function (id) { return !!findGame(id); }) : [];
+                            var cmdEntry = settings[GAME_CMDSUFFIX_KEY];
+                            var cmds = null;
+                            try { cmds = JSON.parse((cmdEntry && typeof cmdEntry.textparam1 === 'string') ? cmdEntry.textparam1 : ''); } catch (e) { cmds = null; }
+                            gameCmdSuffix = (cmds && typeof cmds === 'object' && !Array.isArray(cmds)) ? cmds : {};
+                            var styleEntry = settings[GAME_STYLE_KEY];
+                            var styles = null;
+                            try { styles = JSON.parse((styleEntry && typeof styleEntry.textparam1 === 'string') ? styleEntry.textparam1 : ''); } catch (e) { styles = null; }
+                            gameStyleDoc = (styles && typeof styles === 'object' && !Array.isArray(styles)) ? styles : {};
+                            var unlocksEntry = settings[POINTS_UNLOCKS_KEY];
+                            var unlocks = null;
+                            try { unlocks = JSON.parse((unlocksEntry && typeof unlocksEntry.textparam1 === 'string') ? unlocksEntry.textparam1 : ''); } catch (e) { unlocks = null; }
+                            pointsUnlocks = Array.isArray(unlocks) ? unlocks.filter(function (u) {
+                                return u && typeof u === 'object' && isFinite(Number(u.threshold)) && typeof u.name === 'string';
+                            }).map(function (u) { return { threshold: Math.max(1, Math.round(Number(u.threshold))), name: u.name }; }) : [];
+                            var enabledEntry = settings.enablePointsSystem;
+                            pointsEarnState.enabled = !!(enabledEntry && enabledEntry.setting);
+                            var perEntry = settings.pointsPerEngagement;
+                            var per = perEntry && Number(perEntry.numbersetting);
+                            pointsEarnState.per = (isFinite(per) && per > 0) ? per : 1; // points.js:83 falls back to 1 the same way
+                            var winEntry = settings.engagementWindow;
+                            var winMin = winEntry && Number(winEntry.numbersetting);
+                            pointsEarnState.windowMin = (isFinite(winMin) && winMin > 0) ? winMin : 15; // points.js:84 — 15min default
+                        } catch (e) { console.error('[arcade-shell] games settings parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] games settings load failed:', e); }
+            setGamesStatus('settings bridge unavailable — edits will not persist', true);
+            resolve();
+        });
+    }
+
+    // Every S48 write rides the canonical saveSetting IPC — but ASYNC, no
+    // callback, deliberately. A callback makes the preload answer with
+    // ipcRenderer.sendSync (preload.js:735), and main.js's relay branch
+    // (main.js:9421 — mainFrame.frames goes transiently undefined while the
+    // frame tree churns, e.g. the demo cabinet's 17 iframes) can then throw
+    // before the sync reply is set, DEADLOCKING the renderer (found by the
+    // S48 harness: even Runtime.evaluate queues forever). Async send rides
+    // the same canonical IPC without ever blocking the shell on the relay.
+    // One idempotent re-send at +600ms covers the flip side of the same
+    // hazard: a relay that throws before reaching background.js loses that
+    // write — the retry lands it once the frame tree settles (same value,
+    // so a double-landing is a no-op).
+    function saveGameSetting(key, json) {
+        try {
+            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                var payload = { cmd: 'saveSetting', type: 'textparam1', target: null, setting: key, value: json };
+                window.ninjafy.sendMessage(null, payload);
+                setTimeout(function () {
+                    try { window.ninjafy.sendMessage(null, payload); } catch (e) { /* noop */ }
+                }, 600);
+            }
+        } catch (e) { console.error('[arcade-shell] game setting save failed:', e); }
+    }
+
+    function saveGameShelf() { saveGameSetting(GAME_SHELF_KEY, JSON.stringify(gamesShelf)); }
+    function saveGameCmdSuffixes() { saveGameSetting(GAME_CMDSUFFIX_KEY, JSON.stringify(gameCmdSuffix)); }
+    function saveGameStyles() { saveGameSetting(GAME_STYLE_KEY, JSON.stringify(gameStyleDoc)); }
+    function savePointsUnlocks() { saveGameSetting(POINTS_UNLOCKS_KEY, JSON.stringify(pointsUnlocks)); }
+
+    // --------------------------------------------------------------------
+    // S48 — LEFT: the shelf (active games) + the pinned Points & unlocks row
+    // --------------------------------------------------------------------
+    function renderGamesList() {
+        var list = document.getElementById('arcade-games-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!gamesShelf.length) {
+            var empty = document.createElement('div');
+            empty.className = 'arcade-src-empty arcade-fx-grid';
+            empty.textContent = 'No games on the shelf yet — “+ Add game” opens the demo cabinet.';
+            list.appendChild(empty);
+        }
+        gamesShelf.forEach(function (id) {
+            var game = findGame(id);
+            if (!game) return; // unknown ids were filtered at load; belt-and-braces
+            list.appendChild(buildGameListRow({
+                key: game.id,
+                icon: game.emoji,
+                label: game.name,
+                stateText: 'active',
+                stateOn: true
+            }));
+        });
+        var divider = document.createElement('div');
+        divider.className = 'arcade-game-list__divider';
+        list.appendChild(divider);
+        list.appendChild(buildGameListRow({
+            key: GAME_POINTS_KEY,
+            icon: '🏆',
+            label: 'Points & unlocks',
+            stateText: pointsEarnState.enabled ? 'on' : 'off',
+            stateOn: pointsEarnState.enabled === true,
+            stateTitle: pointsEarnState.enabled === true
+                ? 'The stock points system is on'
+                : 'The stock points system is off — the earn card on the right has the door'
+        }));
+    }
+
+    function buildGameListRow(opts) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'arcade-evt-item';
+        row.dataset.arcadeGameKey = opts.key;
+        row.setAttribute('role', 'option');
+        var selected = gamesSelectedKey === opts.key;
+        row.classList.toggle('is-on', selected);
+        row.setAttribute('aria-selected', String(selected));
+        var label = document.createElement('span');
+        label.className = 'arcade-evt-item__label';
+        label.textContent = (opts.icon ? opts.icon + ' ' : '') + opts.label;
+        row.appendChild(label);
+        if (opts.stateText) {
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state ' + (opts.stateOn ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+            state.textContent = opts.stateText;
+            if (opts.stateTitle) state.title = opts.stateTitle;
+            row.appendChild(state);
+        }
+        row.addEventListener('click', function () {
+            selectGamesKey(opts.key);
+        });
+        return row;
+    }
+
+    function selectGamesKey(key) {
+        if (gamesSelectedKey === key) return;
+        gamesSelectedKey = key;
+        renderGamesList();
+        renderGamesConfig();
+        initGamesPreviewFrame();
+    }
+
+    // --------------------------------------------------------------------
+    // S48 — RIGHT: config for the selected game (or the points page)
+    // --------------------------------------------------------------------
+    function renderGamesConfig() {
+        var config = document.getElementById('arcade-games-config');
+        if (!config) return;
+        config.innerHTML = '';
+        var copyBtn = document.getElementById('arcade-games-copy');
+        if (gamesSelectedKey === GAME_POINTS_KEY) {
+            if (copyBtn) copyBtn.textContent = 'Copy leaderboard URL';
+            renderPointsConfig(config);
+            return;
+        }
+        if (copyBtn) copyBtn.textContent = 'Copy overlay URL';
+        var game = findGame(gamesSelectedKey);
+        if (!game) {
+            var empty = document.createElement('p');
+            empty.className = 'arcade-evt-blurb';
+            empty.textContent = 'Select a game on the left, or “+ Add game” to pull one out of the demo cabinet.';
+            config.appendChild(empty);
+            return;
+        }
+
+        var head = document.createElement('div');
+        head.className = 'arcade-evt-config__head';
+        var name = document.createElement('span');
+        name.className = 'arcade-evt-config__name';
+        name.textContent = game.emoji + ' ' + game.name;
+        head.appendChild(name);
+        config.appendChild(head);
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-blurb';
+        blurb.textContent = game.blurb;
+        config.appendChild(blurb);
+
+        // Start command — the &cmdsuffix pattern generalized. Command games
+        // get the editable suffix; the 11 command-less games say so plainly.
+        var cmdRow = document.createElement('div');
+        cmdRow.className = 'arcade-game-cmd';
+        var cmdTitle = document.createElement('div');
+        cmdTitle.className = 'arcade-evt-cond__title';
+        cmdTitle.textContent = 'Start command';
+        cmdRow.appendChild(cmdTitle);
+        if (game.cmds.length) {
+            var chips = document.createElement('div');
+            chips.className = 'arcade-game-cmdchips';
+            var suffixNow = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
+            game.cmds.forEach(function (cmd) {
+                var chip = document.createElement('span');
+                chip.className = 'arcade-game-cmdchip';
+                chip.textContent = cmd + suffixNow;
+                chips.appendChild(chip);
+            });
+            cmdRow.appendChild(chips);
+            if (game.cmdsuffix) {
+                var sfxRow = document.createElement('div');
+                sfxRow.className = 'arcade-alert-row';
+                var sfxLabel = document.createElement('label');
+                sfxLabel.textContent = 'Command suffix';
+                sfxRow.appendChild(sfxLabel);
+                var sfxInput = document.createElement('input');
+                sfxInput.type = 'text';
+                sfxInput.autocomplete = 'off';
+                sfxInput.placeholder = 'e.g. ' + game.id.slice(0, 2);
+                sfxInput.value = suffixNow;
+                sfxInput.title = 'Rides the stock &cmdsuffix= param — letters/numbers only, exactly what the game sanitizes';
+                sfxInput.addEventListener('input', debounce(function () {
+                    var clean = sanitizeGameCmdSuffix(sfxInput.value);
+                    if (clean) gameCmdSuffix[game.id] = clean; else delete gameCmdSuffix[game.id];
+                    saveGameCmdSuffixes();
+                    sfxInput.value = clean;
+                    // Update the chips in place (no config re-render — the
+                    // input keeps focus while the streamer types); the
+                    // preview follows on the usual debounce.
+                    var chipEls = chips.querySelectorAll('.arcade-game-cmdchip');
+                    game.cmds.forEach(function (cmd, i) {
+                        if (chipEls[i]) chipEls[i].textContent = cmd + clean;
+                    });
+                    queueGamesPreviewReload();
+                }, 300));
+                sfxRow.appendChild(sfxInput);
+                cmdRow.appendChild(sfxRow);
+                var sfxHint = document.createElement('div');
+                sfxHint.className = 'arcade-evt-cond__hint';
+                sfxHint.textContent = 'A suffix makes the commands unique when several games share one session — the stock &cmdsuffix= param, stored per game.';
+                cmdRow.appendChild(sfxHint);
+            }
+        } else {
+            var noCmd = document.createElement('div');
+            noCmd.className = 'arcade-evt-cond__hint';
+            noCmd.textContent = 'No command — every chat message plays.';
+            cmdRow.appendChild(noCmd);
+        }
+        config.appendChild(cmdRow);
+
+        if (game.avatar) {
+            var avatarLine = document.createElement('div');
+            avatarLine.className = 'arcade-evt-cond__hint';
+            avatarLine.textContent = 'Player avatars: pulls the chatter’s profile picture automatically (the page’s own chatimg path).';
+            config.appendChild(avatarLine);
+        }
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var styleBtn = document.createElement('button');
+        styleBtn.type = 'button';
+        styleBtn.className = 'arcade-btn arcade-btn--sm';
+        styleBtn.textContent = 'Customize style';
+        doors.appendChild(styleBtn);
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'arcade-btn arcade-btn--sm arcade-evt-remove';
+        removeBtn.textContent = 'Remove from shelf';
+        doors.appendChild(removeBtn);
+        config.appendChild(doors);
+
+        var styleSection = document.createElement('div');
+        styleSection.className = 'arcade-evt-style';
+        styleSection.hidden = true;
+        styleBtn.addEventListener('click', function () {
+            styleSection.hidden = !styleSection.hidden;
+            styleBtn.textContent = styleSection.hidden ? 'Customize style' : 'Hide style';
+        });
+        buildGameStyleSection(game, styleSection);
+        config.appendChild(styleSection);
+
+        // Remove-from-shelf — confirm-on-second-click (the S47 idiom); the
+        // game's stored options stay saved, so re-adding restores them.
+        removeBtn.addEventListener('click', function () {
+            if (removeBtn.dataset.armed === '1') {
+                clearTimeout(gamesRemoveArmTimer);
+                gamesShelf = gamesShelf.filter(function (id) { return id !== game.id; });
+                saveGameShelf();
+                setGamesStatus('"' + game.name + '" left the shelf — its settings stay saved');
+                gamesSelectedKey = gamesShelf.length ? gamesShelf[0] : GAME_POINTS_KEY;
+                renderGamesList();
+                renderGamesConfig();
+                initGamesPreviewFrame();
+                return;
+            }
+            removeBtn.dataset.armed = '1';
+            removeBtn.textContent = 'Remove "' + game.name + '"? Click again';
+            clearTimeout(gamesRemoveArmTimer);
+            gamesRemoveArmTimer = setTimeout(function () {
+                removeBtn.dataset.armed = '';
+                removeBtn.textContent = 'Remove from shelf';
+            }, 2500);
+        });
+
+        var pointsNote = document.createElement('div');
+        pointsNote.className = 'arcade-evt-cond__hint';
+        pointsNote.textContent = 'Playing is chatting — chatters earn loyalty points at the standard rate while the points system is on (see 🏆 Points & unlocks on the left).';
+        config.appendChild(pointsNote);
+    }
+
+    function buildGameStyleSection(game, section) {
+        // Transparency — the stock chroma toggle re-homed, or the honest
+        // state when the page has no support. NO per-game hacks (ruled).
+        if (game.chroma) {
+            section.appendChild(buildGameToggleRow(game, 'chroma', 'Green-screen background (&chroma)', 'Key it out in OBS — the game paints a #00ff00 ground.'));
+        } else if (game.transparentByDesign) {
+            var native = document.createElement('div');
+            native.className = 'arcade-evt-cond__hint';
+            native.textContent = 'Transparent by design — a lower-third overlay; nothing to set.';
+            section.appendChild(native);
+        } else {
+            var noTrans = document.createElement('div');
+            noTrans.className = 'arcade-evt-cond__hint';
+            noTrans.textContent = 'Transparency: not supported — this game reads no chroma/transparent param.';
+            section.appendChild(noTrans);
+        }
+        if (game.dark) {
+            section.appendChild(buildGameToggleRow(game, 'dark', 'Dark mode (&darkmode)', 'The game’s own night palette.'));
+        }
+        // Demo mode — the census's 17 popup demo toggles re-homed HERE, and
+        // here they drive the PREVIEW only; the copy-URL never carries &demo.
+        if (game.demo) {
+            section.appendChild(buildGameToggleRow(game, 'demo', 'Demo mode (preview only)', 'Auto-players in the preview above — never copied into the live overlay URL.'));
+        } else {
+            var attract = document.createElement('div');
+            attract.className = 'arcade-evt-cond__hint';
+            attract.textContent = 'Attract mode is built in — the preview always demos with computer players.';
+            section.appendChild(attract);
+        }
+        // The style commons' font knobs, measured honestly: NO stock game
+        // reads font-size/font-family params or &css — nothing to wire.
+        var fontNote = document.createElement('div');
+        fontNote.className = 'arcade-evt-cond__hint';
+        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 18; see the S48 report).';
+        section.appendChild(fontNote);
+    }
+
+    function buildGameToggleRow(game, field, label, hint) {
+        var row = document.createElement('div');
+        row.className = 'arcade-evt-cond__opt';
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = 'arcade-game-' + field + '-' + game.id;
+        input.checked = !!gameStyleFor(game.id)[field];
+        var lbl = document.createElement('label');
+        lbl.htmlFor = input.id;
+        lbl.textContent = label;
+        if (hint) lbl.title = hint;
+        input.addEventListener('change', function () {
+            var st = gameStyleDoc[game.id] && typeof gameStyleDoc[game.id] === 'object' ? gameStyleDoc[game.id] : {};
+            st[field] = !!input.checked;
+            gameStyleDoc[game.id] = st;
+            saveGameStyles();
+            queueGamesPreviewReload(); // the preview wears the configured look
+        });
+        row.appendChild(input);
+        row.appendChild(lbl);
+        return row;
+    }
+
+    // --------------------------------------------------------------------
+    // S48 — the preview (always an isolated demo) + the copy URL (always the
+    // real session, never a demo). See the PREVIEW ISOLATION GUARANTEE.
+    // --------------------------------------------------------------------
+    function buildGamePreviewParams(game) {
+        var params = ['session=' + encodeURIComponent(gamesPreviewRoom)];
+        var st = gameStyleFor(game.id);
+        if (game.demo && st.demo) params.push('demo');
+        if (game.chroma && st.chroma) params.push('chroma');
+        if (game.dark && st.dark) params.push('darkmode');
+        var suffix = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
+        if (game.cmdsuffix && suffix) params.push('cmdsuffix=' + encodeURIComponent(suffix));
+        return params;
+    }
+
+    function initGamesPreviewFrame() {
+        var frame = document.getElementById('arcade-games-preview-frame');
+        if (!frame || !gamesPanelLive) return;
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') {
+            setGamesPreviewHint('preview unavailable (app helpers not found)');
+            return;
+        }
+        var myToken = ++gamesPreviewToken;
+        frame.dataset.arcadeGamePreviewReady = '';
+        if (gamesSelectedKey === GAME_POINTS_KEY) {
+            // Leaderboard door — stock leaderboard.html; &demo stays
+            // preview-only (ruled), the room is the throwaway preview room.
+            setGamesPreviewHint('Loading leaderboard demo…');
+            resolver('leaderboard.html', { extraParams: ['session=' + encodeURIComponent(gamesPreviewRoom), 'demo'] }).then(function (resolved) {
+                if (myToken !== gamesPreviewToken) return;
+                if (resolved && resolved.url) {
+                    frame.onload = function () {
+                        if (myToken !== gamesPreviewToken) return;
+                        frame.dataset.arcadeGamePreviewReady = '1';
+                        // Stock only seeds its demo users in the topbar
+                        // ticker layout (leaderboard.html:2488), so the
+                        // default-layout demo honestly renders empty — an
+                        // isolated room has no board to show.
+                        setGamesPreviewHint('Leaderboard preview — honestly empty in an isolated room; Copy leaderboard URL takes the live overlay (no demo).');
+                    };
+                    frame.src = resolved.url;
+                }
+            }).catch(function (e) {
+                console.error('[arcade-shell] leaderboard preview init failed:', e);
+                setGamesPreviewHint('preview failed — see console');
+            });
+            return;
+        }
+        var game = findGame(gamesSelectedKey);
+        if (!game) {
+            frame.removeAttribute('src');
+            setGamesPreviewHint('Add a game to preview it here — every preview is an isolated demo, never your live session.');
+            return;
+        }
+        setGamesPreviewHint('Loading demo…');
+        resolver(game.file, { extraParams: buildGamePreviewParams(game) }).then(function (resolved) {
+            if (myToken !== gamesPreviewToken) return;
+            if (resolved && resolved.url) {
+                frame.onload = function () {
+                    if (myToken !== gamesPreviewToken) return;
+                    frame.dataset.arcadeGamePreviewReady = '1';
+                    setGamesPreviewHint('Preview ready — isolated demo, never your live session.');
+                };
+                frame.src = resolved.url;
+            }
+        }).catch(function (e) {
+            console.error('[arcade-shell] game preview init failed:', e);
+            setGamesPreviewHint('preview failed — see console');
+        });
+    }
+
+    var gamesReloadTimer = null;
+    function queueGamesPreviewReload() {
+        if (!gamesPanelLive) return;
+        clearTimeout(gamesReloadTimer);
+        gamesReloadTimer = setTimeout(initGamesPreviewFrame, 400);
+    }
+
+    function buildGamesOverlayUrl() {
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') {
+            return Promise.reject(new Error('overlay resolver unavailable'));
+        }
+        var langParams = (typeof window.getLanguageExtraParams === 'function') ? window.getLanguageExtraParams() : [];
+        var isPoints = gamesSelectedKey === GAME_POINTS_KEY;
+        var game = isPoints ? null : findGame(gamesSelectedKey);
+        if (!isPoints && !game) return Promise.reject(new Error('no game selected'));
+
+        function withSession(sessionId) {
+            var params = [];
+            if (sessionId) params.push('session=' + encodeURIComponent(sessionId));
+            if (game) {
+                // The real overlay URL: stored options only — NEVER &demo and
+                // never the preview room (the ruled mirror of the preview).
+                var st = gameStyleFor(game.id);
+                if (game.chroma && st.chroma) params.push('chroma');
+                if (game.dark && st.dark) params.push('darkmode');
+                var suffix = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
+                if (game.cmdsuffix && suffix) params.push('cmdsuffix=' + encodeURIComponent(suffix));
+            }
+            params = params.concat(langParams);
+            return resolver(isPoints ? 'leaderboard.html' : game.file, { extraParams: params }).then(function (resolved) {
+                return resolved && resolved.url;
+            });
+        }
+
+        if (typeof window.getChatDockSessionId === 'function') {
+            try {
+                return Promise.resolve(window.getChatDockSessionId()).then(withSession, function () { return withSession(null); });
+            } catch (e) {
+                return withSession(null);
+            }
+        }
+        return withSession(null);
+    }
+
+    function copyGamesOverlayUrl(btn) {
+        if (gamesSelectedKey !== GAME_POINTS_KEY && !findGame(gamesSelectedKey)) {
+            setGamesStatus('select a game first', true);
+            return;
+        }
+        buildGamesOverlayUrl().then(function (url) {
+            if (!url) throw new Error('empty overlay url');
+            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
+        }).catch(function (e) {
+            console.error('[arcade-shell] copy games overlay url failed:', e);
+            flashButton(btn, 'Copy failed', 2200);
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // S48 — the demo cabinet (picker pop-window). One card per game NOT on
+    // the shelf, each running the game's OWN demo in a small frame (attract
+    // mode) off the same throwaway preview room — never a live session.
+    // Frames load lazily as they scroll into view (seventeen live canvases
+    // at once would jank the shell for no reason).
+    // --------------------------------------------------------------------
+    function openGamePicker() {
+        closeGamePicker();
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-game-picker';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal arcade-game-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-label', 'Add a game — the demo cabinet');
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.textContent = 'Add a game — the demo cabinet';
+        modal.appendChild(title);
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-modal__blurb';
+        blurb.textContent = 'Every cabinet runs the game’s own isolated demo — never your live session.';
+        modal.appendChild(blurb);
+        var grid = document.createElement('div');
+        grid.className = 'arcade-game-cabinet';
+        modal.appendChild(grid);
+        var inactive = GAMES.filter(function (g) { return gamesShelf.indexOf(g.id) === -1; });
+        if (!inactive.length) {
+            var none = document.createElement('p');
+            none.className = 'arcade-evt-modal__blurb';
+            none.textContent = 'Every game is already on the shelf.';
+            grid.appendChild(none);
+        }
+        var pendingFrames = [];
+        inactive.forEach(function (game) {
+            var card = document.createElement('div');
+            card.className = 'arcade-game-cab';
+            var name = document.createElement('div');
+            name.className = 'arcade-game-cab__name';
+            name.textContent = game.emoji + ' ' + game.name;
+            card.appendChild(name);
+            var frame = document.createElement('iframe');
+            frame.className = 'arcade-game-cab__demo';
+            frame.title = game.name + ' — demo';
+            frame.setAttribute('loading', 'lazy');
+            card.appendChild(frame);
+            pendingFrames.push({ frame: frame, game: game });
+            var cabBlurb = document.createElement('div');
+            cabBlurb.className = 'arcade-game-cab__blurb';
+            cabBlurb.textContent = game.blurb;
+            card.appendChild(cabBlurb);
+            var add = document.createElement('button');
+            add.type = 'button';
+            add.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+            add.textContent = 'Add to shelf';
+            add.addEventListener('click', function () {
+                gamesShelf.push(game.id);
+                saveGameShelf();
+                closeGamePicker();
+                setGamesStatus('"' + game.name + '" landed on the shelf');
+                selectGamesKey(game.id);
+                if (gamesSelectedKey !== game.id) { // first selection — selectGamesKey no-ops when equal
+                    renderGamesList();
+                    renderGamesConfig();
+                    initGamesPreviewFrame();
+                }
+            });
+            card.appendChild(add);
+            grid.appendChild(card);
+        });
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeGamePicker(); });
+        document.body.appendChild(back);
+
+        // Lazy demo loading: resolve each card's demo URL up front (cheap —
+        // it's just URL composition), but only hand a frame its src once the
+        // card is near the viewport.
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        pendingFrames.forEach(function (entry) {
+            var params = ['session=' + encodeURIComponent(gamesPreviewRoom)];
+            if (entry.game.demo) params.push('demo'); // the cabinet always demos
+            resolver(entry.game.file, { extraParams: params }).then(function (resolved) {
+                if (!resolved || !resolved.url) return;
+                entry.url = resolved.url;
+                if (entry.visible) loadCabFrame(entry);
+            });
+        });
+        if (typeof IntersectionObserver === 'function') {
+            var observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (en) {
+                    if (!en.isIntersecting) return;
+                    var entry = en.target.__cabEntry;
+                    if (entry) {
+                        entry.visible = true;
+                        loadCabFrame(entry);
+                        observer.unobserve(en.target);
+                    }
+                });
+            }, { root: grid, rootMargin: '200px' });
+            pendingFrames.forEach(function (entry) {
+                entry.frame.__cabEntry = entry;
+                observer.observe(entry.frame);
+            });
+        } else {
+            pendingFrames.forEach(function (entry) { entry.visible = true; loadCabFrame(entry); });
+        }
+    }
+
+    function loadCabFrame(entry) {
+        if (!entry || !entry.visible || !entry.url || entry.loaded) return;
+        if (!document.getElementById('arcade-game-picker')) return; // modal closed meanwhile
+        entry.loaded = true;
+        entry.frame.src = entry.url;
+    }
+
+    function closeGamePicker() {
+        var back = document.getElementById('arcade-game-picker');
+        if (back) back.remove(); // the demo iframes die with the modal
+    }
+
+    // --------------------------------------------------------------------
+    // S48 — LANE 2: the points page (earn card + unlocks table + the
+    // leaderboard door — its preview/copy ride the shared frame/URL code).
+    // --------------------------------------------------------------------
+    function renderPointsConfig(config) {
+        var head = document.createElement('div');
+        head.className = 'arcade-evt-config__head';
+        var name = document.createElement('span');
+        name.className = 'arcade-evt-config__name';
+        name.textContent = '🏆 Points & unlocks';
+        head.appendChild(name);
+        config.appendChild(head);
+
+        // EARN — the real rates off getSettings, measured against points.js.
+        var earnTitle = document.createElement('div');
+        earnTitle.className = 'arcade-evt-cond__title';
+        earnTitle.textContent = 'Earn';
+        config.appendChild(earnTitle);
+        var earnLine = document.createElement('p');
+        earnLine.className = 'arcade-evt-blurb';
+        earnLine.textContent =
+            'Chatters earn ' + pointsEarnState.per + ' point' + (pointsEarnState.per === 1 ? '' : 's') +
+            ' per ' + pointsEarnState.windowMin + '-minute engagement window, plus a streak bonus ' +
+            '(+10% per consecutive hour, capped at 2× — stock rules). Points are message engagement, not watch time.';
+        config.appendChild(earnLine);
+        if (pointsEarnState.enabled !== true) {
+            var offLine = document.createElement('div');
+            offLine.className = 'arcade-evt-cond__hint';
+            offLine.textContent = 'The points system is OFF — no points accrue until it’s on.';
+            config.appendChild(offLine);
+        }
+        var earnDoors = document.createElement('div');
+        earnDoors.className = 'arcade-evt-doors';
+        var deckBtn = document.createElement('button');
+        deckBtn.type = 'button';
+        deckBtn.className = 'arcade-btn arcade-btn--sm';
+        deckBtn.textContent = pointsEarnState.enabled === true ? 'Edit rates in Deck Settings' : 'Turn on in Deck Settings';
+        deckBtn.addEventListener('click', function () { navigateArcadeTab('settings'); });
+        earnDoors.appendChild(deckBtn);
+        config.appendChild(earnDoors);
+
+        // UNLOCKS — the streamer-edited threshold → effect-name ledger. v1
+        // renders the table and says honestly where execution lives.
+        var unlocksTitle = document.createElement('div');
+        unlocksTitle.className = 'arcade-evt-cond__title';
+        unlocksTitle.textContent = 'Unlocks';
+        config.appendChild(unlocksTitle);
+        var unlocksList = document.createElement('div');
+        unlocksList.className = 'arcade-game-unlocks';
+        config.appendChild(unlocksList);
+        pointsUnlocks.forEach(function (unlock, idx) {
+            unlocksList.appendChild(buildUnlockRow(unlock, idx));
+        });
+        if (!pointsUnlocks.length) {
+            var noUnlocks = document.createElement('div');
+            noUnlocks.className = 'arcade-evt-cond__hint';
+            noUnlocks.textContent = 'No unlocks yet — set a points threshold and name what it means.';
+            unlocksList.appendChild(noUnlocks);
+        }
+        var addUnlockBtn = document.createElement('button');
+        addUnlockBtn.type = 'button';
+        addUnlockBtn.className = 'arcade-btn arcade-btn--sm';
+        addUnlockBtn.textContent = '+ Add unlock';
+        addUnlockBtn.addEventListener('click', function () {
+            var nextThreshold = pointsUnlocks.length ? (Math.max.apply(null, pointsUnlocks.map(function (u) { return u.threshold; })) * 2) : 100;
+            pointsUnlocks.push({ threshold: nextThreshold, name: '' });
+            savePointsUnlocks();
+            renderGamesConfig();
+        });
+        config.appendChild(addUnlockBtn);
+        var unlocksHint = document.createElement('div');
+        unlocksHint.className = 'arcade-evt-cond__hint';
+        unlocksHint.textContent = 'Names only for now — unlocks fire via event flows; the execution wiring is a follow-up task. ' +
+            'Flows and overlays can already read this table through the settings chain (arcadePointsUnlocks).';
+        config.appendChild(unlocksHint);
+        var flowDoors = document.createElement('div');
+        flowDoors.className = 'arcade-evt-doors';
+        var flowsBtn = document.createElement('button');
+        flowsBtn.type = 'button';
+        flowsBtn.className = 'arcade-btn arcade-btn--sm';
+        flowsBtn.textContent = 'Open Flows';
+        flowsBtn.addEventListener('click', function () { navigateArcadeTab('eventflow'); });
+        flowDoors.appendChild(flowsBtn);
+        config.appendChild(flowDoors);
+
+        var lbNote = document.createElement('div');
+        lbNote.className = 'arcade-evt-cond__hint';
+        lbNote.textContent = 'The leaderboard overlay (stock leaderboard.html) demos above; “Copy leaderboard URL” takes the live overlay into OBS.';
+        config.appendChild(lbNote);
+    }
+
+    function buildUnlockRow(unlock, idx) {
+        var row = document.createElement('div');
+        row.className = 'arcade-game-unlock';
+        var thresholdInput = document.createElement('input');
+        thresholdInput.type = 'number';
+        thresholdInput.min = '1';
+        thresholdInput.step = '1';
+        thresholdInput.value = String(unlock.threshold);
+        thresholdInput.title = 'Points threshold';
+        thresholdInput.addEventListener('change', function () {
+            var v = Math.max(1, Math.round(Number(thresholdInput.value) || 0));
+            thresholdInput.value = String(v);
+            pointsUnlocks[idx].threshold = v;
+            savePointsUnlocks();
+        });
+        row.appendChild(thresholdInput);
+        var arrow = document.createElement('span');
+        arrow.className = 'arcade-game-unlock__arrow';
+        arrow.textContent = '→';
+        row.appendChild(arrow);
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.autocomplete = 'off';
+        nameInput.placeholder = 'effect name — e.g. Emote storm';
+        nameInput.value = unlock.name;
+        nameInput.addEventListener('input', debounce(function () {
+            pointsUnlocks[idx].name = nameInput.value;
+            savePointsUnlocks();
+        }, 300));
+        row.appendChild(nameInput);
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'arcade-btn arcade-btn--sm';
+        remove.textContent = '×';
+        remove.title = 'Remove this unlock';
+        remove.addEventListener('click', function () {
+            pointsUnlocks.splice(idx, 1);
+            savePointsUnlocks();
+            renderGamesConfig();
+        });
+        row.appendChild(remove);
+        return row;
+    }
+
+    // --------------------------------------------------------------------
+    // S48 — LANE 2 on Main: the POINTS pulse tile + top-earners rows on the
+    // analytics rail. Real IndexedDB reads off the analytics bridge (the
+    // background page's window.pointsSystem global — the same pure-read
+    // pattern getLastMessagesDB/buildViewerCountsFromMetaStore already use).
+    // "Today" = entries in each record's engagementHistory since local
+    // midnight (one entry per awarded window) × the live pointsPerEngagement
+    // — BASE rate only; streak bonuses aren't attributable per day and the
+    // sub says so. Dash laws apply: system off or nobody earned yet = dash.
+    // --------------------------------------------------------------------
+    var pointsPulseToken = 0;
+
+    function readPointsEarnersToday(sys) {
+        var startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        var startMs = startOfToday.getTime();
+        return Promise.resolve(sys.ensureDB()).then(function (db) {
+            return new Promise(function (resolve) {
+                var out = [];
+                try {
+                    var tx = db.transaction(sys.storeName, 'readonly');
+                    tx.objectStore(sys.storeName).openCursor().onsuccess = function (e) {
+                        var cursor = e.target.result;
+                        if (cursor) {
+                            var u = cursor.value || {};
+                            var hist = Array.isArray(u.engagementHistory) ? u.engagementHistory : [];
+                            var windows = 0;
+                            for (var i = 0; i < hist.length; i++) { if (hist[i] >= startMs) windows++; }
+                            if (windows > 0 && u.username) {
+                                out.push({
+                                    username: String(u.username),
+                                    type: String(u.type || ''),
+                                    today: windows * (sys.pointsPerEngagement || 1),
+                                    total: (Number(u.points) || 0) - (Number(u.pointsSpent) || 0)
+                                });
+                            }
+                            cursor.continue();
+                        } else {
+                            resolve(out);
+                        }
+                    };
+                    tx.onerror = function () { resolve(out); };
+                } catch (e) { resolve(out); }
+            });
+        });
+    }
+
+    function renderPointsPulse() {
+        var valEl = document.getElementById('arcade-stat-points-value');
+        var subEl = document.getElementById('arcade-stat-points-sub');
+        var rowsEl = document.getElementById('arcade-points-rows');
+        if (!valEl || !subEl || !rowsEl) return;
+        var my = ++pointsPulseToken;
+        var bg = getBackgroundWindow();
+        var sys = bg && bg.pointsSystem;
+        if (!sys || typeof sys.ensureDB !== 'function') return; // bridge not up yet — honest "connecting…" dash
+        var enabled = null;
+        try { enabled = (typeof bg.getSettingFlag === 'function') ? !!bg.getSettingFlag('enablePointsSystem') : null; } catch (e) { enabled = null; }
+        if (enabled === false) {
+            arcadeFxSetNumber(valEl, null); // dash stays dash
+            valEl.classList.add('is-dash');
+            subEl.textContent = 'points system off — Games → Points & unlocks';
+            rowsEl.innerHTML = '';
+            return;
+        }
+        readPointsEarnersToday(sys).then(function (earners) {
+            if (my !== pointsPulseToken) return; // superseded by a newer poll
+            earners.sort(function (a, b) { return (b.today - a.today) || (b.total - a.total); });
+            rowsEl.innerHTML = '';
+            if (!earners.length) {
+                arcadeFxSetNumber(valEl, null);
+                valEl.classList.add('is-dash');
+                subEl.textContent = 'no base points earned yet today';
+                var empty = document.createElement('li');
+                empty.className = 'arcade-src-empty arcade-fx-grid';
+                empty.textContent = enabled === null
+                    ? 'Points reads waiting on the background bridge.'
+                    : 'No earners yet today — points accrue on chat engagement.';
+                rowsEl.appendChild(empty);
+                return;
+            }
+            arcadeFxSetNumber(valEl, earners[0].today); // S44 M3 — tick TO the real value
+            valEl.classList.remove('is-dash');
+            subEl.textContent = earners[0].username + ' · base pts today';
+            earners.slice(0, 3).forEach(function (earner, idx) {
+                var li = document.createElement('li');
+                li.className = 'arcade-frow';
+                li.innerHTML =
+                    '<span class="arcade-pill arcade-pill--mono">' + (idx + 1) + '</span>' +
+                    '<span class="arcade-frow__label"></span>' +
+                    '<span class="arcade-frow__total arcade-fx-ticker">—</span>' +
+                    '<span class="arcade-frow__delta arcade-fx-ticker">—</span>';
+                li.querySelector('.arcade-frow__label').textContent = earner.username;
+                li.querySelector('.arcade-frow__label').title = (earner.type ? earner.type + ' · ' : '') + 'today: base pts · right: all-time available';
+                rowsEl.appendChild(li);
+                arcadeFxSetNumber(li.querySelector('.arcade-frow__total'), earner.today);
+                arcadeFxSetNumber(li.querySelector('.arcade-frow__delta'), earner.total);
+            });
+        }).catch(function (e) {
+            console.error('[arcade-shell] points pulse read failed:', e);
+        });
+    }
+
+    // --------------------------------------------------------------------
     // Style Builder v1 (custom "Style" tab) — visual chat-dock styling.
     // Emits a CSS-variable override blob through SSN's EXISTING cssb64
     // plumbing: the blob is saved as RAW css to the popup's own Custom CSS
@@ -6486,9 +7553,18 @@
             '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-firsttime-value">—</span><span class="arcade-stat__sub" id="arcade-stat-firsttime-sub">connecting…</span></div>' +
             '<div class="arcade-stat"><span class="arcade-stat__label">RAIDS RECEIVED</span>' +
             '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-raids-value">—</span><span class="arcade-stat__sub" id="arcade-stat-raids-sub">last: —</span></div>' +
+            // S48 — the points pulse tile: top earner TODAY off real points
+            // IndexedDB reads via the bridge (renderPointsPulse); base rate
+            // only, dash-faced while off/unearned — dash stays dash.
+            '<div class="arcade-stat"><span class="arcade-stat__label">TOP EARNER TODAY</span>' +
+            '<span class="arcade-stat__value arcade-fx-ticker is-dash" id="arcade-stat-points-value">—</span><span class="arcade-stat__sub" id="arcade-stat-points-sub">points: connecting…</span></div>' +
             '</div>' +
             '<div class="arcade-field"><label>FOLLOWER DELTA</label><span class="arcade-field__hint">Δ since this session started — no historical archive yet</span></div>' +
             '<ul class="arcade-frow-list" id="arcade-follower-rows"></ul>' +
+            // S48 — top earners today (base pts off today's engagement
+            // windows; all-time available on the right). Real reads only.
+            '<div class="arcade-field"><label>POINTS — TOP EARNERS TODAY</label><span class="arcade-field__hint">base pts from today’s engagement windows · right: all-time available</span></div>' +
+            '<ul class="arcade-frow-list" id="arcade-points-rows"></ul>' +
             '<div class="arcade-field"><label>RECENT NOTIFICATIONS</label><span class="arcade-field__hint">latest from chat history, any period</span></div>' +
             '<div id="arcade-notifications"><div class="arcade-nrow-empty arcade-fx-grid" id="arcade-nrow-empty">Waiting on the background bridge — raids, follows, and ' +
             'donations live in the chat-history store (background.js/db.js); this reads it via frame2, not a fabricated feed.</div>' +
@@ -6594,6 +7670,7 @@
         renderAnalyticsPeakViewers();
         renderWatchTime();
         renderFollowerTotals();
+        renderPointsPulse(); // S48 — the points pulse tile + top-earners rows (own async token)
     }
 
     // Hours watched — viewer-hours (∫ concurrent viewers dt), the honest
@@ -7384,6 +8461,7 @@
         buildAddonsPanel();
         buildStylePanel();
         buildAlertsPanel();
+        buildGamesPanel(); // S48 — the hub panel exists from boot; contents lazy (ensureGamesPanelLive on first visit)
         if (CUSTOM_TABS.ai) buildAiPanel();
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer
