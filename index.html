@@ -10,7 +10,8 @@
         content="script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;" />
     <link rel="stylesheet" type="text/css" href="main.css" />
     <!-- Arcade shell (Pac's Arcade chrome layer). Every rule is scoped under
-         body.arcade-shell — inert unless that class is present (SSN_SHELL=arcade). -->
+         body.arcade-shell — inert unless that class is present (default since
+         TASK-66; SSN_SHELL=stock or the in-app Interface switch opts out). -->
     <link rel="stylesheet" type="text/css" href="arcade-shell.css" />
     <script src="resources/social_stream_fallback/main/thirdparty/vdoninja-sdk.js"></script>
     <script>
@@ -100,17 +101,36 @@
 
 <body>
     <script>
-        // Arcade shell switch (Phase 2 Shell Alpha). SSN_SHELL is set by the launcher
-        // the same way SSN_CHANNEL already is; process.env is readable here because
-        // this window runs with nodeIntegration on for local/sourcemode loads (same
-        // mechanism SSAPP_TIKTOK_SIGNING_GUIDE_URL already relies on elsewhere in this
-        // file). Unset/anything else = stock, byte-for-byte unchanged.
+        // Arcade shell switch — TASK-66 (H22 ruled): ARCADE IS THE DEFAULT.
+        // Precedence, first match wins:
+        //   1. SSN_SHELL=stock   -> stock (the explicit opt-out; byte-for-byte
+        //      Steve's original). SSN_SHELL=arcade -> arcade (explicit opt-in).
+        //      process.env is readable here because this window runs with
+        //      nodeIntegration on for local/sourcemode loads (same mechanism
+        //      SSAPP_TIKTOK_SIGNING_GUIDE_URL already relies on elsewhere).
+        //   2. The persisted in-app choice (Deck Settings -> Diagnostics ->
+        //      Interface), mirrored to localStorage by arcade-shell.js so this
+        //      synchronous boot script can read it without an IPC round-trip.
+        //   3. Default: arcade.
+        // With the class absent the app is stock, byte-for-byte unchanged.
         (function () {
             try {
-                if (typeof process !== 'undefined' && process && process.env && process.env.SSN_SHELL === 'arcade') {
+                var envShell = '';
+                if (typeof process !== 'undefined' && process && process.env && process.env.SSN_SHELL) {
+                    envShell = String(process.env.SSN_SHELL).toLowerCase();
+                }
+                var picked = '';
+                if (envShell === 'stock' || envShell === 'arcade') {
+                    picked = envShell;
+                } else {
+                    try { picked = String(localStorage.getItem('ssnShellInterface') || '').toLowerCase(); } catch (e) { picked = ''; }
+                }
+                if (picked !== 'stock') {
                     document.body.classList.add('arcade-shell');
                 }
-            } catch (e) { /* no process.env access — stay stock */ }
+            } catch (e) { /* unreadable env/storage — the default stands: arcade */ 
+                try { document.body.classList.add('arcade-shell'); } catch (e2) { /* noop */ }
+            }
         })();
     </script>
     <nav id="main-navigation">

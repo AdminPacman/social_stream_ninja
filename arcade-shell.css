@@ -2109,6 +2109,42 @@ body.arcade-shell .arcade-deck-sessionid:focus-visible {
   border-radius: 3px;
 }
 
+/* TASK-66 — the session id goes quiet: masked-by-default link fields
+   (Frames & Cameras guest links — the room derives from the session id),
+   the rotate flow, and the cabinet sound toggle. Same blur idiom as
+   .arcade-deck-masked, on the shell's own inputs. */
+body.arcade-shell .arcade-masked-value {
+  filter: blur(6px);
+  transition: filter 0.15s ease;
+  cursor: pointer;
+}
+body.arcade-shell .arcade-masked-value:hover,
+body.arcade-shell .arcade-masked-value:focus { filter: none; }
+body.arcade-shell .arcade-deck-masked { cursor: pointer; }
+body.arcade-shell .arcade-deck-rotate {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--arc-edge);
+  border-radius: var(--arc-r);
+  background: var(--arc-panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body.arcade-shell .arcade-deck-rotate__notice {
+  margin: 0;
+  color: var(--arc-warning, #f59e0b);
+  font-size: 12px;
+  line-height: 1.5;
+}
+body.arcade-shell .arcade-deck-rotate__done {
+  margin: 0;
+  color: var(--arc-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+body.arcade-shell .arcade-game-cab__sound { align-self: flex-start; margin: 0 0 4px; }
+
 /* Control surfaces — the chooser grid + copy rows. */
 body.arcade-shell .arcade-deck-chooser {
   display: grid;
