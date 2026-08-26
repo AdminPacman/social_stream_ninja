@@ -134,16 +134,10 @@ body.arcade-shell .arcade-nav button.is-on {
   background: rgba(53, 208, 255, 0.1);
   box-shadow: inset 0 -2px 0 rgba(53, 208, 255, 0.5);
 }
-/* AI area rail berth — deliberately off the cyan is-on accent every other
-   tab shares: gold marks it as the gated/admin seat (design doc colors,
-   0018.06.01). Only ever rendered at all when hasNostrSigner() passed at
-   boot (arcade-shell.js), so this rule is inert on every other seat. */
-body.arcade-shell .arcade-nav button[data-arcade-tab-btn="ai"] { color: #D9B24E; }
-body.arcade-shell .arcade-nav button[data-arcade-tab-btn="ai"].is-on {
-  color: #D9B24E;
-  background: rgba(217, 178, 78, 0.12);
-  box-shadow: inset 0 -2px 0 rgba(217, 178, 78, 0.55);
-}
+/* TASK-64 delock: the AI tab wears exactly the shared styles above — the
+   v1/v2 gated-gold override ([data-arcade-tab-btn="ai"] #D9B24E, topbar AND
+   burger sheet) is retired with the gate. Nothing in the nav reads
+   "locked" any more. */
 body.arcade-shell .arcade-topbar .arcade-spacer { flex: 1; }
 
 /* --------------------------------------------------------------------------
@@ -209,14 +203,6 @@ body.arcade-shell .arcade-nav-sheet button.is-on {
   color: var(--arc-info);
   background: rgba(53, 208, 255, 0.1);
   box-shadow: inset 2px 0 0 rgba(53, 208, 255, 0.5);
-}
-/* the gated seat keeps its gold inside the sheet too (same semantic as the
-   bar berth — off the cyan accent every other tab shares). */
-body.arcade-shell .arcade-nav-sheet button[data-arcade-tab-btn="ai"] { color: #D9B24E; }
-body.arcade-shell .arcade-nav-sheet button[data-arcade-tab-btn="ai"].is-on {
-  color: #D9B24E;
-  background: rgba(217, 178, 78, 0.12);
-  box-shadow: inset 2px 0 0 rgba(217, 178, 78, 0.55);
 }
 /* Sheet entry motion — reduced-motion seats get the still-state only
    (the sheet simply appears; no transform, no fade). */
@@ -852,13 +838,13 @@ body.arcade-shell .arcade-el-status--planned { color: var(--arc-faint); }
 }
 
 /* --------------------------------------------------------------------------
-   AI area — custom "AI" tab (Phase 1, pacsarcade briefings/
-   ssn-ai-area-design.md). Same full-panel custom-tab pattern as
-   .arcade-addons/.arcade-alerts, but its own ground: gate ink on a
-   dedicated dark-violet panel (design doc colors, 0018.06.01) rather than
-   the shared --arc-void, so the gated DevChat berth reads visually distinct
-   from the rest of the shell. Only ever built at all when hasNostrSigner()
-   passed at boot — see buildAiPanel() in arcade-shell.js.
+   AI console (TASK-64 — delocked). Same full-panel custom-tab pattern as
+   .arcade-addons/.arcade-alerts, on the SAME shared ground as every sibling
+   panel — the v1/v2 gated look (violet berth ground + gold panel title +
+   the 🔒 nav label) is retired with the gate itself. Nothing here reads
+   "locked" any more; every zone row reports its own honest state instead.
+   Interior = the S47/S50 idiom (.arcade-alerts-body/stage + .arcade-evt-*),
+   so only the AI-specific bits below are new — all body.arcade-shell-scoped.
    -------------------------------------------------------------------------- */
 body.arcade-shell .arcade-ai {
   display: none;
@@ -866,128 +852,76 @@ body.arcade-shell .arcade-ai {
   top: var(--arc-topbar-h);
   left: 0; right: 0; bottom: 0;
   z-index: 1500;
-  background: #1b1530;
+  background: var(--arc-void);
   flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
 }
 body.arcade-shell[data-arcade-tab="ai"] .arcade-ai { display: flex; }
 
-body.arcade-shell .arcade-ai .arcade-panel-title { color: #D9B24E; }
 body.arcade-shell .arcade-ai-status {
   font: 400 11px/1.4 var(--arc-font-ui);
-  color: rgba(244, 236, 255, 0.6);
+  color: var(--arc-muted);
 }
 body.arcade-shell .arcade-ai-body {
   flex: 1; min-height: 0;
   display: flex;
   padding: 0;
 }
-body.arcade-shell .arcade-ai-body[data-ai-state="checking"],
-body.arcade-shell .arcade-ai-body[data-ai-state="refused"],
-body.arcade-shell .arcade-ai-body[data-ai-state="unreachable"] {
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-body.arcade-shell .arcade-ai-hint {
-  font: 400 13px/1.5 var(--arc-font-ui);
-  color: #F4ECFF;
-  text-align: center;
-  max-width: 480px;
-}
-body.arcade-shell .arcade-ai-hint.is-error { color: var(--arc-warning); }
-body.arcade-shell #arcade-ai-frame {
-  flex: 1; min-height: 0; width: 100%;
-  border: 0;
-  background: #1b1530;
+
+/* The stage column (TOP half of the right side). Plain flex column — zones
+   that want the preview-box look create their own .arcade-alerts-preview
+   inside it; card-staged zones (moderation test box, models status, devchat
+   status) just drop their card here. */
+body.arcade-shell .arcade-ai-stage {
+  display: flex; flex-direction: column; gap: 12px;
+  flex-shrink: 0;
 }
 
-/* Collapse control ("← Console") — only visible while expanded (checking/
-   unreachable/live past the gate); toggled by setAiCollapseVisible(). Sits
-   in the same persistent panel head as the × close button, but the two are
-   NOT the same action: × exits the AI tab entirely (navigateArcadeTab
-   ('main')), collapse only tears the iframe down and returns to the
-   console, staying on the tab. */
-body.arcade-shell #arcade-ai-collapse[hidden] { display: none; }
-
-/* --------------------------------------------------------------------------
-   AI console (V2) — the tab's default post-gate view. Body text/pills sit
-   on --arc-panel (#14161b) rather than the outer .arcade-ai violet ground
-   (#1b1530), following the SAME "card floats on a darker ground" pattern
-   .arcade-el-card already uses on --arc-void — contrast measured against
-   --arc-panel, not the violet ground, since that's the surface the text
-   actually paints on. Contrast table (WCAG, measured 2026-08-23):
-     arc-ink f2f0ea    / arc-panel 14161b : 15.88:1  (body text, needs 4.5)
-     arc-muted 9ba1ad  / arc-panel 14161b :  6.98:1  (secondary text, needs 4.5)
-     arc-faint 646b78  / arc-panel 14161b :  3.38:1  (meta-only, UI 3:1, never body)
-     arc-info 35d0ff   / arc-panel 14161b : 10.01:1  (reachable label, needs 3)
-     arc-warning f59e0b/ arc-panel 14161b :  8.43:1  (unreachable/error label, needs 3)
-     gold D9B24E       / violet 1b1530    :  8.72:1  (inherited from v1's panel title)
-   -------------------------------------------------------------------------- */
-body.arcade-shell .arcade-ai-console {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column;
-  gap: 20px;
-  padding: 18px;
-  overflow-y: auto;
-  box-sizing: border-box;
-  max-width: 1120px;
+/* "Brain" line — every AI row shows WHICH model it uses + honest state.
+   arc-muted on arc-panel: 6.98:1 (the S30 table) — body-text safe. */
+body.arcade-shell .arcade-ai-brain__value {
+  font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted);
+  overflow-wrap: anywhere;
 }
 
-/* Check-in card — same card shell as .arcade-el-card (padding/bg/border/
-   radius), its own class because the body is a probe-populated line list,
-   not a blurb+params pair. */
-body.arcade-shell .arcade-ai-checkin {
-  display: flex; flex-direction: column; gap: 10px;
+/* Verdict / status read-outs (moderation test box, models + devchat
+   probes). is-error = warning/amber, never money-gold, never live-neon. */
+body.arcade-shell .arcade-ai-verdict { margin: 0; }
+body.arcade-shell .arcade-ai-verdict.is-error { color: var(--arc-warning); }
+
+/* Moderation test box + persona textarea rows — the textarea takes the
+   field column of the shared .arcade-alert-row grid. The label-less test
+   box spans both columns so the sample text gets the room the button
+   doesn't need. */
+body.arcade-shell .arcade-ai-testbox textarea,
+body.arcade-shell .arcade-ai-persona textarea {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  font: 400 12px/1.5 var(--arc-font-ui); padding: 6px 8px;
+}
+body.arcade-shell .arcade-ai-testbox { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+body.arcade-shell .arcade-ai-persona { grid-template-columns: 68px minmax(0, 1fr); align-items: start; }
+body.arcade-shell .arcade-ai-persona textarea { grid-column: 2; }
+
+/* Honest off-state block (the private chat panel before allowChatBot). */
+body.arcade-shell .arcade-ai-offstate {
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
   padding: 16px;
   background: var(--arc-panel);
-  border: 1px solid var(--arc-edge);
-  border-radius: var(--arc-r-lg);
-  box-sizing: border-box;
-  max-width: 420px;
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r-lg);
 }
-body.arcade-shell .arcade-ai-checkin__head {
-  display: flex; align-items: center; gap: 8px;
-}
-body.arcade-shell .arcade-ai-checkin__name {
-  margin: 0; flex: 1 1 auto;
-  font: 700 14px/1.2 var(--arc-font-ui); color: var(--arc-ink);
-}
-/* Pill states reuse the shell's own semantic tokens — info/cyan for
-   "reachable" (the SAME "available, not literally live" meaning
-   .arcade-el-status--ready already uses; --arc-live/neon stays reserved for
-   an actual live source per that rule's own comment), warning/amber for
-   "not running" (never money-gold, never neon). */
-body.arcade-shell .arcade-ai-checkin__pill--up { color: var(--arc-info); border-color: rgba(53, 208, 255, 0.35); background: rgba(53, 208, 255, 0.07); }
-body.arcade-shell .arcade-ai-checkin__pill--down { color: var(--arc-warning); border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.07); }
-body.arcade-shell .arcade-ai-checkin__body { display: flex; flex-direction: column; gap: 4px; min-height: 20px; }
-body.arcade-shell .arcade-ai-checkin__line {
-  margin: 0; font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted);
-}
-body.arcade-shell .arcade-ai-checkin__line.is-error { color: var(--arc-warning); }
-body.arcade-shell .arcade-ai-checkin__actions { display: flex; gap: 8px; margin-top: 2px; }
+body.arcade-shell .arcade-ai-offstate .arcade-style-hint { margin: 0; }
 
-/* SSN AI items section — MOVE blocks reuse .arcade-alert-card/
-   .arcade-alert-row/.arcade-alert-card__body byte-for-byte (same classes,
-   same file — see buildAiMoveCard/buildAiMoveRow in arcade-shell.js), laid
-   out in the SAME .arcade-alerts-rail grid the Alerts tab uses; LINK cards
-   reuse .arcade-el-card/.arcade-el-grid byte-for-byte, same as the Elements
-   tab (buildAiLinkCard). No new color tokens introduced — every hex in this
-   section is already in the contrast table above (arc-ink/arc-muted on
-   arc-panel) or the Elements tab's own precedent. */
-body.arcade-shell .arcade-ai-items { display: flex; flex-direction: column; gap: 12px; }
-body.arcade-shell .arcade-ai-items__head { display: flex; align-items: center; gap: 8px; }
-body.arcade-shell .arcade-ai-items__head--sub { margin-top: 6px; }
-body.arcade-shell .arcade-ai-items__title {
-  margin: 0;
-  font: 700 11px/1.4 var(--arc-font-ui); letter-spacing: 0.08em;
-  color: var(--arc-muted);
-}
+/* The cohost/private-chat preview frames ride the shared
+   .arcade-alerts-preview iframe rule (checkerboard ground) — the cohost
+   stage itself is transparent by design, so the checkerboard is the honest
+   OBS-transparency read. */
+body.arcade-shell #arcade-ai-private-chat { background: var(--arc-panel); }
 
 @media (max-width: 760px) {
-  body.arcade-shell .arcade-ai-console { padding: 12px; }
-  body.arcade-shell .arcade-ai-checkin { max-width: none; }
+  body.arcade-shell .arcade-ai-stage { gap: 10px; }
 }
 
 /* --------------------------------------------------------------------------

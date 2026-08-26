@@ -23,10 +23,12 @@
     }
 
     // S46 shell frame (TASK-43, Add-On Arcade round 3 — boards APPROVED
-    // 0018.06.03): menu bar on TOP reads Main · Add-ons · Style · AI 🔒 ·
-    // Deck Settings. The old rail tabs Games / Elements / Alerts / VDO /
-    // Event Flow leave the nav — their surfaces stay reachable through the
-    // Add-ons gallery doors (ADDON_DOORS below). Interior redesigns: S47+.
+    // 0018.06.03): menu bar on TOP reads Main · Add-ons · Style · AI ·
+    // Deck Settings (TASK-64 delocked the AI seat — it reads AI, styled
+    // like every sibling, always visible). The old rail tabs Games /
+    // Elements / Alerts / VDO / Event Flow leave the nav — their surfaces
+    // stay reachable through the Add-ons gallery doors (ADDON_DOORS below).
+    // Interior redesigns: S47+.
     //
     // S51 (TASK-48 — Deck Settings + control surfaces): the More▾ hatch is
     // RETIRED. Its stock trio is absorbed into Deck Settings sections
@@ -53,68 +55,28 @@
     // working — they drive the same tab id.
 
     // --------------------------------------------------------------------
-    // AI area — rail berth for the DevChat console, gated to a single ruled
-    // npub. Ruling: the Admiral, 0018.06.01 — "gate the devchat behind the
-    // admin npub g2x3 ... the natural point for that admin devchat area is
-    // inside of the ssn app ... it should go in the ai area." Design doc:
-    // pacsarcade briefings/ssn-ai-area-design.md, Phase 1.
+    // AI console (TASK-64 — the delock + the zone interior). The v1/v2 berth
+    // was GATED: the tab only existed when a NIP-07 signer holding the ruled
+    // admin npub (g2x3) was present, or when SSN_AI_GATE=open was set in the
+    // operator's own launcher — and it wore a 🔒 in the nav. The 0018.06.04
+    // audit found that gate PRESENTATIONAL (npub-or-SSN_AI_GATE, open on this
+    // rig) and the Admiral ruled: nothing is "locked" in a free program.
+    // TASK-64 retires the presentation AND the gate machinery wholesale —
+    // the tab reads AI, styled like every sibling, always visible, and every
+    // feature row inside reports its own honest "not set up" state instead.
+    // The nostr signer door, if a future lane ever wants one back, is a
+    // design-doc decision (briefings/ssn-ai-area-design.md), not a leftover.
     //
-    // ONLY this pubkey opens the berth. One named const, no env sprawl (v1).
-    // Decoded from
-    // npub1ugzge9n0qtw9xydcynpm80vytq5wfd207lt842jje2zwuz56t33scrg2x3 via
-    // bech32 (cross-checked against two independent decoder implementations,
-    // 0018.06.01 a₿) — this app has no nostr/bech32 library of its own
-    // (none found anywhere in the repo), so the hex is baked in here rather
-    // than decoded live in the renderer.
+    // DevChat endpoints (Rider 2's Z5 setup zone) — confirmed by reading
+    // chatdev's own LOCAL_SETUP.md / Makefile / compose.yml: frontend dev
+    // server on :5173, API server on :6400 (`make dev` in ~/dev/chatdev runs
+    // `uv run python server_main.py --port 6400` + the Vite frontend with
+    // VITE_API_BASE_URL=http://localhost:6400). /api/models is the cheap
+    // no-session status route (configured_model + is_ollama + reachable).
     // --------------------------------------------------------------------
-    var AI_AREA_ALLOWED_PUBKEY_HEX = 'e2048c966f02dc5311b824c3b3bd845828e4b54ff7d67aaa52ca84ee0a9a5c63'; // g2x3, Admiral ruling 0018.06.01
     var AI_AREA_DEVCHAT_URL = 'http://localhost:5173';
-    // DevChat's API server (separate from the frontend above) — the check-in
-    // card's ONLY cheap-data source. Confirmed by reading chatdev's own
-    // route table (server/routes/*.py) rather than guessing: /health,
-    // /health/live, /health/ready, and /api/models are the only routes that
-    // answer with no session id already in hand. There is no build-stamp
-    // route — the stamp is baked into the frontend bundle with no API, so
-    // the check-in card links to it instead of scraping HTML for it.
     var AI_AREA_DEVCHAT_API_URL = 'http://localhost:6400';
     var AI_AREA_PROBE_TIMEOUT_MS = 2500;
-
-    // Cheap pre-check, run once at boot: is ANY NIP-07 signer present at
-    // all? This Electron window has no browser-extension host wired up on
-    // Linux — the ONLY extension-loading path in the app (main.js's
-    // "Enable Chrome Extension" right-click item, session.loadExtension)
-    // only scans the Chrome profile's Extensions directory on win32/darwin;
-    // there is no Linux branch. So on this deployment window.nostr is never
-    // populated and this always returns false, hiding the berth entirely —
-    // an honest fail-closed default, not a workaround. See the build report
-    // for the precise finding and what would need to change to light it up.
-    // If a signer IS present we still can't know WHICH identity it holds
-    // without prompting it (not cheap, and prompting every seat on every
-    // boot is exactly the "a gate that advertises itself" trap the design
-    // doc warns against) — so presence-only is the full extent of the
-    // pre-check; identity is only resolved inside the real gate, on click.
-    function aiGateOpen() {
-        // Local-dev override (Admiral, 0018.06.02): no house signer ships yet
-        // (the Arcade Sidecar is queued), so SSN_AI_GATE=open bypasses the
-        // g2x3 signer gate ON THIS MACHINE ONLY — the env exists only where
-        // the operator's own launcher sets it. The g2x3 door returns with the
-        // Arcade Sidecar; this override is a berth key left under the mat on
-        // the operator's own boat, not a hole in the hull (DevChat itself is
-        // localhost-only either way).
-        try {
-            return typeof process !== 'undefined' && process.env && process.env.SSN_AI_GATE === 'open';
-        } catch (e) { return false; }
-    }
-
-    function hasNostrSigner() {
-        try {
-            return !!(window.nostr &&
-                typeof window.nostr.getPublicKey === 'function' &&
-                typeof window.nostr.signEvent === 'function');
-        } catch (e) {
-            return false;
-        }
-    }
 
     // --------------------------------------------------------------------
     // Element registry — the ONE source of truth for selectable overlay
@@ -1102,15 +1064,13 @@
     // S46: 'addons' (the gallery) is a nav berth; 'alerts' keeps its panel
     // but no berth — it opens through its gallery door (DOOR_PARENT). The
     // old 'elements' panel is retired, its cards re-homed in the gallery.
-    // 'ai' is deliberately NOT a static member here — it's added (along with
-    // the TABS entry and the panel DOM itself) only when hasNostrSigner()
-    // passes at boot, in init(). No signer on this seat => 'ai' stays
-    // unknown to both maps => navigateArcadeTab('ai') is a silent no-op,
-    // same as any other unrecognized tab id.
     // S48: 'games' joins the custom set — the hub is its own in-shell panel.
     // S49: 'commands' (chat commands + timers) and 'goals' (goal bars) too.
     // S50: 'frames' (Frames & Cameras) and 'tipjar' (the Tip Jar interior).
     // S51: 'settings' (Deck Settings) — the sectioned settings home.
+    // TASK-64: 'ai' is a static member like every sibling since the delock
+    // (the v1/v2 conditional-berth machinery is retired — see the TASK-64
+    // note at the top of the file).
     var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true, frames: true, tipjar: true, settings: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
@@ -1119,24 +1079,7 @@
         if (link) link.click();
     }
 
-    // Leaving the AI tab for ANY other tab (rail click, ×, stock nav) must
-    // not leave a live DevChat iframe sitting hidden in the background
-    // still polling — the design doc's "destroy or hide on collapse" rule
-    // applies here too, not just to the explicit collapse button, since
-    // plain CSS display:none (how every other custom-tab panel hides
-    // itself) does not unload an iframe's document. aiConsoleExpanded is
-    // left untouched so re-entering the tab this session still reopens
-    // expanded — runAiAreaGate()'s re-run rebuilds the frame fresh either
-    // way (setAiAreaState('checking') already clears the body).
-    function teardownAiAreaFrameIfLeaving(nextTabId) {
-        if (nextTabId === 'ai') return;
-        if (document.body.dataset.arcadeTab !== 'ai') return;
-        var frame = document.getElementById('arcade-ai-frame');
-        if (frame) frame.remove();
-    }
-
     function navigateArcadeTab(tabId) {
-        teardownAiAreaFrameIfLeaving(tabId);
         requestFoldMeasures(); // S46B — a panel becoming visible changes what the fold math sees
         if (CUSTOM_TABS[tabId]) {
             // Custom in-shell panel (e.g. Elements): no stock page to drive —
@@ -1152,7 +1095,7 @@
             if (tabId === 'frames') ensureFramesPanelLive(); // lazy (S50): load guests/frame style, then the device frame (sendSync-before-churn order)
             if (tabId === 'tipjar') ensureTipjarPanelLive(); // lazy (S50): load payment rails + first demo preview on first visit
             if (tabId === 'settings') ensureDeckSettingsLive(); // lazy (S51): load deck settings + first section on first visit
-            if (tabId === 'ai') runAiAreaGate(); // NOT lazy-once — a fresh challenge every open, no stored grants (design doc, 0018.06.01)
+            if (tabId === 'ai') ensureAiPanelLive(); // lazy (TASK-64): load AI settings + first zone on first visit
             return;
         }
         var pageId = ARCADE_TAB_PAGE[tabId];
@@ -1921,655 +1864,1074 @@
     }
 
     // --------------------------------------------------------------------
-    // AI area panel — the AI CONSOLE (V2, Admiral's refinement, briefings/
-    // ssn-ai-area-design.md "V2 — the AI console"). Same custom-tab pattern
-    // as .arcade-elements/.arcade-alerts (full-width in-shell panel,
-    // CSS-shown only while data-arcade-tab="ai"). Only built at all when
-    // hasNostrSigner() passed at boot (see init()) — no signer, no DOM, no
-    // nav entry: the berth doesn't exist for that seat, full stop.
+    // AI console (TASK-64 — delocked; the AI-1 board interior + Rider 2's
+    // six zones + AI-2-A's cohost stage). Same custom-tab pattern as every
+    // sibling panel, and the S47/S50 interior idiom inside: left zone list
+    // (role=listbox, the shared attachArcadeListboxNav contract), right
+    // stage-on-TOP + config-BELOW. Stock settings groups berth through the
+    // S51 popup-EMBED driver (buildDeckPopupEmbed — same stock page, same
+    // handlers, same canonical keys, zero stock JS touched); native rows
+    // ride saveDeckSetting (the S48 async idiom). Nothing here is gated,
+    // locked, or signer-checked any more — every row reports its own
+    // honest "not set up" state instead.
     //
-    // The gate itself re-runs EVERY time the tab is opened (runAiAreaGate,
-    // called from navigateArcadeTab) — no stored grants in v1, per the
-    // design doc ("opening the AI area is rare and deliberate"). Gate
-    // states: 'checking' (asking the signer) -> 'refused' (wrong key,
-    // signer declined, or vanished). THE GATE ITSELF IS UNCHANGED FROM V1 —
-    // only what renders once it passes is new (openAiAreaAfterGate down).
-    //
-    // Past the gate, the tab has two views chosen by aiConsoleExpanded (a
-    // plain module var — SESSION-ONLY, never localStorage/saveSetting, so
-    // every fresh app boot lands back on the console per the design doc):
-    //   'console' (default) — DevChat check-in card (small) + the SSN
-    //     AI-items section (Lane A inventory: moved settings + link cards).
-    //   expanded — reuses 'checking'/'unreachable'/'live', now scoped to
-    //     just the iframe path instead of the whole tab. 'live' renders the
-    //     iframe, created fresh on expand and destroyed on collapse — it is
-    //     never kept around hidden/polling. Collapsing returns to
-    //     'console' without re-running the signer gate (already passed for
-    //     this tab visit).
+    // Zone map (the 0018.06.04 audit, verified live; Rider 2's left-list
+    // order — DevChat fifth, Models sixth):
+    //   🛡️ Chat Moderation  — native re-berth of chatbot-Censor's two real
+    //      toggles + the test box (below). Stock actions cited per row.
+    //   🎙️ AI Cohost        — chatbot-cohost + chatbot-ai-overlay groups
+    //      (embed) + the house cohost-stage.html overlay (Lane 2).
+    //   💬 Chat Bot & Prompts — chatbot-public + chatbot-ai-prompt +
+    //      chatbot-private groups (embed) + the private host↔bot chat
+    //      panel (chatbot.html, stock plumbing — the Z3 rider).
+    //   🌐 Auto-translate   — ai-auto-translate group (embed).
+    //   🚀 DevChat          — setup zone (Rider 2): endpoint, honest
+    //      connection test, plain description. NO deep integration.
+    //   🧠 Models           — bots-options-ext group (embed) + native
+    //      local-first head + the real round-trip test.
+    // chatbot-message-tts stays berthed in Deck Settings → Speech (audit).
     // --------------------------------------------------------------------
-    var aiConsoleExpanded = false; // session-only — see comment above
+    var AI_ZONES = [
+        { id: 'moderation', icon: '🛡️', label: 'Chat Moderation' },
+        { id: 'cohost', icon: '🎙️', label: 'AI Cohost' },
+        { id: 'bot', icon: '💬', label: 'Chat Bot & Prompts' },
+        { id: 'translate', icon: '🌐', label: 'Auto-translate' },
+        { id: 'devchat', icon: '🚀', label: 'DevChat' },
+        { id: 'models', icon: '🧠', label: 'Models' }
+    ];
+
+    // House keys minted by this console (names only in reports; all written
+    // textparam1 via saveDeckSetting — the canonical async idiom).
+    var AI_COHOST_BODY_KEY = 'arcadeCohostBody';       // JSON {head, body, color} — the pixel body config
+    var AI_COHOST_VOICE_KEY = 'arcadeCohostVoice';     // speechSynthesis voice name (substring match in-page)
+    var AI_COHOST_VOLUME_KEY = 'arcadeCohostVolume';   // '0'..'1'
+    var AI_COHOST_POSITION_KEY = 'arcadeCohostPosition'; // bottom-right family, same six as stock's aiOverlayPosition
+    var AI_DEVCHAT_ENDPOINT_KEY = 'arcadeDevchatEndpoint'; // frontend URL; blank = not set up
+    var AI_COHOST_STAGE_LABEL = 'cohost-stage';        // the house overlay's P2P label (its &label default)
+
+    var aiPanelLive = false;
+    var aiSelectedZone = 'moderation';
+    var aiSettings = {};       // one getSettings snapshot, read before any iframe churn (S50 discipline)
+    var aiCohostBody = { head: 'pac', body: 'bot', color: 'cyan' }; // BASIC DEFAULT — the board's simple orb/invader pick-and-go
+    var aiDevchatProbe = { state: 'unknown', detail: '' }; // 'unknown'|'checking'|'connected'|'unreachable'|'not-setup'
+
+    // The stock provider list, mirrored from the source of truth (popup.html
+    // wrapper-bots-options-ext #aiProvider) so the native head offers exactly
+    // what stock offers — local-first ordering is stock's own.
+    var AI_PROVIDER_OPTIONS = [
+        { value: 'ollama', label: 'Ollama (Native Local API)' },
+        { value: 'localgemma', label: 'Local Gemma 4 (Browser, self-hosted)' },
+        { value: 'localqwen', label: 'Local Qwen 3.5 0.8B (Browser, fast)' },
+        { value: 'localqwen2b', label: 'Local Qwen 3.5 2B (Browser, quality)' },
+        { value: 'chatgpt', label: 'ChatGPT API' },
+        { value: 'gemini', label: 'Gemini API' },
+        { value: 'deepseek', label: 'DeepSeek API' },
+        { value: 'xai', label: 'xAI API (Grok)' },
+        { value: 'bedrock', label: 'AWS Bedrock API' },
+        { value: 'openrouter', label: 'OpenRouter API' },
+        { value: 'groq', label: 'Groq API' },
+        { value: 'opencode', label: 'OpenCode Zen API' },
+        { value: 'hostedllm', label: 'SSN Hosted Trial LLM (experimental)' },
+        { value: 'custom', label: 'Custom API (OpenAI-compatible / llama.cpp)' }
+    ];
 
     function setAiAreaStatus(text) {
         var el = document.getElementById('arcade-ai-status');
         if (el) el.textContent = text || '';
     }
 
-    function setAiCollapseVisible(visible) {
-        var btn = document.getElementById('arcade-ai-collapse');
-        if (btn) btn.hidden = !visible;
+    function aiSettingFlag(key) {
+        var raw = aiSettings[key];
+        return !!(raw && raw.setting);
+    }
+    function aiSettingText(key) {
+        var raw = aiSettings[key];
+        return (raw && raw.textsetting) || '';
+    }
+    function aiSettingOption(key) {
+        var raw = aiSettings[key];
+        return (raw && raw.optionsetting) || '';
+    }
+    // House keys ride the textparam1 shape (same as arcadeVdoBase & co.) —
+    // read them with this, NOT aiSettingText (which is the stock text shape).
+    function aiHouseText(key) {
+        var raw = aiSettings[key];
+        return (raw && (raw.textparam1 || raw.textsetting)) || '';
     }
 
-    function setAiAreaState(state, message) {
-        var body = document.getElementById('arcade-ai-body');
-        if (!body) return;
-        body.dataset.aiState = state; // 'checking' | 'refused' | 'unreachable' | 'live' | 'console'
-        if (state === 'live' || state === 'console') return; // owned elsewhere (renderAiAreaFrame / renderAiConsole)
-        body.innerHTML = '';
-        var hint = document.createElement('div');
-        hint.className = 'arcade-ai-hint' + (state === 'checking' ? '' : ' is-error');
-        hint.textContent = message || '';
-        body.appendChild(hint);
+    // WHICH BRAIN a row uses — every AI row shows this honestly (the brief:
+    // "every other row shows WHICH brain it uses + honest offline state").
+    function aiBrainLine() {
+        var provider = aiSettingOption('aiProvider') || 'ollama';
+        var label = provider;
+        AI_PROVIDER_OPTIONS.forEach(function (o) { if (o.value === provider) label = o.label; });
+        if (provider === 'ollama') {
+            return label + ' · ' + (aiSettingText('ollamamodel') || 'default model') + ' @ ' + (aiSettingText('ollamaendpoint') || 'http://localhost:11434');
+        }
+        return label;
     }
 
-    // HEAD probe with a short deadline — reuses index.html's own
-    // fetchWithDeadline (top-level helper in its classic inline script, so
-    // it's a window global; see buildElementOverlayUrl's comment on the
-    // same convention) when present, with a local AbortController fallback
-    // so this degrades honestly rather than throwing if that ever changes.
-    // mode:'no-cors' matters here: index.html itself runs with webSecurity
-    // disabled (it's a file:// window), but DevChat's dev server won't send
-    // CORS headers for a cross-origin probe either way — no-cors still lets
-    // the browser attempt the connection and resolve on success (opaque
-    // response) vs reject on a real connection failure, which is exactly
-    // the reachable/unreachable signal this needs, without caring about the
-    // response body.
-    function probeDevChatReachable() {
+    function buildAiZoneHead(title, blurb) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = title;
+        head.appendChild(name);
+        card.appendChild(head);
+        if (blurb) {
+            var p = document.createElement('p');
+            p.className = 'arcade-el-card__blurb';
+            p.textContent = blurb;
+            card.appendChild(p);
+        }
+        return card;
+    }
+
+    function buildAiToggleRow(label, title, key, onAfter) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        if (title) lbl.title = title;
+        row.appendChild(lbl);
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = aiSettingFlag(key);
+        input.setAttribute('aria-label', label);
+        input.addEventListener('change', function () {
+            aiSettings[key] = { setting: input.checked }; // keep the snapshot honest for dependent rows
+            saveDeckSetting('setting', key, input.checked);
+            if (onAfter) onAfter(input.checked);
+        });
+        row.appendChild(input);
+        return row;
+    }
+
+    function buildAiTextRow(label, key, placeholder, onAfter) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.placeholder = placeholder || '';
+        input.value = aiSettingText(key);
+        input.setAttribute('aria-label', label);
+        input.addEventListener('input', debounce(function () {
+            aiSettings[key] = { textsetting: input.value };
+            saveDeckSetting('textsetting', key, input.value);
+            if (onAfter) onAfter(input.value);
+        }, 300));
+        row.appendChild(input);
+        return row;
+    }
+
+    function buildAiSelectRow(label, key, options, onAfter) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var input = document.createElement('select');
+        input.setAttribute('aria-label', label);
+        options.forEach(function (opt) {
+            var o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            input.appendChild(o);
+        });
+        input.value = aiSettingOption(key) || options[0].value;
+        input.addEventListener('change', function () {
+            aiSettings[key] = { optionsetting: input.value };
+            saveDeckSetting('optionsetting', key, input.value);
+            if (onAfter) onAfter(input.value);
+        });
+        row.appendChild(input);
+        return row;
+    }
+
+    function buildAiHouseTextRow(label, houseKey, placeholder, current, onAfter) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.placeholder = placeholder || '';
+        input.value = current || '';
+        input.setAttribute('aria-label', label);
+        input.addEventListener('input', debounce(function () {
+            aiSettings[houseKey] = { textparam1: input.value }; // keep the snapshot honest for dependent rows
+            saveDeckSetting('textparam1', houseKey, input.value);
+            if (onAfter) onAfter(input.value);
+        }, 300));
+        row.appendChild(input);
+        return row;
+    }
+
+    function appendAiBrainRow(body, usesLabel) {
+        var row = document.createElement('div');
+        row.className = 'arcade-alert-row arcade-ai-brain';
+        var lbl = document.createElement('label');
+        lbl.textContent = 'Brain';
+        row.appendChild(lbl);
+        var val = document.createElement('span');
+        val.className = 'arcade-ai-brain__value';
+        val.textContent = (usesLabel ? usesLabel + ' — ' : '') + aiBrainLine();
+        row.appendChild(val);
+        body.appendChild(row);
+    }
+
+    // --------------------------------------------------------------------
+    // Zone: 🛡️ CHAT MODERATION. Native re-berth of stock's censor bot — the
+    // ONLY two actions stock's bot really performs, cited:
+    //   · non-blocking mode (ollamaCensorBot on, block off): a judged-bad
+    //     message is DELETED after the fact — ai.js:2518 & :2524
+    //     (`sendToDestinations({ delete: data })`, extension-connected only).
+    //   · block mode (ollamaCensorBotBlockMode on): the message is HELD and
+    //     never delivered until the bot approves it — background.js:17505
+    //     (`return false` in applyFilterXSSpipeline; some messages are
+    //     honestly skipped when the bot can't keep up — stock's own title).
+    // There is NO timeout/ban/flag-to-dock action anywhere in stock — the
+    // picker below wires exactly these two and says so.
+    // --------------------------------------------------------------------
+    function renderAiZoneModeration(stage, config) {
+        // STAGE — the test box: run a sample message through the REAL
+        // configured model with stock's REAL moderation prompt, show the
+        // verdict, send nothing. Stock has no dry-evaluate path
+        // (censorMessageWithLLM always acts — delete or block — on a bad
+        // verdict), so this calls the model directly with the same prompt
+        // builder + parser the live path uses (ai.js:2375 buildCensorPrompt,
+        // :2416/:2432 the decision parsers), reached on the background page
+        // (the S51 direct-frame2 pattern — no IPC, no sendSync). Advisory.
+        var testCard = buildAiZoneHead('Test a message', 'Runs the sample through the REAL configured model with stock’s own moderation prompt. Advisory only — nothing is sent to chat, deleted, blocked, or stored.');
+        var testBody = document.createElement('div');
+        testBody.className = 'arcade-alert-card__body';
+        var inputRow = document.createElement('div');
+        inputRow.className = 'arcade-alert-row arcade-ai-testbox';
+        var textarea = document.createElement('textarea');
+        textarea.id = 'arcade-ai-mod-test-input';
+        textarea.rows = 2;
+        textarea.placeholder = 'Type a sample chat message…';
+        textarea.setAttribute('aria-label', 'Sample chat message to test');
+        inputRow.appendChild(textarea);
+        var testBtn = document.createElement('button');
+        testBtn.type = 'button';
+        testBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        testBtn.id = 'arcade-ai-mod-test-btn';
+        testBtn.textContent = 'Test with the model';
+        inputRow.appendChild(testBtn);
+        testBody.appendChild(inputRow);
+        var verdict = document.createElement('p');
+        verdict.className = 'arcade-style-hint arcade-ai-verdict';
+        verdict.id = 'arcade-ai-mod-verdict';
+        verdict.setAttribute('role', 'status');
+        verdict.setAttribute('aria-live', 'polite');
+        testBody.appendChild(verdict);
+        testCard.appendChild(testBody);
+        stage.appendChild(testCard);
+
+        testBtn.addEventListener('click', function () {
+            var text = textarea.value.trim();
+            if (!text) { verdict.textContent = 'Type a sample message first.'; return; }
+            var bg = getBackgroundWindow();
+            if (!bg || typeof bg.callLLMAPI !== 'function' || typeof bg.buildCensorPrompt !== 'function') {
+                verdict.textContent = 'The background AI plumbing is not reachable yet — try again in a moment.';
+                return;
+            }
+            testBtn.disabled = true;
+            verdict.textContent = 'Asking ' + aiBrainLine() + '…';
+            var providerKey = (typeof bg.getActiveCensorProviderKey === 'function') ? bg.getActiveCensorProviderKey() : '';
+            var prompt;
+            try {
+                prompt = bg.buildCensorPrompt({ chatname: 'TestUser', chatmessage: text, type: 'test' }, text, [], [], providerKey);
+            } catch (e) {
+                testBtn.disabled = false;
+                verdict.textContent = 'Could not build the moderation prompt: ' + (e && e.message || e);
+                return;
+            }
+            var opts = { localBrowserStateless: (typeof bg.isLocalBrowserProvider === 'function') ? bg.isLocalBrowserProvider(providerKey) : false };
+            var binary = (typeof bg.shouldUseBinaryCensorPrompt === 'function') ? bg.shouldUseBinaryCensorPrompt(providerKey) : false;
+            if (binary) opts.localBrowserGeneration = { maxNewTokens: 8, temperature: 0.15, topP: 0.9 };
+            bg.callLLMAPI(prompt, null, null, null, null, null, opts).then(function (out) {
+                testBtn.disabled = false;
+                if (!document.body.contains(verdict)) return;
+                var decision = binary ? bg.parseBinaryCensorDecision(out) : bg.parseNumericCensorDecision(out);
+                var word = decision.blocked ? 'WOULD BLOCK' : 'WOULD ALLOW';
+                verdict.textContent = word + ' — model said: “' + String(out || '').trim().slice(0, 120) + '”' +
+                    (decision.parseOk ? '' : ' (unparseable answer — the live path treats that as block)') +
+                    ' · advisory test: nothing was sent, deleted, or blocked.';
+                verdict.classList.toggle('is-error', !!decision.blocked);
+            }).catch(function (e) {
+                testBtn.disabled = false;
+                if (!document.body.contains(verdict)) return;
+                verdict.textContent = 'The model did not answer — ' + (e && e.message || e) + '. Is the provider reachable? Check 🧠 Models.';
+                verdict.classList.add('is-error');
+            });
+        });
+
+        // CONFIG — the native head (canonical keys, S48 async idiom).
+        var card = buildAiZoneHead('Moderation', 'The censor bot reads chat and judges each message with the configured brain. It never answers in chat.');
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        body.appendChild(buildAiToggleRow('Enable the censor bot', 'Stock key: ollamaCensorBot', 'ollamaCensorBot', function () { renderAiZoneList(); }));
+        var modeRow = document.createElement('div');
+        modeRow.className = 'arcade-alert-row';
+        var modeLbl = document.createElement('label');
+        modeLbl.textContent = 'When a message is judged bad';
+        modeRow.appendChild(modeLbl);
+        var modeSel = document.createElement('select');
+        modeSel.setAttribute('aria-label', 'When a message is judged bad');
+        [{ value: 'delete', label: 'Delete it after the fact (default)' }, { value: 'block', label: 'Hold it until the bot approves' }].forEach(function (opt) {
+            var o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            modeSel.appendChild(o);
+        });
+        modeSel.value = aiSettingFlag('ollamaCensorBotBlockMode') ? 'block' : 'delete';
+        modeSel.addEventListener('change', function () {
+            aiSettings.ollamaCensorBotBlockMode = { setting: modeSel.value === 'block' };
+            saveDeckSetting('setting', 'ollamaCensorBotBlockMode', modeSel.value === 'block');
+        });
+        modeRow.appendChild(modeSel);
+        body.appendChild(modeRow);
+        var rules = document.createElement('p');
+        rules.className = 'arcade-style-hint';
+        rules.textContent = 'Rules: stock’s fixed prompt judges hate, profanity, threats, and spam-split-across-messages (0–5 score, or OK/BLOCK on local browser models). These are the only two actions stock’s bot can take — there is no timeout, ban, or flag-to-dock action in stock. Honest limit: in hold-mode some messages are skipped when the bot can’t keep up (stock’s own note).';
+        body.appendChild(rules);
+        appendAiBrainRow(body, 'judges with');
+        card.appendChild(body);
+        config.appendChild(card);
+    }
+
+    // --------------------------------------------------------------------
+    // Zone: 🎙️ AI COHOST (Lane 2 / AI-2-A). The house cohost-stage.html
+    // overlay (pixel body + speech bubbles + the existing stage-TTS rail),
+    // preview demo-isolated (&preview), Copy-URL real-session. Wiring is
+    // ONLY stock-real doors, each cited in the wiring card.
+    // --------------------------------------------------------------------
+    function aiCohostStageParams(forCopy) {
+        var params = [];
+        var pos = aiHouseText(AI_COHOST_POSITION_KEY) || 'bottom-right';
+        params.push('position=' + encodeURIComponent(pos));
+        var voice = aiHouseText(AI_COHOST_VOICE_KEY);
+        if (voice) params.push('voice=' + encodeURIComponent(voice));
+        var vol = aiHouseText(AI_COHOST_VOLUME_KEY);
+        if (vol) params.push('volume=' + encodeURIComponent(vol));
+        if (aiCohostBody.head) params.push('head=' + encodeURIComponent(aiCohostBody.head));
+        if (aiCohostBody.body) params.push('body=' + encodeURIComponent(aiCohostBody.body));
+        if (aiCohostBody.color) params.push('color=' + encodeURIComponent(aiCohostBody.color));
+        if (forCopy && aiSettingFlag('aiOverlayTts')) params.push('tts');
+        return params;
+    }
+
+    function buildAiCohostPreviewFrame(stage) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-alerts-preview';
+        var bar = document.createElement('div');
+        bar.className = 'arcade-alerts-preview-bar';
+        var hint = document.createElement('span');
+        hint.className = 'arcade-style-hint';
+        hint.textContent = 'Isolated preview — no session, no bridge, nothing live. The overlay only speaks when a real sender reaches its label.';
+        bar.appendChild(hint);
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.addEventListener('click', function () {
+            var resolver = window.resolveSocialStreamPage;
+            if (typeof resolver !== 'function') { flashButton(copyBtn, 'Unavailable', 2200); return; }
+            var params = aiCohostStageParams(true);
+            if (deckSessionId) params.push('session=' + encodeURIComponent(deckSessionId));
+            resolver('cohost-stage.html', { extraParams: params }).then(function (resolved) {
+                if (!resolved || !resolved.url) throw new Error('no url');
+                return copyToClipboard(resolved.url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
+            }).catch(function () { flashButton(copyBtn, 'Copy failed', 2200); });
+        });
+        bar.appendChild(copyBtn);
+        wrap.appendChild(bar);
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-ai-cohost-preview';
+        frame.title = 'Cohost stage preview (isolated demo)';
+        wrap.appendChild(frame);
+        stage.appendChild(wrap);
+
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        var params = aiCohostStageParams(false);
+        // preview carries &tts so the stage's real TTS rail is exercisable
+        // in the isolated demo (speak() still only fires on a sender's
+        // meta.tts — the rail, never a live transport).
+        params.push('preview=1', 'demo=1', 'tts');
+        resolver('cohost-stage.html', { extraParams: params }).then(function (resolved) {
+            if (resolved && resolved.url) frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] cohost preview resolve failed:', e); });
+    }
+
+    function renderAiZoneCohost(stage, config) {
+        buildAiCohostPreviewFrame(stage);
+
+        // Body card — the pixel body config door. Scopes to exactly what the
+        // house PixelAvatar config models (head variant, body part, palette —
+        // adapted from arcade-ui/react/PixelAvatar.tsx; no new avatar format).
+        var bodyCard = buildAiZoneHead('The body', 'Pick-and-go pixel body — the BASIC DEFAULT is the simple orb/bot look. The renderer is house code adapted from arcade-ui’s PixelAvatar (16×16 SVG, zero assets).');
+        var bodyBody = document.createElement('div');
+        bodyBody.className = 'arcade-alert-card__body';
+        [['Head', 'head', [{ value: 'pac', label: 'Pac orb (default)' }, { value: 'ghost', label: 'Ghost' }]],
+         ['Body', 'body', [{ value: 'bot', label: 'Bot chassis (default)' }, { value: 'classic', label: 'Classic' }, { value: 'caped', label: 'Caped' }, { value: 'round', label: 'Round' }]],
+         ['Color', 'color', [{ value: 'cyan', label: 'Cyan (default)' }, { value: 'pink', label: 'Pink' }, { value: 'neon', label: 'Neon' }, { value: 'coin', label: 'Coin gold' }, { value: 'ghost', label: 'Ghost white' }]]
+        ].forEach(function (spec) {
+            var row = document.createElement('div');
+            row.className = 'arcade-alert-row';
+            var lbl = document.createElement('label');
+            lbl.textContent = spec[0];
+            row.appendChild(lbl);
+            var sel = document.createElement('select');
+            sel.setAttribute('aria-label', 'Cohost ' + spec[0].toLowerCase());
+            spec[2].forEach(function (opt) {
+                var o = document.createElement('option');
+                o.value = opt.value;
+                o.textContent = opt.label;
+                sel.appendChild(o);
+            });
+            sel.value = aiCohostBody[spec[1]] || spec[2][0].value;
+            sel.addEventListener('change', function () {
+                aiCohostBody[spec[1]] = sel.value;
+                saveDeckSetting('textparam1', AI_COHOST_BODY_KEY, JSON.stringify(aiCohostBody));
+                // re-compose the preview with the new pick (still isolated)
+                var frame = document.getElementById('arcade-ai-cohost-preview');
+                var resolver = window.resolveSocialStreamPage;
+                if (frame && typeof resolver === 'function') {
+                    var params = aiCohostStageParams(false);
+                    params.push('preview=1', 'demo=1', 'tts');
+                    resolver('cohost-stage.html', { extraParams: params }).then(function (resolved) {
+                        if (resolved && resolved.url && document.body.contains(frame)) frame.src = resolved.url;
+                    });
+                }
+            });
+            row.appendChild(sel);
+            bodyBody.appendChild(row);
+        });
+        bodyCard.appendChild(bodyBody);
+        config.appendChild(bodyCard);
+
+        // Personality + voice card. The personality is the BOT BRAIN's stock
+        // instructions key (ollamaprompt — popup.html:9312, the same text the
+        // chat bot reads; the stage itself only displays what senders tell
+        // it). Voice/volume/position are house keys compiled into the URL.
+        var voiceCard = buildAiZoneHead('Personality, voice & position', 'The personality is shared with the chat bot’s brain (stock “Additional Bot Instructions”) — the stage speaks what the brain says.');
+        var voiceBody = document.createElement('div');
+        voiceBody.className = 'arcade-alert-card__body';
+        var personaRow = document.createElement('div');
+        personaRow.className = 'arcade-alert-row arcade-ai-persona';
+        var personaLbl = document.createElement('label');
+        personaLbl.textContent = 'Personality instructions';
+        personaRow.appendChild(personaLbl);
+        var persona = document.createElement('textarea');
+        persona.rows = 3;
+        persona.placeholder = 'e.g. You are pacBOT, a warm arcade-regular cohost…';
+        persona.value = aiSettingText('ollamaprompt');
+        persona.setAttribute('aria-label', 'Personality instructions (shared bot brain)');
+        persona.addEventListener('input', debounce(function () {
+            aiSettings.ollamaprompt = { textsetting: persona.value };
+            saveDeckSetting('textsetting', 'ollamaprompt', persona.value);
+        }, 300));
+        personaRow.appendChild(persona);
+        voiceBody.appendChild(personaRow);
+        voiceBody.appendChild(buildAiHouseTextRow('Voice (browser TTS voice name)', AI_COHOST_VOICE_KEY, 'blank = system default', aiHouseText(AI_COHOST_VOICE_KEY)));
+        voiceBody.appendChild(buildAiHouseTextRow('Volume (0–1)', AI_COHOST_VOLUME_KEY, 'e.g. 0.9 — blank = full', aiHouseText(AI_COHOST_VOLUME_KEY)));
+        var posRow = document.createElement('div');
+        posRow.className = 'arcade-alert-row';
+        var posLbl = document.createElement('label');
+        posLbl.textContent = 'Position';
+        posRow.appendChild(posLbl);
+        var posSel = document.createElement('select');
+        posSel.setAttribute('aria-label', 'Cohost position');
+        ['bottom-right', 'bottom-left', 'bottom-center', 'top-right', 'top-left', 'top-center'].forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p;
+            o.textContent = p.replace('-', ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+            posSel.appendChild(o);
+        });
+        posSel.value = aiHouseText(AI_COHOST_POSITION_KEY) || 'bottom-right';
+        posSel.addEventListener('change', function () {
+            saveDeckSetting('textparam1', AI_COHOST_POSITION_KEY, posSel.value);
+        });
+        posRow.appendChild(posSel);
+        voiceBody.appendChild(posRow);
+        voiceCard.appendChild(voiceBody);
+        config.appendChild(voiceCard);
+
+        // WIRING card — ONLY real existing triggers, each cited.
+        var wireCard = buildAiZoneHead('When it speaks — the real wiring', 'The stage listens on its P2P label. Pointing stock’s AI-overlay label at it routes every existing sender to the house body.');
+        var wireBody = document.createElement('div');
+        wireBody.className = 'arcade-alert-card__body';
+
+        // 1. The label door (stock chatbot/cohost response path): stock
+        // routes every AI-stage payload through sendAiOverlayCommand() to the
+        // aiOverlayLabel setting (background.js:11787 + :11773 default), and
+        // the house stage speaks that exact protocol. Senders that then reach
+        // it for real: dock right-click co-host actions + cohost.html
+        // (action "cohostOverlay", background.js:13560) and primary chat-bot
+        // replies when aiOverlayFromChatBot is on (ai.js:3413-3420).
+        var labelRow = document.createElement('div');
+        labelRow.className = 'arcade-alert-row';
+        var labelLbl = document.createElement('label');
+        labelLbl.textContent = 'Stage label';
+        labelRow.appendChild(labelLbl);
+        var labelState = document.createElement('span');
+        labelState.className = 'arcade-ai-brain__value';
+        var currentLabel = aiSettingText('aiOverlayLabel') || 'cohost-overlay';
+        labelState.textContent = currentLabel === AI_COHOST_STAGE_LABEL
+            ? 'cohost-stage — stock senders reach this body'
+            : currentLabel + ' — NOT this stage yet';
+        labelRow.appendChild(labelState);
+        wireBody.appendChild(labelRow);
+        if (currentLabel !== AI_COHOST_STAGE_LABEL) {
+            var pointRow = document.createElement('div');
+            pointRow.className = 'arcade-evt-doors';
+            var pointBtn = document.createElement('button');
+            pointBtn.type = 'button';
+            pointBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+            pointBtn.textContent = 'Point stock’s AI overlay label at this stage';
+            pointBtn.title = 'Canonical stock setting aiOverlayLabel = "cohost-stage" — the same key the stock AI Stage Overlay group edits.';
+            pointBtn.addEventListener('click', function () {
+                aiSettings.aiOverlayLabel = { textsetting: AI_COHOST_STAGE_LABEL };
+                saveDeckSetting('textsetting', 'aiOverlayLabel', AI_COHOST_STAGE_LABEL);
+                labelState.textContent = AI_COHOST_STAGE_LABEL + ' — stock senders reach this body';
+                pointBtn.disabled = true;
+                pointBtn.textContent = 'Pointed ✓';
+                renderAiZoneList();
+            });
+            pointRow.appendChild(pointBtn);
+            wireBody.appendChild(pointRow);
+        }
+        wireBody.appendChild(buildAiToggleRow('Also send chat bot replies to the stage', 'Stock key: aiOverlayFromChatBot — primary bot replies ride the same rail (ai.js:3413)', 'aiOverlayFromChatBot'));
+        wireBody.appendChild(buildAiToggleRow('Overlay TTS (stage speaks replies aloud)', 'Stock key: aiOverlayTts — the stage’s &tts rail (browser speech)', 'aiOverlayTts'));
+
+        // 2. First-timer greeting — the S47B one-click affordance (same
+        // canonical write the popup's own toggle emits + the disableDB
+        // companion, background.js:16595 sets firsttime only under
+        // firsttimers && !disableDB).
+        var ftBg = getBackgroundWindow();
+        var firsttimersOn = !!(ftBg && typeof ftBg.getSettingFlag === 'function' && ftBg.getSettingFlag('firsttimers'));
+        var ftLine = document.createElement('p');
+        ftLine.className = 'arcade-style-hint';
+        ftLine.textContent = firsttimersOn
+            ? 'First-timer detection: ON — the real `firsttime` message property fires. Deliver the greeting with a flow: messageProperties(firsttime) → customJs with the snippet below.'
+            : 'First-timer detection: OFF — the `firsttime` property never fires until the stock firsttimers setting is on.';
+        wireBody.appendChild(ftLine);
+        if (!firsttimersOn) {
+            var ftRow = document.createElement('div');
+            ftRow.className = 'arcade-evt-doors';
+            var ftBtn = document.createElement('button');
+            ftBtn.type = 'button';
+            ftBtn.className = 'arcade-btn arcade-btn--sm';
+            ftBtn.textContent = 'Turn on first-timers';
+            ftBtn.title = 'Turns on stock first-time chatter detection — the dock will start highlighting first-time chatters (that is the stock behavior this flag controls).';
+            ftBtn.addEventListener('click', function () {
+                saveDeckSetting('setting', 'firsttimers', true);
+                var bg2 = getBackgroundWindow();
+                if (bg2 && typeof bg2.getSettingFlag === 'function' && bg2.getSettingFlag('disableDB')) {
+                    saveDeckSetting('setting', 'disableDB', false); // the popup's own companion write (popup.js:5538-5546)
+                }
+                ftBtn.disabled = true;
+                ftBtn.textContent = 'First-timers on ✓';
+                ftLine.textContent = 'First-timer detection: ON — the real `firsttime` message property fires. Deliver the greeting with a flow: messageProperties(firsttime) → customJs with the snippet below.';
+            });
+            ftRow.appendChild(ftBtn);
+            wireBody.appendChild(ftRow);
+        }
+
+        // 3. The EventFlow cohostSay door — there is NO dedicated stage
+        // action in the catalog (EventFlowEditor.js:380-392 is the whole
+        // Media group, none reach the AI rail). The REAL existing door is
+        // the customJs action: it executes in the background page's scope
+        // (EventFlowSystem.js:2546 `new Function('message', config.code)`)
+        // where sendAiOverlayCommand is a global (background.js:11787).
+        var snippetLine = document.createElement('p');
+        snippetLine.className = 'arcade-style-hint';
+        snippetLine.textContent = 'EventFlow door (no dedicated action exists — the real one is a customJs action):';
+        wireBody.appendChild(snippetLine);
+        var snippetRow = document.createElement('div');
+        snippetRow.className = 'arcade-evt-doors';
+        var snippetBtn = document.createElement('button');
+        snippetBtn.type = 'button';
+        snippetBtn.className = 'arcade-btn arcade-btn--sm';
+        snippetBtn.textContent = 'Copy cohostSay snippet';
+        snippetBtn.addEventListener('click', function () {
+            var code = 'sendAiOverlayCommand({ meta: { command: "say", text: "Welcome " + (message.chatname || "friend") + "!", name: "Cohost", tts: true } });';
+            copyToClipboard(code).then(function () { flashButton(snippetBtn, 'Copied ✓'); });
+        });
+        snippetRow.appendChild(snippetBtn);
+        wireBody.appendChild(snippetRow);
+
+        // 4. Chat-quiet timer — FLAGGED, not faked: stock has a timeInterval
+        // trigger but NO "chat silent for N minutes" condition anywhere in
+        // the flow engine's state. Not wired.
+        var quietLine = document.createElement('p');
+        quietLine.className = 'arcade-style-hint';
+        quietLine.textContent = '“Chat goes quiet” timer: NOT wired — stock has a timeInterval trigger but no quiet-check in its flow state, so there is no honest condition to hang it on. Flagged, not faked.';
+        wireBody.appendChild(quietLine);
+        wireCard.appendChild(wireBody);
+        config.appendChild(wireCard);
+
+        // Stock groups berth below (chatbot-cohost: the multimodal co-host
+        // page + tool permissions; chatbot-ai-overlay: the STOCK stage
+        // overlay's own config — it configures cohost-overlay.html, NOT the
+        // house stage; the embed says so in its own copy).
+        buildDeckPopupEmbed(config, 'ai-cohost', 'Stock’s own co-host surfaces — the multimodal co-host page (cohost.html) and the STOCK stage overlay (cohost-overlay.html). Same stock settings, same keys.');
+    }
+
+    // --------------------------------------------------------------------
+    // Zone: 💬 CHAT BOT & PROMPTS (Z3 + the private-chat rider). The stage
+    // is stock's own private 1-on-1 bot page (chatbot.html) embedded with
+    // the REAL session — host types, bot answers over the private request/
+    // response rail (background.js:13827: answers go back to THIS page's
+    // UUID only). NOTHING reaches public chat or any overlay — said on the
+    // surface. It doubles as the honest personality-test surface before
+    // arming public replies.
+    // --------------------------------------------------------------------
+    function renderAiZoneBot(stage, config) {
+        var allow = aiSettingFlag('allowChatBot');
+        var panelWrap = document.createElement('div');
+        panelWrap.className = 'arcade-alerts-preview';
+        var bar = document.createElement('div');
+        bar.className = 'arcade-alerts-preview-bar';
+        var hint = document.createElement('span');
+        hint.className = 'arcade-style-hint';
+        hint.textContent = 'Private chat — host ↔ bot only. Nothing typed or answered here ever reaches public chat or any overlay. Stock’s own page and plumbing.';
+        bar.appendChild(hint);
+        panelWrap.appendChild(bar);
+        stage.appendChild(panelWrap);
+
+        if (!allow) {
+            var offCard = document.createElement('div');
+            offCard.className = 'arcade-ai-offstate';
+            var offLine = document.createElement('p');
+            offLine.className = 'arcade-style-hint';
+            offLine.textContent = 'The private chat bot is not set up — stock’s “Enable private chat bot option” (allowChatBot) is off.';
+            offCard.appendChild(offLine);
+            var onBtn = document.createElement('button');
+            onBtn.type = 'button';
+            onBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+            onBtn.textContent = 'Enable the private chat bot';
+            onBtn.addEventListener('click', function () {
+                aiSettings.allowChatBot = { setting: true };
+                saveDeckSetting('setting', 'allowChatBot', true);
+                renderAiZone(); // rebuild — the panel embeds now
+            });
+            offCard.appendChild(onBtn);
+            panelWrap.appendChild(offCard);
+        } else {
+            var frame = document.createElement('iframe');
+            frame.id = 'arcade-ai-private-chat';
+            frame.title = 'Private chat with the bot (host only)';
+            panelWrap.appendChild(frame);
+            var resolver = window.resolveSocialStreamPage;
+            if (typeof resolver === 'function') {
+                var params = [];
+                if (deckSessionId) params.push('session=' + encodeURIComponent(deckSessionId));
+                resolver('chatbot.html', { extraParams: params }).then(function (resolved) {
+                    if (resolved && resolved.url) frame.src = resolved.url;
+                }).catch(function (e) { console.error('[arcade-shell] private chat resolve failed:', e); });
+            }
+        }
+
+        // The aioverlay ORPHAN door (0018.06.04 audit): aioverlay.html is
+        // the AI Prompt Builder's publish target and has NO settings group
+        // and no zone fit. Builder's pick (flagged for the Admiral's gate
+        // ruling): a minimal "your published overlay" door here in Z3 —
+        // copy-URL + the builder door, no config invented.
+        var orphanCard = buildAiZoneHead('Your published AI overlay', 'The AI Prompt Builder (aiprompt.html) publishes the pages it builds to aioverlay.html. Stock gives that overlay no settings group of its own — this is its door. (Flagged for the Admiral’s gate ruling — audit orphan.)');
+        var orphanBody = document.createElement('div');
+        orphanBody.className = 'arcade-alert-card__body';
+        var orphanDoors = document.createElement('div');
+        orphanDoors.className = 'arcade-evt-doors';
+        var copyOverlayBtn = document.createElement('button');
+        copyOverlayBtn.type = 'button';
+        copyOverlayBtn.className = 'arcade-btn arcade-btn--sm';
+        copyOverlayBtn.textContent = 'Copy published overlay URL';
+        copyOverlayBtn.addEventListener('click', function () {
+            var resolver = window.resolveSocialStreamPage;
+            if (typeof resolver !== 'function') { flashButton(copyOverlayBtn, 'Unavailable', 2200); return; }
+            var params = [];
+            if (deckSessionId) params.push('session=' + encodeURIComponent(deckSessionId));
+            resolver('aioverlay.html', { extraParams: params }).then(function (resolved) {
+                if (!resolved || !resolved.url) throw new Error('no url');
+                return copyToClipboard(resolved.url).then(function () { flashButton(copyOverlayBtn, 'Copied ✓'); });
+            }).catch(function () { flashButton(copyOverlayBtn, 'Copy failed', 2200); });
+        });
+        orphanDoors.appendChild(copyOverlayBtn);
+        orphanBody.appendChild(orphanDoors);
+        orphanCard.appendChild(orphanBody);
+        config.appendChild(orphanCard);
+
+        buildDeckPopupEmbed(config, 'ai-bot', 'Stock’s chat-bot groups — public replies, the AI prompt page builder, and the private-interface toggle. Same stock settings, same keys.');
+    }
+
+    // --------------------------------------------------------------------
+    // Zone: 🌐 AUTO-TRANSLATE (Z4) — the stock group berthed, honest status.
+    // --------------------------------------------------------------------
+    function renderAiZoneTranslate(stage, config) {
+        var on = aiSettingFlag('aiAutoTranslate');
+        var out = aiSettingFlag('aiAutoTranslateOutgoing');
+        var card = buildAiZoneHead('Auto-translate', on
+            ? 'Incoming translation is ON' + (out ? ' (+ outgoing)' : '') + ' → ' + (aiSettingText('aiAutoTranslateTargetLanguage') || 'default target') + '.'
+            : 'Auto-translate is not set up — it turns on inside the stock group below.');
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        appendAiBrainRow(body, 'translates with');
+        card.appendChild(body);
+        stage.appendChild(card);
+        buildDeckPopupEmbed(config, 'ai-translate', 'Stock’s AI auto-translate group — same stock settings, same keys.');
+    }
+
+    // --------------------------------------------------------------------
+    // Zone: 🚀 DEVCHAT (Rider 2 — the setup zone, NO deep integration).
+    // Endpoint field + honest connection test + a plain description. The
+    // probe reuses the v2 console's real machinery (HEAD no-cors reachability
+    // + /api/models on the API port — chatdev's own LOCAL_SETUP.md ports:
+    // frontend :5173, API :6400 via `make dev` in ~/dev/chatdev).
+    // --------------------------------------------------------------------
+    function probeDevChatEndpoint(url) {
         var opts = { method: 'HEAD', mode: 'no-cors', cache: 'no-store', timeoutMs: AI_AREA_PROBE_TIMEOUT_MS };
         var runner = typeof window.fetchWithDeadline === 'function'
-            ? window.fetchWithDeadline(AI_AREA_DEVCHAT_URL, opts)
+            ? window.fetchWithDeadline(url, opts)
             : (function () {
                 var controller = new AbortController();
                 var timer = setTimeout(function () { controller.abort(); }, AI_AREA_PROBE_TIMEOUT_MS);
-                return fetch(AI_AREA_DEVCHAT_URL, { method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: controller.signal })
+                return fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: controller.signal })
                     .then(function (r) { clearTimeout(timer); return r; })
                     .catch(function (e) { clearTimeout(timer); throw e; });
             })();
         return runner.then(function () { return true; }).catch(function () { return false; });
     }
 
-    function renderAiAreaFrame() {
-        var body = document.getElementById('arcade-ai-body');
-        if (!body) return;
-        body.dataset.aiState = 'live';
-        body.innerHTML = '';
-        var frame = document.createElement('iframe');
-        frame.id = 'arcade-ai-frame';
-        frame.title = 'DevChat';
-        frame.setAttribute('allow', 'clipboard-write *');
-        frame.src = AI_AREA_DEVCHAT_URL;
-        body.appendChild(frame);
-        setAiAreaStatus('DevChat · localhost:5173');
-        setAiCollapseVisible(true);
+    function fetchDevChatModels(endpoint) {
+        // The API port is chatdev's own fixed one (compose.yml: "6400:6400")
+        // on the same host as the frontend endpoint.
+        var api;
+        try {
+            var u = new URL(endpoint);
+            api = u.protocol + '//' + u.hostname + ':6400';
+        } catch (e) {
+            api = AI_AREA_DEVCHAT_API_URL;
+        }
+        var controller = new AbortController();
+        var timer = setTimeout(function () { controller.abort(); }, AI_AREA_PROBE_TIMEOUT_MS);
+        return fetch(api + '/api/models', { method: 'GET', cache: 'no-store', signal: controller.signal })
+            .then(function (r) { clearTimeout(timer); if (!r.ok) throw new Error('http'); return r.json(); })
+            .catch(function (e) { clearTimeout(timer); throw e; });
     }
 
-    // Expanded (full-view) path — the v1 whole-tab probe-then-iframe flow,
-    // now scoped to just this path. Entered via the check-in card's "Open
-    // full view" quick action, or automatically on re-open this session if
-    // the seat left the tab expanded (aiConsoleExpanded persists per
-    // session, per the design doc).
-    function openAiAreaExpanded() {
-        aiConsoleExpanded = true;
-        setAiCollapseVisible(true);
-        setAiAreaState('checking', 'Checking for DevChat at localhost:5173…');
-        probeDevChatReachable().then(function (reachable) {
-            // Re-check we're still ON the ai tab AND still expanded — a fast
-            // tab-away or collapse-click shouldn't race a stale probe into
-            // painting over whatever's showing now.
-            if (document.body.dataset.arcadeTab !== 'ai' || !aiConsoleExpanded) return;
-            if (!reachable) {
-                setAiAreaState('unreachable', "DevChat isn't running — `make dev` in ~/dev/chatdev");
-                setAiCollapseVisible(true);
-                return;
-            }
-            renderAiAreaFrame();
-        });
-    }
-
-    function collapseAiAreaToConsole() {
-        aiConsoleExpanded = false;
-        renderAiConsole();
-    }
-
-    // "Open in browser" — the OPERATOR'S SYSTEM BROWSER, not an in-app
-    // Electron window. window.open()/target=_blank (the idiom index.html
-    // itself uses elsewhere, e.g. the Euler Stream dashboard links) is the
-    // wrong tool here: mainWindow's own setWindowOpenHandler (main.js
-    // ~7934) intercepts window.open and allocates an IN-APP BrowserWindow
-    // for it — it never hands off to the OS. This window runs with
-    // nodeIntegration on for local/sourcemode loads (the same access
-    // index.html's own SSN_SHELL boot switch already relies on, and the
-    // same require('electron') the boot script's ipcRenderer pull already
-    // uses), so require('electron').shell.openExternal — the exact call the
-    // app's own menu items use from the main process (main.js ~17423 etc.)
-    // — is directly reachable from here and is the one path that actually
-    // reaches the system default browser. Falls back to window.open only if
-    // require ever comes back unavailable, so this never dead-ends into
-    // nothing happening.
-    function openDevChatInBrowser() {
+    function openDevChatInBrowser(url) {
         try {
             var electron = require('electron');
             if (electron && electron.shell && typeof electron.shell.openExternal === 'function') {
-                electron.shell.openExternal(AI_AREA_DEVCHAT_URL);
+                electron.shell.openExternal(url);
                 return;
             }
         } catch (e) { /* nodeIntegration off somehow — fall through */ }
-        try { window.open(AI_AREA_DEVCHAT_URL, '_blank'); } catch (e) { /* honest no-op, never throw */ }
+        try { window.open(url, '_blank'); } catch (e) { /* honest no-op, never throw */ }
     }
 
-    // Deadline-guarded GET against DevChat's API, mirroring
-    // probeDevChatReachable()'s fetchWithDeadline-with-fallback shape
-    // exactly, but WITHOUT no-cors — this window runs with webSecurity
-    // disabled for local/sourcemode loads (main.js ~7458/~7467, the same
-    // fact probeDevChatReachable()'s own comment already notes), so a plain
-    // fetch here can read the JSON body; no-cors would only ever hand back
-    // an opaque, unreadable response.
-    function fetchDevChatJson(path) {
-        var url = AI_AREA_DEVCHAT_API_URL + path;
-        var opts = { method: 'GET', cache: 'no-store', timeoutMs: AI_AREA_PROBE_TIMEOUT_MS };
-        var runner = typeof window.fetchWithDeadline === 'function'
-            ? window.fetchWithDeadline(url, opts)
-            : (function () {
-                var controller = new AbortController();
-                var timer = setTimeout(function () { controller.abort(); }, AI_AREA_PROBE_TIMEOUT_MS);
-                return fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal })
-                    .then(function (r) { clearTimeout(timer); return r; })
-                    .catch(function (e) { clearTimeout(timer); throw e; });
-            })();
-        return runner.then(function (r) {
-            if (!r || !r.ok) throw new Error('devchat api http error');
-            return r.json();
-        });
+    function aiDevchatEndpoint() {
+        return aiHouseText(AI_DEVCHAT_ENDPOINT_KEY) || '';
     }
 
-    function appendCheckinLine(body, text, isError) {
-        var line = document.createElement('p');
-        line.className = 'arcade-ai-checkin__line' + (isError ? ' is-error' : '');
-        line.textContent = text;
-        body.appendChild(line);
-        return line;
-    }
-
-    // The DevChat check-in card — the console's default small pulse panel.
-    // Runs its OWN probe, independent of the signer gate above: the same
-    // honest frontend-reachable probe first, and only when reachable does
-    // it also read the API (:6400/health via reachability, :6400/api/models
-    // for the model name + Ollama-reachable flag) — exactly the "cheaply
-    // readable" scope the design doc draws. "Current/last run status" was
-    // in-scope per the design doc IF cheap — it is NOT: chatdev's only
-    // status-bearing routes (sessions/artifacts/workflows) all require a
-    // session id nobody has yet, there is no list-sessions route, so that
-    // line is honestly omitted rather than faked.
-    function refreshDevChatCheckin() {
-        var pill = document.getElementById('arcade-ai-checkin-pill');
-        var body = document.getElementById('arcade-ai-checkin-body');
-        if (!pill || !body) return;
-        pill.className = 'arcade-pill arcade-ai-checkin__pill';
-        pill.textContent = 'Checking…';
-        body.innerHTML = '';
-
-        probeDevChatReachable().then(function (reachable) {
-            // Bail if the tab moved on, or the console got collapsed-past/
-            // re-expanded, mid-probe — never paint over a state that isn't
-            // current.
-            if (document.body.dataset.arcadeTab !== 'ai' || document.body.dataset.aiState !== 'console') return;
-            var p = document.getElementById('arcade-ai-checkin-pill');
-            var b = document.getElementById('arcade-ai-checkin-body');
-            if (!p || !b) return;
-
-            if (!reachable) {
-                p.classList.add('arcade-ai-checkin__pill--down');
-                p.textContent = 'Not running';
-                appendCheckinLine(b, "DevChat isn't running — `make dev` in ~/dev/chatdev", true);
-                return;
-            }
-            p.classList.add('arcade-ai-checkin__pill--up');
-            p.textContent = 'Reachable';
-            appendCheckinLine(b, 'localhost:5173');
-
-            fetchDevChatJson('/api/models').then(function (data) {
-                if (document.body.dataset.arcadeTab !== 'ai' || document.body.dataset.aiState !== 'console') return;
-                var b2 = document.getElementById('arcade-ai-checkin-body');
-                if (!b2) return;
-                appendCheckinLine(b2, 'Model: ' + ((data && data.configured_model) || 'not configured'));
-                if (data && data.is_ollama) {
-                    appendCheckinLine(b2, 'Ollama: ' + (data.reachable ? 'reachable' : 'unreachable'), !data.reachable);
+    function renderAiZoneDevchat(stage, config) {
+        var endpoint = aiDevchatEndpoint();
+        var card = buildAiZoneHead('DevChat — connect your AI team', 'DevChat is the house’s local AI build swarm (a ChatDev fork, ~/dev/chatdev): a team of AI agents — CEO, CTO, programmer, tester — that takes a written task spec and grinds out a prototype on your local Ollama models, fully on-box, no cloud. Runs with `make dev` in ~/dev/chatdev (web console on :5173, API on :6400).');
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        var statusRow = document.createElement('div');
+        statusRow.className = 'arcade-alert-row';
+        var statusLbl = document.createElement('label');
+        statusLbl.textContent = 'Status';
+        statusRow.appendChild(statusLbl);
+        var statusVal = document.createElement('span');
+        statusVal.className = 'arcade-ai-brain__value';
+        statusVal.id = 'arcade-ai-devchat-status';
+        statusVal.setAttribute('role', 'status');
+        statusVal.textContent = !endpoint ? 'not set up — enter your DevChat address below'
+            : aiDevchatProbe.state === 'connected' ? 'connected — ' + aiDevchatProbe.detail
+            : aiDevchatProbe.state === 'checking' ? 'checking…'
+            : aiDevchatProbe.state === 'unreachable' ? 'unreachable — is DevChat running? (`make dev` in ~/dev/chatdev)'
+            : 'not tested yet';
+        statusRow.appendChild(statusVal);
+        body.appendChild(statusRow);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var testBtn = document.createElement('button');
+        testBtn.type = 'button';
+        testBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        testBtn.textContent = 'Test connection';
+        testBtn.addEventListener('click', function () {
+            var ep = aiDevchatEndpoint();
+            if (!ep) { statusVal.textContent = 'not set up — enter your DevChat address below'; return; }
+            aiDevchatProbe = { state: 'checking', detail: '' };
+            statusVal.textContent = 'checking…';
+            probeDevChatEndpoint(ep).then(function (reachable) {
+                if (!document.body.contains(statusVal)) return;
+                if (!reachable) {
+                    aiDevchatProbe = { state: 'unreachable', detail: '' };
+                    statusVal.textContent = 'unreachable — is DevChat running? (`make dev` in ~/dev/chatdev)';
+                    return;
                 }
-            }).catch(function () {
-                if (document.body.dataset.arcadeTab !== 'ai' || document.body.dataset.aiState !== 'console') return;
-                var b2 = document.getElementById('arcade-ai-checkin-body');
-                if (!b2) return;
-                appendCheckinLine(b2, 'API not reachable — localhost:6400', true);
+                fetchDevChatModels(ep).then(function (data) {
+                    if (!document.body.contains(statusVal)) return;
+                    var detail = 'model: ' + ((data && data.configured_model) || 'not configured');
+                    if (data && data.is_ollama) detail += ' · Ollama ' + (data.reachable ? 'reachable' : 'unreachable');
+                    aiDevchatProbe = { state: 'connected', detail: detail };
+                    statusVal.textContent = 'connected — ' + detail;
+                }).catch(function () {
+                    if (!document.body.contains(statusVal)) return;
+                    aiDevchatProbe = { state: 'connected', detail: 'console reachable · API (:6400) not answering' };
+                    statusVal.textContent = 'connected — console reachable · API (:6400) not answering';
+                });
             });
         });
-    }
-
-    function buildDevChatCheckinCard() {
-        var card = document.createElement('article');
-        card.className = 'arcade-ai-checkin';
-
-        var head = document.createElement('div');
-        head.className = 'arcade-ai-checkin__head';
-        var name = document.createElement('h3');
-        name.className = 'arcade-ai-checkin__name';
-        name.textContent = 'DevChat';
-        head.appendChild(name);
-        var pill = document.createElement('span');
-        pill.className = 'arcade-pill arcade-ai-checkin__pill';
-        pill.id = 'arcade-ai-checkin-pill';
-        pill.textContent = 'Checking…';
-        head.appendChild(pill);
-        card.appendChild(head);
-
-        var body = document.createElement('div');
-        body.className = 'arcade-ai-checkin__body';
-        body.id = 'arcade-ai-checkin-body';
-        card.appendChild(body);
-
-        var actions = document.createElement('div');
-        actions.className = 'arcade-ai-checkin__actions';
-        var expandBtn = document.createElement('button');
-        expandBtn.type = 'button';
-        expandBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
-        expandBtn.textContent = 'Open full view';
-        expandBtn.addEventListener('click', openAiAreaExpanded);
-        actions.appendChild(expandBtn);
+        doors.appendChild(testBtn);
         var browserBtn = document.createElement('button');
         browserBtn.type = 'button';
         browserBtn.className = 'arcade-btn arcade-btn--sm';
         browserBtn.textContent = 'Open in browser';
-        browserBtn.addEventListener('click', openDevChatInBrowser);
-        actions.appendChild(browserBtn);
-        card.appendChild(actions);
+        browserBtn.addEventListener('click', function () {
+            var ep = aiDevchatEndpoint() || AI_AREA_DEVCHAT_URL;
+            openDevChatInBrowser(ep);
+        });
+        doors.appendChild(browserBtn);
+        body.appendChild(doors);
+        card.appendChild(body);
+        stage.appendChild(card);
 
-        return card;
+        var setupCard = buildAiZoneHead('Setup', 'Point the console at your local DevChat instance. Default when blank: ' + AI_AREA_DEVCHAT_URL + ' (chatdev’s own dev-server port). V1 is this front door only — no deep integration yet.');
+        var setupBody = document.createElement('div');
+        setupBody.className = 'arcade-alert-card__body';
+        setupBody.appendChild(buildAiHouseTextRow('DevChat endpoint', AI_DEVCHAT_ENDPOINT_KEY, AI_AREA_DEVCHAT_URL, endpoint, function () {
+            aiDevchatProbe = { state: 'unknown', detail: '' };
+        }));
+        setupCard.appendChild(setupBody);
+        config.appendChild(setupCard);
     }
 
-    // SSN's own AI items, gathered home (Lane A inventory — grepped +
-    // read against shared/config/settingsDefinitions.js, popup.html and
-    // popup.js directly, keys and read/write shapes verified, not guessed).
-    //
-    // MOVE groups: small settings blocks, wired to the SAME keys the stock
-    // Settings screen already reads/writes via the canonical saveSetting
-    // IPC (settings-write law) — never a forked copy. Two storage shapes
-    // exist in this app; these keys use the NEWER flat one (confirmed by
-    // reading popup.js's handleSetting()/refreshPopupSettingsAfterLanguageSave()
-    // paths, not the older param25 shape the Alerts tab uses):
-    //   boolean -> {cmd:'saveSetting', type:'setting',       setting:key, value:true|false}, read response.settings[key].setting
-    //   text    -> {cmd:'saveSetting', type:'textsetting',   setting:key, value:'…'},          read response.settings[key].textsetting
-    //   select  -> {cmd:'saveSetting', type:'optionsetting', setting:key, value:'…'},           read response.settings[key].optionsetting
-    // (target is always null here — none of these are per-source overrides.)
-    //
-    // Curated to the compact, decision-relevant fields only — mirrors the
-    // Alerts tab's own curation (6 fields per card, not every param the
-    // underlying system supports). Provider CREDENTIALS (10+ providers,
-    // ~25 fields, each with popup.js's own conditional show/hide wiring
-    // keyed to the aiProvider dropdown) are LINK, not MOVE — duplicating
-    // that many provider-conditional fields here would fork the exact
-    // surface popup.js already owns, which is the LINK criterion itself.
-    // Ollama's own endpoint/model are the one exception: kept as MOVE since
-    // Ollama is the default provider and the deployment's actual local
-    // setup (pacBOT/gemma3:1b — see the SSN skill's "Local AI" section).
-    var AI_MOVE_GROUPS = [
-        {
-            id: 'bot',
-            title: 'LLM provider & chat bot',
-            blurb: 'The LLM chat-response bot (ollama toggle + aiProvider — this is pacBOT\'s home). Other providers\' API keys/endpoints and rarer bot options live in Settings — see the cards below.',
-            fields: [
-                { key: 'ollama', label: 'Bot enabled', type: 'boolean' },
-                {
-                    key: 'aiProvider', label: 'Provider', type: 'select', options: [
-                        { value: 'ollama', label: 'Ollama (local)' },
-                        { value: 'chatgpt', label: 'ChatGPT API' },
-                        { value: 'gemini', label: 'Gemini API' },
-                        { value: 'groq', label: 'Groq API' },
-                        { value: 'deepseek', label: 'DeepSeek API' },
-                        { value: 'xai', label: 'xAI API (Grok)' },
-                        { value: 'bedrock', label: 'AWS Bedrock API' },
-                        { value: 'openrouter', label: 'OpenRouter API' },
-                        { value: 'opencode', label: 'OpenCode Zen API' },
-                        { value: 'hostedllm', label: 'SSN Hosted Trial LLM' },
-                        { value: 'localgemma', label: 'Local Gemma 4 (browser)' },
-                        { value: 'localqwen', label: 'Local Qwen 3.5 0.8B (browser)' },
-                        { value: 'localqwen2b', label: 'Local Qwen 3.5 2B (browser)' },
-                        { value: 'custom', label: 'Custom (OpenAI-compatible)' }
-                    ]
-                },
-                { key: 'ollamaendpoint', label: 'Ollama endpoint', type: 'text', placeholder: 'http://localhost:11434' },
-                { key: 'ollamamodel', label: 'Ollama model', type: 'text', placeholder: 'gemma3:1b' },
-                { key: 'ollamabotname', label: 'Bot name', type: 'text', placeholder: 'e.g. pacBOT' },
-                { key: 'bottriggerwords', label: 'Trigger words', type: 'text', placeholder: 'blank = always eligible' }
-            ]
-        },
-        {
-            id: 'moderation',
-            title: 'AI moderation',
-            blurb: 'The bot reviews chat and can delete (or block-until-approved) messages it judges unfit.',
-            fields: [
-                { key: 'ollamaCensorBot', label: 'Moderation enabled', type: 'boolean' },
-                { key: 'ollamaCensorBotBlockMode', label: 'Block until approved', type: 'boolean' }
-            ]
-        },
-        {
-            id: 'translate',
-            title: 'AI translation',
-            blurb: 'Auto-translates chat through the configured AI provider — separate from the app\'s plain UI-language switcher (not an AI feature, excluded here).',
-            fields: [
-                { key: 'aiAutoTranslate', label: 'Translate incoming', type: 'boolean' },
-                { key: 'aiAutoTranslateOutgoing', label: 'Translate outgoing', type: 'boolean' },
-                { key: 'aiAutoTranslateTargetLanguage', label: 'Target language', type: 'text', placeholder: 'en-US' }
-            ]
-        },
-        {
-            id: 'summaries',
-            title: 'AI summaries',
-            blurb: 'Chat-summary context fed to the bot, and the user-triggered !summary command.',
-            fields: [
-                { key: 'llmsummary', label: 'Feed summaries to bot', type: 'boolean' },
-                { key: 'allowLLMSummary', label: 'Allow !summary command', type: 'boolean' }
-            ]
-        }
-    ];
-
-    // LINK cards — real surfaces, deliberately not duplicated here (each
-    // note says why). "Open Settings" is the same navigateArcadeTab
-    // ('settings') the sources rail's own "+ Add source" button already
-    // uses — the shell has no finer settings-category deep link, so the
-    // card names the exact heading text to look for once there.
-    var AI_LINK_ITEMS = [
-        {
-            id: 'llm-api',
-            name: 'Configure LLM API — other providers',
-            blurb: 'API keys, endpoints and models for ChatGPT, Gemini, Groq, DeepSeek, OpenRouter, xAI, AWS Bedrock, OpenCode Zen, the SSN Hosted Trial LLM, the in-browser Local Gemma/Qwen models, and custom OpenAI-compatible endpoints — each with its own show/hide wiring keyed to the Provider dropdown above.',
-            where: 'Settings → Configure LLM API 🦙'
-        },
-        {
-            id: 'chatbot-advanced',
-            name: 'Chat bot — advanced',
-            blurb: 'History length, timestamps, RAG knowledge base, rate limiting, keep-alive, mod-only replies, overlay-only replies, read-aloud via TTS, and the standalone one-on-one chat bot.',
-            where: 'Settings → Chat bot 🤖💬 / Standalone one-on-one chat bot'
-        },
-        {
-            id: 'ai-prompt-builder',
-            name: 'AI Prompt / Overlay Builder',
-            blurb: 'The standalone AI Prompt Page Builder (its own page, own localStorage-backed state — aiprompt.html) and the AI Overlay it publishes to. Moving it would fork a whole second page, not a settings block.',
-            where: 'Settings → page picker → AI Prompt Page Builder'
-        },
-        {
-            id: 'cohost',
-            name: 'AI Cohost',
-            blurb: 'The AI virtual-cohost overlay page — a large standalone surface (cohost.html), out of scope to relocate here.',
-            where: 'Settings → page picker → Cohost'
-        }
-    ];
-
-    function saveAiItemSetting(type, key, value) {
-        try {
-            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
-                window.ninjafy.sendMessage(null, { cmd: 'saveSetting', type: type, target: null, setting: key, value: value }, function () {});
-            }
-        } catch (e) { console.error('[arcade-shell] AI item setting save failed:', e); }
-    }
-
-    function buildAiMoveRow(field, currentValue) {
-        var row = document.createElement('div');
-        row.className = 'arcade-alert-row';
-        var lbl = document.createElement('label');
-        lbl.textContent = field.label;
-        row.appendChild(lbl);
-        var input;
-        if (field.type === 'boolean') {
-            input = document.createElement('input');
-            input.type = 'checkbox';
-            input.checked = !!currentValue;
-            input.addEventListener('change', function () {
-                saveAiItemSetting('setting', field.key, input.checked);
-            });
-        } else if (field.type === 'select') {
-            input = document.createElement('select');
-            (field.options || []).forEach(function (opt) {
-                var o = document.createElement('option');
-                o.value = opt.value;
-                o.textContent = opt.label;
-                input.appendChild(o);
-            });
-            input.value = currentValue || (field.options && field.options[0] && field.options[0].value) || '';
-            input.addEventListener('change', function () {
-                saveAiItemSetting('optionsetting', field.key, input.value);
-            });
-        } else {
-            input = document.createElement('input');
-            input.type = 'text';
-            input.autocomplete = 'off';
-            input.placeholder = field.placeholder || '';
-            input.value = currentValue || '';
-            input.addEventListener('input', debounce(function () {
-                saveAiItemSetting('textsetting', field.key, input.value);
-            }, 300));
-        }
-        input.dataset.arcadeAiField = field.key;
-        row.appendChild(input);
-        return row;
-    }
-
-    function buildAiMoveCard(group, settings) {
-        var card = document.createElement('article');
-        card.className = 'arcade-alert-card arcade-ai-move-card';
-        var head = document.createElement('div');
-        head.className = 'arcade-alert-card__head';
-        var name = document.createElement('h3');
-        name.className = 'arcade-alert-card__name';
-        name.textContent = group.title;
-        head.appendChild(name);
-        card.appendChild(head);
-        if (group.blurb) {
-            var blurb = document.createElement('p');
-            blurb.className = 'arcade-el-card__blurb';
-            blurb.textContent = group.blurb;
-            card.appendChild(blurb);
-        }
+    // --------------------------------------------------------------------
+    // Zone: 🧠 MODELS (built first — every other zone reads it). Local-first
+    // native head (Ollama endpoint + model lead, provider select) + the real
+    // round-trip test + the stock 32-field provider group berthed below
+    // (API keys stay stock password-type inputs inside the embed — never
+    // echoed, never captured).
+    // --------------------------------------------------------------------
+    function renderAiZoneModels(stage, config) {
+        var card = buildAiZoneHead('The brain', 'Local-first: Ollama on your own machine leads. Cloud providers stay available in the stock group below — their API keys live only in those stock password fields.');
         var body = document.createElement('div');
         body.className = 'arcade-alert-card__body';
-        group.fields.forEach(function (field) {
-            var raw = settings[field.key];
-            var current = field.type === 'boolean' ? (raw && raw.setting)
-                : field.type === 'select' ? (raw && raw.optionsetting)
-                    : (raw && raw.textsetting);
-            body.appendChild(buildAiMoveRow(field, current));
-        });
-        card.appendChild(body);
-        return card;
-    }
-
-    function buildAiLinkCard(item) {
-        var card = document.createElement('article');
-        card.className = 'arcade-el-card arcade-ai-link-card';
-        var head = document.createElement('div');
-        head.className = 'arcade-el-card__head';
-        var name = document.createElement('h3');
-        name.className = 'arcade-el-card__name';
-        name.textContent = item.name;
-        head.appendChild(name);
-        card.appendChild(head);
-        var blurb = document.createElement('p');
-        blurb.className = 'arcade-el-card__blurb';
-        blurb.textContent = item.blurb;
-        card.appendChild(blurb);
-        var where = document.createElement('p');
-        where.className = 'arcade-el-card__params';
-        where.textContent = item.where;
-        card.appendChild(where);
-        var actions = document.createElement('div');
-        actions.className = 'arcade-el-card__actions';
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'arcade-btn arcade-btn--sm';
-        btn.textContent = 'Open Settings';
-        btn.addEventListener('click', function () { navigateArcadeTab('settings'); });
-        actions.appendChild(btn);
-        card.appendChild(actions);
-        return card;
-    }
-
-    // ONE getSettings read hydrates every MOVE card — same shape/IPC the
-    // Alerts/Style tabs' own loaders already use. Guarded by document
-    // .contains() rather than the dataset checks elsewhere: the console is
-    // torn down and rebuilt wholesale on every open/collapse (unlike the
-    // Alerts tab's persistent cards), so "is this exact grid node still
-    // attached" is the more precise staleness check here.
-    function loadAiItemsSettings(moveGrid) {
-        try {
-            if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
-                window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
-                    if (!document.body.contains(moveGrid)) return; // console rebuilt/torn down mid-load
-                    var settings = (response && response.settings) || {};
-                    AI_MOVE_GROUPS.forEach(function (group) {
-                        moveGrid.appendChild(buildAiMoveCard(group, settings));
-                    });
-                });
+        body.appendChild(buildAiSelectRow('Provider', 'aiProvider', AI_PROVIDER_OPTIONS, function () { renderAiZone(); }));
+        body.appendChild(buildAiTextRow('Ollama endpoint', 'ollamaendpoint', 'http://localhost:11434'));
+        body.appendChild(buildAiTextRow('Ollama model', 'ollamamodel', 'gemma3:1b'));
+        var statusLine = document.createElement('p');
+        statusLine.className = 'arcade-style-hint arcade-ai-verdict';
+        statusLine.id = 'arcade-ai-models-status';
+        statusLine.setAttribute('role', 'status');
+        statusLine.setAttribute('aria-live', 'polite');
+        statusLine.textContent = 'Not tested yet.';
+        body.appendChild(statusLine);
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var testBtn = document.createElement('button');
+        testBtn.type = 'button';
+        testBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        testBtn.textContent = 'Test the brain';
+        testBtn.addEventListener('click', function () {
+            var bg = getBackgroundWindow();
+            if (!bg || typeof bg.callLLMAPI !== 'function') {
+                statusLine.textContent = 'The background AI plumbing is not reachable yet — try again in a moment.';
                 return;
             }
-        } catch (e) { console.error('[arcade-shell] AI items settings load failed:', e); }
+            testBtn.disabled = true;
+            statusLine.classList.remove('is-error');
+            statusLine.textContent = 'Asking ' + aiBrainLine() + '…';
+            // Stock's own provider-test prompt (background.js:4743,
+            // cmd 'testLLMProvider') — run DIRECTLY on the background page
+            // (the S51 direct-frame2 pattern: no IPC, no sendSync, no 60s
+            // renderer block).
+            bg.callLLMAPI('Reply with one short sentence confirming this chatbot connection works.', null, null, null, null, null, {})
+                .then(function (out) {
+                    testBtn.disabled = false;
+                    if (!document.body.contains(statusLine)) return;
+                    statusLine.textContent = 'Connected — the brain answered: “' + String(out || '').trim().slice(0, 140) + '”';
+                })
+                .catch(function (e) {
+                    testBtn.disabled = false;
+                    if (!document.body.contains(statusLine)) return;
+                    statusLine.textContent = 'Unreachable or misconfigured — ' + (e && e.message || e) + '. Check the endpoint/model above and the provider group below.';
+                    statusLine.classList.add('is-error');
+                });
+        });
+        doors.appendChild(testBtn);
+        var probeBtn = document.createElement('button');
+        probeBtn.type = 'button';
+        probeBtn.className = 'arcade-btn arcade-btn--sm';
+        probeBtn.textContent = 'Probe Ollama';
+        probeBtn.title = 'Reads the Ollama endpoint’s /api/tags — reports installed models, never downloads anything.';
+        probeBtn.addEventListener('click', function () {
+            var endpoint = aiSettingText('ollamaendpoint') || 'http://localhost:11434';
+            statusLine.classList.remove('is-error');
+            statusLine.textContent = 'Probing ' + endpoint + '…';
+            var controller = new AbortController();
+            var timer = setTimeout(function () { controller.abort(); }, AI_AREA_PROBE_TIMEOUT_MS);
+            fetch(endpoint.replace(/\/$/, '') + '/api/tags', { cache: 'no-store', signal: controller.signal })
+                .then(function (r) { clearTimeout(timer); if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+                .then(function (data) {
+                    if (!document.body.contains(statusLine)) return;
+                    var names = (data && data.models || []).map(function (m) { return m.name; });
+                    statusLine.textContent = names.length
+                        ? 'Ollama reachable — ' + names.length + ' model' + (names.length === 1 ? '' : 's') + ' installed: ' + names.slice(0, 6).join(', ') + (names.length > 6 ? '…' : '')
+                        : 'Ollama reachable but no models installed — `ollama pull gemma3:1b`.';
+                })
+                .catch(function (e) {
+                    clearTimeout(timer);
+                    if (!document.body.contains(statusLine)) return;
+                    statusLine.textContent = 'Ollama unreachable at ' + endpoint + ' — is it running? (offline state, honest: ' + (e && e.message || e) + ')';
+                    statusLine.classList.add('is-error');
+                });
+        });
+        doors.appendChild(probeBtn);
+        body.appendChild(doors);
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        buildDeckPopupEmbed(config, 'ai-models', 'Stock’s full provider group — every provider’s endpoint, model, and API-key fields. Keys stay inside these stock password inputs: never echoed, never captured.');
     }
 
-    function buildAiItemsSection() {
-        var section = document.createElement('section');
-        section.className = 'arcade-ai-items';
-
-        var head = document.createElement('div');
-        head.className = 'arcade-ai-items__head';
-        var title = document.createElement('h3');
-        title.className = 'arcade-ai-items__title';
-        title.textContent = 'SSN AI ITEMS';
-        head.appendChild(title);
-        section.appendChild(head);
-
-        var moveGrid = document.createElement('div');
-        moveGrid.className = 'arcade-alerts-rail arcade-ai-move-grid';
-        section.appendChild(moveGrid);
-
-        var linkHead = document.createElement('div');
-        linkHead.className = 'arcade-ai-items__head arcade-ai-items__head--sub';
-        var linkTitle = document.createElement('h4');
-        linkTitle.className = 'arcade-ai-items__title';
-        linkTitle.textContent = 'ELSEWHERE IN SETTINGS';
-        linkHead.appendChild(linkTitle);
-        section.appendChild(linkHead);
-
-        var linkGrid = document.createElement('div');
-        linkGrid.className = 'arcade-el-grid arcade-ai-link-grid';
-        AI_LINK_ITEMS.forEach(function (item) { linkGrid.appendChild(buildAiLinkCard(item)); });
-        section.appendChild(linkGrid);
-
-        loadAiItemsSettings(moveGrid);
-        return section;
+    // --------------------------------------------------------------------
+    // The panel shell: list + stage/config, listbox contract, lazy ensure.
+    // --------------------------------------------------------------------
+    function renderAiZoneList() {
+        var list = document.getElementById('arcade-ai-zone-list');
+        if (!list) return;
+        list.innerHTML = '';
+        AI_ZONES.forEach(function (zone) {
+            var row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'arcade-evt-item';
+            row.dataset.arcadeAiZone = zone.id;
+            row.setAttribute('role', 'option');
+            var selected = aiSelectedZone === zone.id;
+            row.classList.toggle('is-on', selected);
+            row.setAttribute('aria-selected', String(selected));
+            var label = document.createElement('span');
+            label.className = 'arcade-evt-item__label';
+            label.textContent = zone.icon + ' ' + zone.label;
+            row.appendChild(label);
+            var stateText = null;
+            var stateOn = false;
+            if (zone.id === 'moderation') { stateText = aiSettingFlag('ollamaCensorBot') ? 'on' : 'off'; stateOn = aiSettingFlag('ollamaCensorBot'); }
+            else if (zone.id === 'cohost') { stateText = (aiSettingText('aiOverlayLabel') === AI_COHOST_STAGE_LABEL) ? 'wired' : 'not wired'; stateOn = aiSettingText('aiOverlayLabel') === AI_COHOST_STAGE_LABEL; }
+            else if (zone.id === 'bot') { stateText = aiSettingFlag('ollama') ? 'on' : 'off'; stateOn = aiSettingFlag('ollama'); }
+            else if (zone.id === 'translate') { stateText = aiSettingFlag('aiAutoTranslate') ? 'on' : 'off'; stateOn = aiSettingFlag('aiAutoTranslate'); }
+            else if (zone.id === 'devchat') { stateText = aiDevchatProbe.state === 'connected' ? 'connected' : (aiDevchatEndpoint() ? '—' : 'not set up'); stateOn = aiDevchatProbe.state === 'connected'; }
+            else if (zone.id === 'models') { stateText = aiSettingOption('aiProvider') || 'ollama'; stateOn = true; }
+            if (stateText) {
+                var state = document.createElement('span');
+                state.className = 'arcade-evt-state ' + (stateOn ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+                state.textContent = stateText;
+                row.appendChild(state);
+            }
+            row.addEventListener('click', function () { selectAiZone(zone.id); });
+            list.appendChild(row);
+        });
     }
 
-    function renderAiConsole() {
-        var body = document.getElementById('arcade-ai-body');
-        if (!body) return;
-        setAiCollapseVisible(false);
-        setAiAreaStatus('');
-        body.dataset.aiState = 'console';
-        body.innerHTML = '';
-        var wrap = document.createElement('div');
-        wrap.className = 'arcade-ai-console';
-        wrap.appendChild(buildDevChatCheckinCard());
-        wrap.appendChild(buildAiItemsSection());
-        body.appendChild(wrap);
-        refreshDevChatCheckin();
+    function renderAiZone() {
+        var stage = document.getElementById('arcade-ai-stage');
+        var config = document.getElementById('arcade-ai-config');
+        if (!stage || !config) return;
+        stage.innerHTML = '';
+        config.innerHTML = '';
+        if (aiSelectedZone === 'moderation') renderAiZoneModeration(stage, config);
+        else if (aiSelectedZone === 'cohost') renderAiZoneCohost(stage, config);
+        else if (aiSelectedZone === 'bot') renderAiZoneBot(stage, config);
+        else if (aiSelectedZone === 'translate') renderAiZoneTranslate(stage, config);
+        else if (aiSelectedZone === 'devchat') renderAiZoneDevchat(stage, config);
+        else if (aiSelectedZone === 'models') renderAiZoneModels(stage, config);
     }
 
-    function openAiAreaAfterGate() {
-        if (aiConsoleExpanded) { openAiAreaExpanded(); }
-        else { renderAiConsole(); }
+    function selectAiZone(zoneId) {
+        if (aiSelectedZone === zoneId) return;
+        aiSelectedZone = zoneId;
+        renderAiZoneList();
+        renderAiZone();
     }
 
-    // The gate — asks the signer for a FRESH challenge every open, admits
-    // only AI_AREA_ALLOWED_PUBKEY_HEX. See the security note in the build
-    // report: signEvent()'s returned signature is checked for shape (sig +
-    // pubkey present, pubkey matches the ruled key) but not cryptographically
-    // verified against secp256k1/schnorr — this app has no crypto library,
-    // and vendoring one is out of scope for a static-file, localhost-only,
-    // single-operator v1 door. The trust boundary is "the NIP-07 provider
-    // bound to THIS browser context claims to control the g2x3 key," which
-    // matches the design doc's own framing of this as the shell's door, not
-    // a hardened auth story (that's Phase 3, if the AI area ever leaves
-    // localhost).
-    function runAiAreaGate() {
-        setAiAreaStatus('');
-        if (aiGateOpen()) {
-            setAiAreaStatus('gate open — SSN_AI_GATE=open · the g2x3 door returns with the Arcade Sidecar');
-            openAiAreaAfterGate();
+    function ensureAiPanelLive() {
+        if (aiPanelLive) {
+            renderAiZoneList(); // state chips re-read the snapshot on re-entry
             return;
         }
-        setAiAreaState('checking', 'Asking the signer to confirm…');
-
-        if (!hasNostrSigner()) {
-            // Re-checked here (not just at boot) in case the signer vanished
-            // mid-session — never trust a stale render for an admit/deny call.
-            setAiAreaState('refused', 'No nostr signer available — the AI area stays closed.');
-            return;
-        }
-
-        var challenge = 'ssn-ai-area:' + Date.now() + ':' + Math.random().toString(36).slice(2);
-        // Ephemeral NIP-42-shaped auth draft (kind 22242) — never published
-        // anywhere; its only job is to carry `challenge` through signEvent()
-        // so the signature proves control of the key for THIS specific ask.
-        var draft = {
-            kind: 22242,
-            created_at: Math.floor(Date.now() / 1000),
-            tags: [['challenge', challenge], ['relay', 'ssn-arcade-shell-ai-area']],
-            content: 'Pac’s Arcade — AI area gate'
-        };
-
-        Promise.resolve()
-            .then(function () { return window.nostr.getPublicKey(); })
-            .then(function (pubkey) {
-                if (!pubkey || String(pubkey).toLowerCase() !== AI_AREA_ALLOWED_PUBKEY_HEX) {
-                    throw new Error('not-authorized');
+        aiPanelLive = true;
+        // ONE getSettings read hydrates every zone — sequenced BEFORE any
+        // iframe src is set (the S50 sendSync-before-churn discipline; the
+        // read rides deckCmd's callback form, only unsafe DURING churn).
+        deckCmd({ getSettings: true }, function (response) {
+            aiSettings = (response && response.settings) || {};
+            try {
+                var rawBody = aiHouseText(AI_COHOST_BODY_KEY);
+                if (rawBody) {
+                    var parsed = JSON.parse(rawBody);
+                    if (parsed && typeof parsed === 'object') aiCohostBody = { head: parsed.head || 'pac', body: parsed.body || 'bot', color: parsed.color || 'cyan' };
                 }
-                draft.pubkey = pubkey;
-                return window.nostr.signEvent(draft);
-            })
-            .then(function (signed) {
-                if (document.body.dataset.arcadeTab !== 'ai') return; // tabbed away mid-sign
-                var okShape = signed && signed.sig && signed.pubkey &&
-                    String(signed.pubkey).toLowerCase() === AI_AREA_ALLOWED_PUBKEY_HEX;
-                if (!okShape) throw new Error('not-authorized');
-                openAiAreaAfterGate();
-            })
-            .catch(function () {
-                if (document.body.dataset.arcadeTab !== 'ai') return;
-                setAiAreaState('refused', 'This seat isn’t the ruled admin key — the AI area stays closed.');
-            });
+            } catch (e) { /* keep the BASIC DEFAULT */ }
+            // The session id comes off the app's own helper (shared with the
+            // deck loader) — resolved BEFORE any zone iframe src is set.
+            var finish = function () { renderAiZoneList(); renderAiZone(); };
+            if (!deckSessionId && typeof window.getChatDockSessionId === 'function') {
+                Promise.resolve(window.getChatDockSessionId()).then(function (id) {
+                    deckSessionId = id || '';
+                    finish();
+                }, finish);
+                return;
+            }
+            finish();
+        });
     }
 
     function buildAiPanel() {
         var panel = document.createElement('section');
         panel.className = 'arcade-ai';
-        panel.setAttribute('aria-label', 'AI area');
+        panel.setAttribute('aria-label', 'AI console');
         panel.innerHTML =
             '<div class="arcade-panel-head">' +
             '<span class="arcade-panel-title">AI</span>' +
             '<span class="arcade-spacer"></span>' +
             '<span class="arcade-ai-status" id="arcade-ai-status"></span>' +
-            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-ai-collapse" hidden>&larr; Console</button>' +
             '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon" id="arcade-ai-close" aria-label="Close">×</button>' +
             '</div>' +
-            '<div class="arcade-ai-body" id="arcade-ai-body"></div>';
+            '<div class="arcade-ai-body">' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-ai-zone-list" role="listbox" aria-label="AI zones"></div>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-ai-stage" id="arcade-ai-stage"></div>' +
+            '<div class="arcade-evt-config" id="arcade-ai-config"></div>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
         document.body.appendChild(panel);
 
-        panel.querySelector('#arcade-ai-collapse').addEventListener('click', collapseAiAreaToConsole);
+        attachArcadeListboxNav(panel.querySelector('#arcade-ai-zone-list'), '[data-arcade-ai-zone]',
+            function () { return aiSelectedZone; }, selectAiZone,
+            function (row) { return row.dataset.arcadeAiZone; });
+
         panel.querySelector('#arcade-ai-close').addEventListener('click', function () {
             navigateArcadeTab('main');
         });
@@ -10995,7 +11357,15 @@
         session: ['wrapper-session-options'],
         connections: ['wrapper-flowactions-obs-options', 'wrapper-additional-chat-services-options', 'wrapper-beta-sdk-options'],
         speech: ['wrapper-chat-message-tts-options', 'wrapper-featured-tts-options', 'wrapper-flowactions-tts-options', 'wrapper-chatbot-message-tts-options'],
-        backups: ['wrapper-export-options', 'wrapper-profiles-options', 'wrapper-chat-message-export-options', 'wrapper-global-mechanics-options']
+        backups: ['wrapper-export-options', 'wrapper-profiles-options', 'wrapper-chat-message-export-options', 'wrapper-global-mechanics-options'],
+        // TASK-64 — the AI console's berthed stock groups (the 0018.06.04
+        // audit zone map, verified live; chatbot-message-tts stays in Speech,
+        // chatbot-Censor's two real fields are native re-berths in the
+        // Moderation zone instead of an embed).
+        'ai-cohost': ['wrapper-chatbot-cohost-options', 'wrapper-chatbot-ai-overlay-options'],
+        'ai-bot': ['wrapper-chatbot-public-options', 'wrapper-chatbot-ai-prompt-options', 'wrapper-chatbot-private-options'],
+        'ai-translate': ['wrapper-ai-auto-translate-options'],
+        'ai-models': ['wrapper-bots-options-ext']
     };
 
     var ALERT_TIER_RULES_KEY = 'arcadeAlertTierRules'; // NEW (S51) — per-tier promotion-condition policy
@@ -13138,19 +13508,14 @@
     // Boot
     // --------------------------------------------------------------------
     function init() {
-        // AI area gate pre-check, before buildTopbar() renders the nav: no
-        // signer on this seat -> the berth never enters TABS/CUSTOM_TABS and
-        // its panel DOM never gets built at all. Hidden entirely, not
-        // disabled — see hasNostrSigner()'s comment for exactly why this is
-        // the only cheap pre-check available.
-        // S46 berth order: the locked seat sits between Style and Deck
-        // Settings on the top bar (Add-On Arcade round 3 menu), marked 🔒.
-        if (aiGateOpen() || hasNostrSigner()) {
-            var settingsIdx = -1;
-            TABS.forEach(function (t, i) { if (t.id === 'settings') settingsIdx = i; });
-            TABS.splice(settingsIdx === -1 ? TABS.length : settingsIdx, 0, { id: 'ai', label: 'AI 🔒' });
-            CUSTOM_TABS.ai = true;
-        }
+        // TASK-64 delock: the AI tab is a first-class berth for EVERY seat —
+        // no signer pre-check, no gate, no 🔒. Unconditionally spliced into
+        // TABS (between Style and Deck Settings, its long-standing seat) and
+        // CUSTOM_TABS; its panel DOM is built like every other custom tab.
+        var settingsIdx = -1;
+        TABS.forEach(function (t, i) { if (t.id === 'settings') settingsIdx = i; });
+        TABS.splice(settingsIdx === -1 ? TABS.length : settingsIdx, 0, { id: 'ai', label: 'AI' });
+        CUSTOM_TABS.ai = true;
 
         buildTopbar();
         buildRailAndSide();
@@ -13163,7 +13528,7 @@
         buildFramesPanel();   // S50 — Frames & Cameras; contents lazy (ensureFramesPanelLive on first visit)
         buildTipjarPanel();   // S50 — the Tip Jar interior (payment rails); contents lazy (ensureTipjarPanelLive on first visit)
         buildDeckSettingsPanel(); // S51 — Deck Settings; contents lazy (ensureDeckSettingsLive on first visit)
-        if (CUSTOM_TABS.ai) buildAiPanel();
+        buildAiPanel();           // TASK-64 — the AI console; contents lazy (ensureAiPanelLive on first visit)
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer
 
