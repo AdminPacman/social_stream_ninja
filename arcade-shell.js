@@ -4273,9 +4273,10 @@
     // pop-window whose cards each run the game's OWN demo — the arcade demo-
     // cabinet). RIGHT = BIG isolated preview on TOP, config below.
     //
-    // THE GAMES REGISTRY below is the stock picker's own 18 options
-    // (popup.html:13881-13898), each capability MEASURED from the bundle
-    // source, not assumed:
+    // THE GAMES REGISTRY below is the stock picker's option list
+    // (popup.html games-preset-select — 20 since TASK-63 added dopaminedrop
+    // + phraseguess, the S48 report's data-only seam), each capability
+    // MEASURED from the bundle source, not assumed:
     //   - demo:      the page reads &demo (all but battle.html — battle's
     //                simulateWebSocket() attract runs unconditionally at
     //                boot, battle.html:1841, so its preview demos anyway).
@@ -4289,9 +4290,15 @@
     //                games. dancingparade's body is transparent BY DESIGN
     //                (its :22 background — the popup's chroma toggle for it
     //                writes a param the page never reads, a dead toggle
-    //                upstream). battle/colorwars/emojitower/petrace/
-    //                wordchain read NO transparency param — said honestly,
-    //                no per-game hacks (ruled).
+    //                upstream). battle/colorwars/emojitower/petrace read NO
+    //                transparency param — said honestly.
+    //   - transparent: the page reads &transparent (REAL alpha, not a key
+    //                ground) — TASK-63's ruled work. treasurehunt (house
+    //                patch: backdrop goes clear and every dug cell becomes a
+    //                true alpha hole — the dig digs through the STREAM, the
+    //                dirt field keeps rendering), wordchain (house patch,
+    //                backdrop goes clear), dopaminedrop (ships with the param
+    //                natively — board elements only).
     //   - dark:      the page reads &darkmode — same 11 as chroma.
     //   - avatar:    the page renders the chatter's profile picture off
     //                data.chatimg — battle.html:419 (addPlayer(chatname,
@@ -4335,7 +4342,7 @@
     // arcadeAlert*/arcadeStylePresets keys are untouched):
     //   arcadeGameShelf      JSON array of active game ids (shelf order)
     //   arcadeGameCmdSuffix  JSON map id -> sanitized suffix
-    //   arcadeGameStyle      JSON map id -> {chroma, dark, demo}
+    //   arcadeGameStyle      JSON map id -> {chroma, transparent, dark, demo}
     //   arcadePointsUnlocks  JSON array [{threshold, name}]
     // --------------------------------------------------------------------
     var GAMES = [
@@ -4351,12 +4358,14 @@
         { id: 'memorylane', file: 'games/memorylane.html', emoji: '📷', name: 'Memory Lane', blurb: 'Nostalgic photo stories drawn from chat.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
         { id: 'rhythmpulse', file: 'games/rhythmpulse.html', emoji: '🎵', name: 'Rhythm Pulse', blurb: 'Chat builds musical beats together.', cmds: [], cmdsuffix: false, demo: true, chroma: true, dark: true, avatar: false },
         { id: 'petrace', file: 'games/petrace.html', emoji: '🏁', name: 'Pet Race', blurb: 'Viewers join the race and their pets run for the finish.', cmds: ['!join'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
-        { id: 'wordchain', file: 'games/wordchain.html', emoji: '🔤', name: 'Word Chain', blurb: 'A word-puzzle chain carried by chat.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'wordchain', file: 'games/wordchain.html', emoji: '🔤', name: 'Word Chain', blurb: 'A word-puzzle chain carried by chat.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false, transparent: true },
         { id: 'emojitower', file: 'games/emojitower.html', emoji: '🏗️', name: 'Emoji Tower', blurb: 'Chat drops emojis onto a growing tower — gravity is rude.', cmds: ['!drop'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
         { id: 'colorwars', file: 'games/colorwars.html', emoji: '🎨', name: 'Color Wars', blurb: 'Territory painting — chat claims the canvas color by color.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false },
-        { id: 'treasurehunt', file: 'games/treasurehunt.html', emoji: '🏴‍☠️', name: 'Treasure Hunt', blurb: 'Grid exploration — chat digs for treasure square by square.', cmds: ['!dig'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false },
+        { id: 'treasurehunt', file: 'games/treasurehunt.html', emoji: '🏴‍☠️', name: 'Treasure Hunt', blurb: 'Grid exploration — chat digs for treasure square by square.', cmds: ['!dig'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false, transparent: true },
         { id: 'dancingparade', file: 'games/dancingparade.html', emoji: '💃', name: 'Dancing Parade', blurb: 'A lower-third parade — join and your dancer struts across. Transparent by design.', cmds: ['!join', '!dance', '!leave'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: false, transparentByDesign: true },
-        { id: 'chickenroyale', file: 'games/chickenroyale.html', emoji: '🍗', name: 'Chicken Royale', blurb: '3D battle royale — last chicken standing takes the island.', cmds: ['!join', '!start'], cmdsuffix: true, demo: true, chroma: true, dark: true, avatar: true }
+        { id: 'chickenroyale', file: 'games/chickenroyale.html', emoji: '🍗', name: 'Chicken Royale', blurb: '3D battle royale — last chicken standing takes the island.', cmds: ['!join', '!start'], cmdsuffix: true, demo: true, chroma: true, dark: true, avatar: true },
+        { id: 'dopaminedrop', file: 'games/dopaminedrop.html', emoji: '🕳️', name: 'Dopamine Drop', blurb: 'Pachinko-style ball drop — chatters drop avatar balls down the peg board for multipliers.', cmds: ['!dd', '!drop'], cmdsuffix: true, demo: true, chroma: false, dark: false, avatar: true, transparent: true },
+        { id: 'phraseguess', file: 'games/phraseguess.html', emoji: '💬', name: 'Phrase Guess', blurb: 'Chat races to guess the hidden phrase — every message is a guess.', cmds: [], cmdsuffix: false, demo: true, chroma: false, dark: false, avatar: false }
     ];
 
     var GAME_POINTS_KEY = '__points__'; // the pinned shelf row's selection key
@@ -4368,7 +4377,7 @@
     var gamesPanelLive = false;
     var gamesShelf = [];        // ordered active game ids
     var gameCmdSuffix = {};     // id -> suffix (raw; sanitized at compose time)
-    var gameStyleDoc = {};      // id -> { chroma:bool, dark:bool, demo:bool }
+    var gameStyleDoc = {};      // id -> { chroma:bool, transparent:bool, dark:bool, demo:bool }
     var pointsUnlocks = [];     // [{ threshold:number, name:string }]
     var pointsEarnState = { enabled: null, per: null, windowMin: null };
     var gamesSelectedKey = null;
@@ -4791,20 +4800,27 @@
     }
 
     function buildGameStyleSection(game, section) {
-        // Transparency — the stock chroma toggle re-homed, or the honest
-        // state when the page has no support. NO per-game hacks (ruled).
+        // Transparency — the stock chroma toggle re-homed, the TASK-63 real-
+        // alpha &transparent toggle where the page reads it, or the honest
+        // state when the page has no support.
         if (game.chroma) {
             section.appendChild(buildGameToggleRow(game, 'chroma', 'Green-screen background (&chroma)', 'Key it out in OBS — the game paints a #00ff00 ground.'));
-        } else if (game.transparentByDesign) {
-            var native = document.createElement('div');
-            native.className = 'arcade-evt-cond__hint';
-            native.textContent = 'Transparent by design — a lower-third overlay; nothing to set.';
-            section.appendChild(native);
-        } else {
-            var noTrans = document.createElement('div');
-            noTrans.className = 'arcade-evt-cond__hint';
-            noTrans.textContent = 'Transparency: not supported — this game reads no chroma/transparent param.';
-            section.appendChild(noTrans);
+        }
+        if (game.transparent) {
+            section.appendChild(buildGameToggleRow(game, 'transparent', 'Transparent overlay mode (&transparent)', 'Real alpha — the backdrop goes clear; in Treasure Hunt every dug hole shows the stream through it.'));
+        }
+        if (!game.chroma && !game.transparent) {
+            if (game.transparentByDesign) {
+                var native = document.createElement('div');
+                native.className = 'arcade-evt-cond__hint';
+                native.textContent = 'Transparent by design — a lower-third overlay; nothing to set.';
+                section.appendChild(native);
+            } else {
+                var noTrans = document.createElement('div');
+                noTrans.className = 'arcade-evt-cond__hint';
+                noTrans.textContent = 'Transparency: not supported — this game reads no chroma/transparent param.';
+                section.appendChild(noTrans);
+            }
         }
         if (game.dark) {
             section.appendChild(buildGameToggleRow(game, 'dark', 'Dark mode (&darkmode)', 'The game’s own night palette.'));
@@ -4823,7 +4839,7 @@
         // reads font-size/font-family params or &css — nothing to wire.
         var fontNote = document.createElement('div');
         fontNote.className = 'arcade-evt-cond__hint';
-        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 18; see the S48 report).';
+        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 20; see the S48/S63 reports).';
         section.appendChild(fontNote);
     }
 
@@ -4859,6 +4875,7 @@
         var st = gameStyleFor(game.id);
         if (game.demo && st.demo) params.push('demo');
         if (game.chroma && st.chroma) params.push('chroma');
+        if (game.transparent && st.transparent) params.push('transparent');
         if (game.dark && st.dark) params.push('darkmode');
         var suffix = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
         if (game.cmdsuffix && suffix) params.push('cmdsuffix=' + encodeURIComponent(suffix));
@@ -4947,6 +4964,7 @@
                 // never the preview room (the ruled mirror of the preview).
                 var st = gameStyleFor(game.id);
                 if (game.chroma && st.chroma) params.push('chroma');
+                if (game.transparent && st.transparent) params.push('transparent');
                 if (game.dark && st.dark) params.push('darkmode');
                 var suffix = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
                 if (game.cmdsuffix && suffix) params.push('cmdsuffix=' + encodeURIComponent(suffix));

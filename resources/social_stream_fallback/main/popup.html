@@ -13896,6 +13896,8 @@ input:checked + .slider:before {
 						<option value="games/treasurehunt.html">🏴‍☠️ Treasure Hunt - Grid exploration</option>
 						<option value="games/dancingparade.html">💃 Dancing Parade - Lower third animation</option>
 						<option value="games/chickenroyale.html">🍗 Chicken Royale - 3D battle royale, last chicken standing</option>
+						<option value="games/dopaminedrop.html">🕳️ Dopamine Drop - Pachinko ball drop with avatars</option>
+						<option value="games/phraseguess.html">💬 Phrase Guess - Guess the hidden phrase</option>
 					</select>
 					<span style="margin-left: 10px; font-size: 12px; opacity: 0.7;display: block;">
 						<i data-translate="games-note">Note: Each game has unique commands and mechanics</i>
@@ -14171,6 +14173,43 @@ input:checked + .slider:before {
 										</label>
 										<span data-translate="dark-mode-chickenroyale">
 											⚫ Dark mode (night island)
+										</span>
+									</div>
+								</div>
+
+								<!-- Dopamine Drop Options -->
+								<div class="game-config-section" id="dopaminedrop-config" style="display: none;">
+									<h3>🕳️ <span data-translate="dopamine-drop-options">Dopamine Drop Options</span></h3>
+									<div>
+										<label class="switch">
+											<input type="checkbox" data-param20="demo" />
+											<span class="slider round"></span>
+										</label>
+										<span data-translate="demo-mode-dopaminedrop">
+											🤖 Enable demo mode (auto-droppers)
+										</span>
+									</div>
+									<div>
+										<label class="switch">
+											<input type="checkbox" data-param20="transparent" />
+											<span class="slider round"></span>
+										</label>
+										<span data-translate="transparent-background-dopaminedrop">
+											🫥 Transparent background (board elements only, for overlays)
+										</span>
+									</div>
+								</div>
+
+								<!-- Phrase Guess Options -->
+								<div class="game-config-section" id="phraseguess-config" style="display: none;">
+									<h3>💬 <span data-translate="phrase-guess-options">Phrase Guess Options</span></h3>
+									<div>
+										<label class="switch">
+											<input type="checkbox" data-param20="demo" />
+											<span class="slider round"></span>
+										</label>
+										<span data-translate="demo-mode-phraseguess">
+											🤖 Enable demo mode (auto-guessers)
 										</span>
 									</div>
 								</div>
