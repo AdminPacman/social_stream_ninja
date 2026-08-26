@@ -159,13 +159,15 @@
             // money-gold palette lock; everything else left at its own sensible
             // stock default rather than guessed.
             params: ['theme=gold'],
+            setup: true, // S50 — Set up opens the Tip Jar interior (payment rails), per the MONEY placement law
             blurb: 'Full-featured stock tip jar — themes, sound, confetti, leaderboard. Display-only, no wallet.'
         },
         {
             id: 'tipjar-mini', name: 'Tip Jar Mini', category: 'tips', status: 'ready', addonType: 'money',
             overlayPage: 'tipjar-mini.html',
             params: ['goal=100', 'label=Tip Jar', 'layout=full'],
-            blurb: 'Lean house variant — running total + goal bar, honest empty states, no wallet.'
+            setup: true, // S50 — the rails (lightning / zaps) render on THIS jar; Set up opens the interior
+            blurb: 'Lean house variant — running total + goal bar, honest empty states, lightning/zap receive rails. No wallet.'
         },
         {
             id: 'hype', name: 'Hype Train', category: 'hype', status: 'ready', addonType: 'widgets',
@@ -210,7 +212,7 @@
             blurb: 'Chat commands and timers — !command replies, repeating shoutouts, all backed by real event flows.'
         },
         {
-            id: 'frames', name: 'Frames & Cameras', addonType: 'frames', tab: 'vdo',
+            id: 'frames', name: 'Frames & Cameras', addonType: 'frames', tab: 'frames',
             cta: 'Open Frames & Cameras',
             blurb: 'Remote cameras and guests — VDO room links bring phones and remote guests onto the stream.'
         },
@@ -239,7 +241,7 @@
     // Door tabs keep no nav berth of their own — while one is open, the
     // Add-ons nav button carries the is-on mark (the door lives INSIDE the
     // add-ons world). Also whitelists door tabs for boot-restore.
-    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons', commands: 'addons', goals: 'addons' };
+    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons', commands: 'addons', goals: 'addons', frames: 'addons', tipjar: 'addons' };
 
     // --------------------------------------------------------------------
     // Analytics IPC bridge state (pacsarcade design-briefs/ssn-ui-overhaul/
@@ -1201,7 +1203,8 @@
     // same as any other unrecognized tab id.
     // S48: 'games' joins the custom set — the hub is its own in-shell panel.
     // S49: 'commands' (chat commands + timers) and 'goals' (goal bars) too.
-    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true };
+    // S50: 'frames' (Frames & Cameras) and 'tipjar' (the Tip Jar interior).
+    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true, frames: true, tipjar: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -1239,6 +1242,8 @@
             if (tabId === 'games') ensureGamesPanelLive(); // lazy (S48): load shelf/style/unlocks settings + first preview on first visit
             if (tabId === 'commands') ensureCommandsPanelLive(); // lazy (S49): load surface flows on first visit
             if (tabId === 'goals') ensureGoalsPanelLive(); // lazy (S49): load goals + first demo preview on first visit
+            if (tabId === 'frames') ensureFramesPanelLive(); // lazy (S50): load guests/frame style, then the device frame (sendSync-before-churn order)
+            if (tabId === 'tipjar') ensureTipjarPanelLive(); // lazy (S50): load payment rails + first demo preview on first visit
             if (tabId === 'ai') runAiAreaGate(); // NOT lazy-once — a fresh challenge every open, no stored grants (design doc, 0018.06.01)
             return;
         }
@@ -1262,7 +1267,8 @@
     // --------------------------------------------------------------------
     var CUSTOM_TAB_PANEL = {
         addons: '.arcade-addons', style: '.arcade-style', alerts: '.arcade-alerts',
-        games: '.arcade-games', commands: '.arcade-commands', goals: '.arcade-goals', ai: '.arcade-ai'
+        games: '.arcade-games', commands: '.arcade-commands', goals: '.arcade-goals', ai: '.arcade-ai',
+        frames: '.arcade-frames', tipjar: '.arcade-tipjar'
     };
 
     function focusFirstInteractiveIn(root, fallbackEl) {
@@ -1282,7 +1288,37 @@
         return false;
     }
 
+    // H18-A listbox contract, one shared helper (TASK-47/S50 — written for
+    // the S47 alerts-list backfill the dispatch rider ruled, used by the new
+    // S50 lists too; S49's three inline implementations are the reference
+    // and stay as they are). A role="listbox" is a promise: ArrowUp/
+    // ArrowDown/Home/End move the selection (aria-selected follows the row
+    // render) and focus re-lands on the fresh row element for the same id.
+    // Rows are real buttons, so Tab already reaches them — arrows are the
+    // listbox contract on top.
+    function attachArcadeListboxNav(list, rowSelector, getSelectedId, selectFn, idFromRow) {
+        if (!list) return;
+        list.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) === -1) return;
+            var rows = Array.prototype.slice.call(list.querySelectorAll(rowSelector));
+            if (!rows.length) return;
+            e.preventDefault();
+            var idx = rows.findIndex(function (r) { return idFromRow(r) === getSelectedId(); });
+            if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = rows.length - 1;
+            else idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+            var id = idFromRow(rows[idx]);
+            selectFn(id);
+            var fresh = null;
+            Array.prototype.slice.call(list.querySelectorAll(rowSelector)).forEach(function (r) {
+                if (idFromRow(r) === id) fresh = r;
+            });
+            if (fresh) fresh.focus();
+        });
+    }
+
     function focusArcadeDestination(tabId, pageId) {
+
         // One frame out, so the tab flip's CSS visibility applies before we
         // measure what's focusable.
         requestAnimationFrame(function () {
@@ -1660,6 +1696,16 @@
             copyBtn.textContent = 'Copy overlay URL';
             copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
             actions.appendChild(copyBtn);
+            // S50 — MONEY placement law: the Tip Jar's Set up opens from the
+            // Money card, NEVER inside Frames & Cameras or any other surface.
+            if (el.setup) {
+                var setupBtn = document.createElement('button');
+                setupBtn.type = 'button';
+                setupBtn.className = 'arcade-btn';
+                setupBtn.textContent = 'Set up';
+                setupBtn.addEventListener('click', function () { navigateArcadeTab('tipjar'); });
+                actions.appendChild(setupBtn);
+            }
             card.appendChild(actions);
         }
 
@@ -1671,12 +1717,12 @@
     // (non-module) script, so its top-level helpers are window globals — but
     // we feature-detect defensively so a future build change degrades to an
     // honest error rather than throwing. Returns a Promise<string url>.
-    function buildElementOverlayUrl(el) {
+    function buildElementOverlayUrl(el, extraUrlParams) {
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') {
             return Promise.reject(new Error('overlay resolver unavailable'));
         }
-        var extra = (el.params || []).slice();
+        var extra = (el.params || []).slice().concat(extraUrlParams || []);
         var langParams = (typeof window.getLanguageExtraParams === 'function') ? window.getLanguageExtraParams() : [];
 
         function withSession(sessionId) {
@@ -1732,7 +1778,13 @@
     // only ever placed on the clipboard by explicit click, never displayed in
     // the shell (masking law is about on-screen display, honored here).
     function copyElementOverlayUrl(el, btn) {
-        buildElementOverlayUrl(el).then(function (url) {
+        // S50 — the mini jar's copy composes the payment rails too, so a jar
+        // the operator configured in Set up doesn't silently lose its rails
+        // when copied from the gallery card. Other elements: unchanged.
+        var urlPromise = (el.id === 'tipjar-mini')
+            ? loadTipRailsSettings().then(function () { return buildElementOverlayUrl(el, tipRailsUrlParams()); })
+            : buildElementOverlayUrl(el);
+        urlPromise.then(function (url) {
             if (!url) throw new Error('empty overlay url');
             return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
         }).catch(function (e) {
@@ -2626,7 +2678,8 @@
             '<div class="arcade-alerts-body">' +
             '<div class="arcade-evt-list-col">' +
             '<div class="arcade-evt-list" id="arcade-alerts-list" role="listbox" aria-label="Alert events"></div>' +
-            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-add">+ Add event</button>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-alerts-add" ' +
+            'aria-haspopup="dialog" aria-expanded="false" aria-controls="arcade-evt-add-modal">+ Add event</button>' +
             '</div>' +
             '<div class="arcade-alerts-stage">' +
             '<div class="arcade-alerts-preview">' +
@@ -2646,6 +2699,13 @@
         ALERT_EVENTS.forEach(function (evt) {
             alertsState[evt.id] = defaultAlertCategoryState(evt.id);
         });
+
+        // H18-A backfill (TASK-47/S50 dispatch rider 2) — the S47 list's
+        // role="listbox" gains the real arrow-key nav the role promises, via
+        // the shared helper (S49's inline implementations are the reference).
+        attachArcadeListboxNav(panel.querySelector('#arcade-alerts-list'), '[data-arcade-alert-key]',
+            function () { return alertsSelectedKey; }, selectAlertsKey,
+            function (row) { return row.dataset.arcadeAlertKey; });
 
         panel.querySelector('#arcade-alerts-copy').addEventListener('click', function (e) {
             copyAlertsOverlayUrl(e.currentTarget);
@@ -4151,15 +4211,33 @@
     // yet (ALERT_ADD_EVENT_DEFAULTS) + Build your own… Each pick seeds an
     // alert-shaped skeleton flow and lands a card on the shelf; Build your
     // own… then opens the flow builder on that seed.
+    //
+    // H18-A backfill (TASK-47/S50 dispatch rider 2): the full house
+    // disclosure contract, mirrored from S49's command picker — focus in on
+    // open, Escape closes, focus returns to the trigger on close-without-
+    // pick, aria-haspopup/aria-expanded/aria-controls on the trigger,
+    // click-outside closes; a pick lands focus on the new shelf row.
     // --------------------------------------------------------------------
-    function closeAddEventPicker() {
+    var alertAddPickerKeydown = null;
+
+    function closeAddEventPicker(returnFocus) {
         var existing = document.getElementById('arcade-evt-add-modal');
         if (existing) existing.remove();
+        if (alertAddPickerKeydown) {
+            document.removeEventListener('keydown', alertAddPickerKeydown);
+            alertAddPickerKeydown = null;
+        }
+        var trigger = document.getElementById('arcade-alerts-add');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            if (returnFocus) trigger.focus();
+        }
     }
 
     function openAddEventPicker() {
         if (!alertsDoc) return;
-        closeAddEventPicker();
+        closeAddEventPicker(false);
+        var trigger = document.getElementById('arcade-alerts-add');
         var back = document.createElement('div');
         back.className = 'arcade-evt-modal-back';
         back.id = 'arcade-evt-add-modal';
@@ -4170,6 +4248,7 @@
 
         var title = document.createElement('h3');
         title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
         title.textContent = 'Add event';
         modal.appendChild(title);
 
@@ -4191,12 +4270,22 @@
         cancel.type = 'button';
         cancel.className = 'arcade-btn arcade-btn--sm';
         cancel.textContent = 'Cancel';
-        cancel.addEventListener('click', closeAddEventPicker);
+        cancel.addEventListener('click', function () { closeAddEventPicker(true); });
         modal.appendChild(cancel);
 
         back.appendChild(modal);
-        back.addEventListener('click', function (e) { if (e.target === back) closeAddEventPicker(); });
+        back.addEventListener('click', function (e) { if (e.target === back) closeAddEventPicker(true); });
         document.body.appendChild(back);
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        alertAddPickerKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-evt-add-modal')) {
+                e.stopPropagation();
+                closeAddEventPicker(true);
+            }
+        };
+        document.addEventListener('keydown', alertAddPickerKeydown);
+        var firstPick = modal.querySelector('.arcade-evt-modal__pick');
+        (firstPick || title).focus();
     }
 
     function buildAddEventPick(name, desc, onPick, isBuild) {
@@ -4216,7 +4305,7 @@
     }
 
     function addCustomAlertEvent(spec, openEditor) {
-        closeAddEventPicker();
+        closeAddEventPicker(false); // a pick — focus lands on the new row, not the trigger (H18-A backfill)
         var customEvt = {
             id: mintAlertId('evt'),
             name: spec.name,
@@ -4234,6 +4323,24 @@
             renderAlertsList();
             renderAlertsConfig();
             setAlertsStatus('"' + customEvt.name + '" landed on the shelf');
+            var rowEl = document.querySelector('#arcade-alerts-list [data-arcade-alert-key="' + customEvt.id + '"]');
+            if (rowEl) {
+                // The multi-alerts preview is an out-of-process iframe holding
+                // browser-level focus — reclaim it for the main frame first or
+                // the row focus silently no-ops; and the selection just set the
+                // preview reloading, so re-claim again after that load lands
+                // (both halves measured in the S50 harness).
+                window.focus();
+                rowEl.focus();
+                var previewFrame = document.getElementById('arcade-alerts-preview-frame');
+                if (previewFrame) {
+                    previewFrame.addEventListener('load', function refocusRow() {
+                        previewFrame.removeEventListener('load', refocusRow);
+                        window.focus();
+                        rowEl.focus();
+                    });
+                }
+            }
             if (openEditor) openAlertFlowInEditor(flowId);
         }).catch(function (e) {
             console.error('[arcade-shell] add event flow seed failed:', e);
@@ -6177,7 +6284,7 @@
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'arcade-btn arcade-btn--sm arcade-goal-set__btn';
-            btn.textContent = '＋ ' + set.name;
+            btn.textContent = '+ ' + set.name; // S50 tofu fix — U+FF0B fullwidth plus rendered as □; ASCII matches the sibling add buttons
             btn.title = set.note + ' — source: ' + set.source + ' (accessed ' + set.accessed + ')';
             btn.addEventListener('click', function () { importGoalRuleset(set); });
             setsHost.appendChild(btn);
@@ -6650,6 +6757,851 @@
             console.error('[arcade-shell] copy goal overlay url failed:', e);
             flashButton(btn, 'Copy failed', 2200);
         });
+    }
+
+    // --------------------------------------------------------------------
+    // S50 — FRAMES & CAMERAS + THE TIP JAR RAILS (TASK-47, ruled 0018.06.03
+    // a₿; dispatch rider 2, base ebd3bd6). Design of record: the brief.
+    //
+    // LANE 1 — FRAMES & CAMERAS (this section). The gallery door now opens
+    // this custom tab instead of the bare stock vdo page (the vdo tab
+    // itself stays reachable via the More▾ hatch — and its vdo.html:356
+    // base URL is repointed to the house instance this same task, one line,
+    // mirror-mastered, exactly the scope the S41 gate's lane-4 report set).
+    //
+    //   ADD A DEVICE — the stock vdo.html page embedded as-is: it mints the
+    //   stream ID in the BROWSER's localStorage and renders the house-VDO
+    //   camera link + QR (post-repoint). Zero SSN storage — H11 by
+    //   construction.
+    //
+    //   GUESTS — VDO's own room mechanics through links (SSN orchestrates
+    //   URLs, it never proxies media). The room is DERIVED from the app's
+    //   own session id (never stored by us — recomputed on every visit);
+    //   each guest's push id is DERIVED from their name (a pure function).
+    //   So settings hold NAMES ONLY — the HONESTY FENCE H11 (S41 lane 4,
+    //   verbatim law): "the publish token lives in the guest's browser and
+    //   URL; SSN stores destination NAMES only, never keys." The invite
+    //   link (the publish credential) exists only ephemerally, for copying.
+    //   Link shapes (vdo-ninja skill §3/§4, verified against docs.vdo.ninja):
+    //     invite:  ?room=<room>&push=<slug>&webcam&label=<name>
+    //     solo:    ?room=<room>&view=<slug>&solo&cleanoutput   (OBS embed)
+    //
+    //   FRAMES — border/style presets around any source. The mechanism is
+    //   honestly CSS: the house workflow is Copy overlay URL → OBS browser
+    //   source, and OBS's own Custom CSS box carries the frame (skill:
+    //   "OBS browser-source CSS box works too"). No transport invented, no
+    //   media touched. Gold #D9B24E is deliberately absent from the presets
+    //   (money-only lock); live-green is absent too (LIVE lock).
+    //
+    // LANE 2 — THE TIP JAR RAILS (further below, its own section). PLACEMENT
+    // LAW (ruled round 6): money configs live under the MONEY category of
+    // Add-ons — Set up opens from the Money card, NEVER inside Frames &
+    // Cameras. WALLET LAW (absolute): receive-side public strings ONLY.
+    //
+    // Settings keys minted (textparam1, canonical saveSetting via the S48
+    // async saveGameSetting idiom — both panels host iframes, so writes can
+    // land during frame churn; every getSettings read is sequenced BEFORE
+    // the first iframe src is set, the same sendSync discipline):
+    //   arcadeFrameGuests  JSON array of guest NAMES (nothing else — H11)
+    //   arcadeFrameStyle   JSON {preset, color, width, radius} — style data
+    //   arcadeTipRails     JSON {lightning, npub, lud16} — PUBLIC receive
+    //                      strings / identifiers only (wallet law)
+    // Reserved keys (arcadeAlertTiers/arcadeAlertVariants/arcadeStylePresets/
+    // arcadeGameShelf/arcadeGameCmdSuffix/arcadeGameStyle/arcadePointsUnlocks/
+    // arcadeGoals) untouched.
+    // --------------------------------------------------------------------
+    var HOUSE_VDO_BASE = 'https://vdo.pacsarcade.com/'; // S41 gate-scoped repoint (vdo.html:356 rides the same host)
+    var FRAMES_GUESTS_KEY = 'arcadeFrameGuests';
+    var FRAME_STYLE_KEY = 'arcadeFrameStyle';
+    var TIP_RAILS_KEY = 'arcadeTipRails';
+    var FRAMES_DEVICE_KEY = '__device__';
+    var FRAMES_STYLE_ZONE_KEY = '__frames__';
+    var FRAMES_INVITE_KEY = '__invite__';
+    var TIPJAR_RAILS_KEY = '__rails__';
+
+    var FRAME_PRESETS = [
+        { id: 'edge', name: 'Clean edge', color: '#33d6ff', width: 4, radius: 10 },
+        { id: 'rounded', name: 'Soft rounded', color: '#e8eaf0', width: 2, radius: 24 },
+        { id: 'shadow', name: 'Drop shadow', color: '#33d6ff', width: 0, radius: 12 },
+        { id: 'pixel', name: 'Pixel', color: '#ff5ca8', width: 4, radius: 0 }
+    ];
+    var FRAME_PRESET_DEFAULT = 'edge';
+
+    var frameGuests = [];            // names only, persisted
+    var frameStyleDoc = { preset: FRAME_PRESET_DEFAULT, color: '#33d6ff', width: 4, radius: 10 };
+    var tipRails = { lightning: '', npub: '', lud16: '' };
+    var framesRoom = '';             // derived from the session id every visit — never persisted
+    var framesSelectedKey = FRAMES_DEVICE_KEY;
+    var framesScopedGuest = '';      // guest slug the Frames zone is scoped to ('' = any source)
+    var tipjarSelectedKey = TIPJAR_RAILS_KEY;
+    var framesPanelLive = false;
+    var tipjarPanelLive = false;
+
+    function setFramesStatus(text, isError) {
+        var el = document.getElementById('arcade-frames-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    function setTipjarStatus(text, isError) {
+        var el = document.getElementById('arcade-tipjar-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    function guestSlug(name) {
+        return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
+    }
+
+    function guestInviteUrl(name) {
+        if (!framesRoom) return '';
+        return HOUSE_VDO_BASE + '?room=' + encodeURIComponent(framesRoom) +
+            '&push=' + encodeURIComponent(guestSlug(name)) + '&webcam&label=' + encodeURIComponent(name);
+    }
+
+    function guestSoloUrl(name) {
+        if (!framesRoom) return '';
+        return HOUSE_VDO_BASE + '?room=' + encodeURIComponent(framesRoom) +
+            '&view=' + encodeURIComponent(guestSlug(name)) + '&solo&cleanoutput';
+    }
+
+    // The guest room rides the app's OWN session id — recomputed on every
+    // visit, never written to settings. Rotate the session and the room (and
+    // every outstanding invite) moves with it; the surface says so.
+    function resolveFramesRoom() {
+        return new Promise(function (resolve) {
+            function done(id) {
+                var clean = String(id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                framesRoom = clean ? ('ssn-' + clean.slice(0, 32)) : '';
+                resolve();
+            }
+            try {
+                if (typeof window.getChatDockSessionId === 'function') {
+                    Promise.resolve(window.getChatDockSessionId()).then(done, function () { done(null); });
+                    return;
+                }
+            } catch (e) { /* fall through */ }
+            done(null);
+        });
+    }
+
+    function loadFramesSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var guestsEntry = settings[FRAMES_GUESTS_KEY];
+                            var guestsDoc = null;
+                            try { guestsDoc = JSON.parse((guestsEntry && typeof guestsEntry.textparam1 === 'string') ? guestsEntry.textparam1 : ''); } catch (e) { guestsDoc = null; }
+                            frameGuests = (Array.isArray(guestsDoc) ? guestsDoc : []).filter(function (n) {
+                                return typeof n === 'string' && guestSlug(n);
+                            }).map(function (n) { return n.slice(0, 40); });
+                            var styleEntry = settings[FRAME_STYLE_KEY];
+                            var styleDoc = null;
+                            try { styleDoc = JSON.parse((styleEntry && typeof styleEntry.textparam1 === 'string') ? styleEntry.textparam1 : ''); } catch (e) { styleDoc = null; }
+                            if (styleDoc && typeof styleDoc === 'object') {
+                                frameStyleDoc = {
+                                    preset: FRAME_PRESETS.some(function (p) { return p.id === styleDoc.preset; }) ? styleDoc.preset : FRAME_PRESET_DEFAULT,
+                                    color: typeof styleDoc.color === 'string' && styleDoc.color ? styleDoc.color.slice(0, 40) : '#33d6ff',
+                                    width: Math.max(0, Math.min(16, Math.round(Number(styleDoc.width) || 0))),
+                                    radius: Math.max(0, Math.min(32, Math.round(Number(styleDoc.radius) || 0)))
+                                };
+                            }
+                        } catch (e) { console.error('[arcade-shell] frames settings parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] frames settings load failed:', e); }
+            setFramesStatus('settings bridge unavailable — edits will not persist', true);
+            resolve();
+        });
+    }
+
+    function loadTipRailsSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var entry = settings[TIP_RAILS_KEY];
+                            var doc = null;
+                            try { doc = JSON.parse((entry && typeof entry.textparam1 === 'string') ? entry.textparam1 : ''); } catch (e) { doc = null; }
+                            if (doc && typeof doc === 'object') {
+                                tipRails = {
+                                    lightning: typeof doc.lightning === 'string' ? doc.lightning.slice(0, 200) : '',
+                                    npub: typeof doc.npub === 'string' ? doc.npub.slice(0, 120) : '',
+                                    lud16: typeof doc.lud16 === 'string' ? doc.lud16.slice(0, 120) : ''
+                                };
+                            }
+                        } catch (e) { console.error('[arcade-shell] tip rails parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] tip rails load failed:', e); }
+            setTipjarStatus('settings bridge unavailable — edits will not persist', true);
+            resolve();
+        });
+    }
+
+    function saveFrameGuests() { saveGameSetting(FRAMES_GUESTS_KEY, JSON.stringify(frameGuests)); }
+    function saveFrameStyle() { saveGameSetting(FRAME_STYLE_KEY, JSON.stringify(frameStyleDoc)); }
+    function saveTipRails() { saveGameSetting(TIP_RAILS_KEY, JSON.stringify(tipRails)); }
+
+    // Wallet law tripwire (absolute): receive-side public strings ONLY. If a
+    // pasted value smells like a SECRET (a nostr private key, a wallet-connect
+    // string), the whole save is refused with the honest line — nothing that
+    // can sign is ever persisted.
+    function tipRailsSecretSmell(value) {
+        return /nsec1/i.test(value) || /nostr\+walletconnect/i.test(value);
+    }
+
+    function tipRailsUrlParams() {
+        var params = [];
+        if (tipRails.lightning) params.push('lightning=' + encodeURIComponent(tipRails.lightning));
+        if (tipRails.lud16) params.push('zaplud16=' + encodeURIComponent(tipRails.lud16));
+        if (tipRails.npub) params.push('zapnpub=' + encodeURIComponent(tipRails.npub));
+        return params;
+    }
+
+    // ---- Lane 1 panel ------------------------------------------------------
+    function buildFramesPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-frames';
+        panel.setAttribute('aria-label', 'Frames and cameras');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">FRAMES &amp; CAMERAS</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-frames-status"></span>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-frames-list" role="listbox" aria-label="Cameras and guests"></div>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-guest-add">+ Invite a guest</button>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-evt-config" id="arcade-frames-config"></div>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(panel);
+
+        panel.querySelector('#arcade-guest-add').addEventListener('click', function () {
+            selectFramesKey(FRAMES_INVITE_KEY);
+            var nameInput = document.getElementById('arcade-guest-name');
+            if (nameInput) nameInput.focus(); // H17-B — focus lands IN the destination form
+        });
+        attachArcadeListboxNav(panel.querySelector('#arcade-frames-list'), '[data-arcade-frames-key]',
+            function () { return framesSelectedKey; }, selectFramesKey,
+            function (row) { return row.dataset.arcadeFramesKey; });
+    }
+
+    function ensureFramesPanelLive() {
+        // Re-entry IS a surface render (S47B doctrine): re-read every visit.
+        // Order matters (S48 sendSync trap): the sync-IPC settings reads AND
+        // the room resolution all land BEFORE any iframe src is set — the
+        // device frame only appears inside renderFramesConfig().
+        loadFramesSettings().then(function () {
+            return resolveFramesRoom();
+        }).then(function () {
+            framesPanelLive = true;
+            renderFramesList();
+            renderFramesConfig();
+        });
+    }
+
+    function buildFramesListRow(opts) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'arcade-evt-item';
+        row.dataset.arcadeFramesKey = opts.key;
+        row.setAttribute('role', 'option');
+        var selected = framesSelectedKey === opts.key;
+        row.classList.toggle('is-on', selected);
+        row.setAttribute('aria-selected', String(selected));
+        var label = document.createElement('span');
+        label.className = 'arcade-evt-item__label';
+        label.textContent = (opts.icon ? opts.icon + ' ' : '') + opts.label;
+        row.appendChild(label);
+        if (opts.stateText) {
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state arcade-evt-state--off';
+            state.textContent = opts.stateText;
+            row.appendChild(state);
+        }
+        row.addEventListener('click', function () { selectFramesKey(opts.key); });
+        return row;
+    }
+
+    function renderFramesList() {
+        var list = document.getElementById('arcade-frames-list');
+        if (!list) return;
+        list.innerHTML = '';
+        list.appendChild(buildFramesListRow({ key: FRAMES_DEVICE_KEY, icon: '📷', label: 'Add a device' }));
+        var guestsHeader = document.createElement('div');
+        guestsHeader.className = 'arcade-evt-group__title';
+        guestsHeader.textContent = 'Guests';
+        list.appendChild(guestsHeader);
+        frameGuests.forEach(function (name) {
+            list.appendChild(buildFramesListRow({ key: guestSlug(name), icon: '🎥', label: name, stateText: 'invited' }));
+        });
+        if (!frameGuests.length) {
+            var none = document.createElement('div');
+            none.className = 'arcade-frames-empty';
+            none.textContent = 'No guests yet — an invite link mints from a name.';
+            list.appendChild(none);
+        }
+        list.appendChild(buildFramesListRow({ key: FRAMES_STYLE_ZONE_KEY, icon: '🖼', label: 'Frames' }));
+    }
+
+    function selectFramesKey(key) {
+        framesSelectedKey = key;
+        renderFramesList();
+        renderFramesConfig();
+    }
+
+    function renderFramesConfig() {
+        var host = document.getElementById('arcade-frames-config');
+        if (!host) return;
+        host.innerHTML = '';
+        if (framesSelectedKey === FRAMES_DEVICE_KEY) { renderFramesDeviceConfig(host); return; }
+        if (framesSelectedKey === FRAMES_INVITE_KEY) { renderFramesInviteConfig(host); return; }
+        if (framesSelectedKey === FRAMES_STYLE_ZONE_KEY) { renderFramesStyleConfig(host); return; }
+        var guestName = null;
+        frameGuests.forEach(function (n) { if (guestSlug(n) === framesSelectedKey) guestName = n; });
+        if (guestName) { renderFramesGuestConfig(host, guestName); return; }
+        // Stale selection (guest removed elsewhere) — fall back honestly.
+        framesSelectedKey = FRAMES_DEVICE_KEY;
+        renderFramesList();
+        renderFramesDeviceConfig(host);
+    }
+
+    function renderFramesDeviceConfig(host) {
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Add a device — phone, tablet, remote cam';
+        host.appendChild(title);
+        var hint = document.createElement('p');
+        hint.className = 'arcade-style-hint';
+        hint.textContent = 'Open the camera link on the device (or scan the QR) and it starts broadcasting; the OBS link is the receive side for your browser source. Links are house-VDO (vdo.pacsarcade.com).';
+        host.appendChild(hint);
+        var frameWrap = document.createElement('div');
+        frameWrap.className = 'arcade-frames-device';
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-frames-device-frame';
+        frame.title = 'Add a device — house VDO camera link and QR';
+        frameWrap.appendChild(frame);
+        host.appendChild(frameWrap);
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver === 'function') {
+            resolver('vdo.html', { extraParams: [] }).then(function (resolved) {
+                if (resolved && resolved.url) frame.src = resolved.url;
+            }).catch(function (e) { console.error('[arcade-shell] device page resolve failed:', e); });
+        }
+        // HONESTY FENCE H11 (S41 lane 4, verbatim law) — carried on the UI.
+        var note = document.createElement('p');
+        note.className = 'arcade-frames-honest';
+        note.textContent = 'Honesty note: the device’s publish token lives in your browser and in the VDO link itself — SSN stores nothing about it, never keys.';
+        host.appendChild(note);
+    }
+
+    function renderFramesInviteConfig(host) {
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Invite a guest';
+        host.appendChild(title);
+        var hint = document.createElement('p');
+        hint.className = 'arcade-style-hint';
+        hint.textContent = 'The name mints the link: their invite and their solo view URL both derive from it, so only the name is ever stored.';
+        host.appendChild(hint);
+        var row = document.createElement('div');
+        row.className = 'arcade-frames-linkrow';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'arcade-guest-name';
+        input.autocomplete = 'off';
+        input.placeholder = 'Guest name (e.g. Jess)';
+        input.setAttribute('aria-label', 'Guest name');
+        row.appendChild(input);
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        createBtn.textContent = 'Create invite';
+        createBtn.addEventListener('click', function () { inviteGuest(input.value); });
+        row.appendChild(createBtn);
+        host.appendChild(row);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); inviteGuest(input.value); }
+        });
+    }
+
+    function inviteGuest(rawName) {
+        var name = String(rawName || '').trim().slice(0, 40);
+        var slug = guestSlug(name);
+        if (!slug) {
+            setFramesStatus('the name needs at least one letter or digit — it mints the link', true);
+            return;
+        }
+        var dupe = frameGuests.some(function (n) { return guestSlug(n) === slug; });
+        if (dupe) {
+            setFramesStatus('a guest with that link-name is already listed — names mint their links', true);
+            return;
+        }
+        frameGuests.push(name);
+        saveFrameGuests();
+        framesSelectedKey = slug;
+        renderFramesList();
+        renderFramesConfig();
+        setFramesStatus('invite minted for "' + name + '"');
+        var rowEl = document.querySelector('#arcade-frames-list [data-arcade-frames-key="' + slug + '"]');
+        if (rowEl) rowEl.focus(); // a pick — focus lands on the new row, not the trigger
+    }
+
+    function renderFramesGuestConfig(host, name) {
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = '🎥 ' + name;
+        host.appendChild(title);
+        if (!framesRoom) {
+            var noSession = document.createElement('p');
+            noSession.className = 'arcade-frames-honest';
+            noSession.textContent = 'Guest rooms derive from your SSN session — connect one and the links mint here.';
+            host.appendChild(noSession);
+        } else {
+            host.appendChild(buildFramesLinkRow('Invite link (send to the guest)', guestInviteUrl(name), 'Copy invite link'));
+            host.appendChild(buildFramesLinkRow('Solo view (their camera, for OBS)', guestSoloUrl(name), 'Add to stream'));
+        }
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var frameBtn = document.createElement('button');
+        frameBtn.type = 'button';
+        frameBtn.className = 'arcade-btn arcade-btn--sm';
+        frameBtn.textContent = 'Frame this camera';
+        frameBtn.addEventListener('click', function () {
+            framesScopedGuest = guestSlug(name);
+            selectFramesKey(FRAMES_STYLE_ZONE_KEY);
+        });
+        actions.appendChild(frameBtn);
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'arcade-btn arcade-btn--sm';
+        removeBtn.textContent = 'Remove guest';
+        removeBtn.addEventListener('click', function () {
+            if (removeBtn.dataset.confirm !== '1') { // two-click confirm, S47 idiom
+                removeBtn.dataset.confirm = '1';
+                removeBtn.textContent = 'Click again to remove';
+                return;
+            }
+            frameGuests = frameGuests.filter(function (n) { return guestSlug(n) !== guestSlug(name); });
+            saveFrameGuests();
+            if (framesScopedGuest === guestSlug(name)) framesScopedGuest = '';
+            framesSelectedKey = FRAMES_DEVICE_KEY;
+            renderFramesList();
+            renderFramesConfig();
+            setFramesStatus('"' + name + '" removed — their invite link stops being listed here');
+        });
+        actions.appendChild(removeBtn);
+        host.appendChild(actions);
+        // HONESTY FENCE H11 (S41 lane 4, verbatim law) — carried on the UI.
+        var note = document.createElement('p');
+        note.className = 'arcade-frames-honest';
+        note.textContent = 'Honesty note: the publish token lives in your guest’s browser and in their invite link — SSN stores their name only, never keys. Guests join through VDO’s own room; SSN orchestrates the links, it never touches the media.';
+        host.appendChild(note);
+    }
+
+    function buildFramesLinkRow(labelText, url, ctaText) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-frames-linkblock';
+        var label = document.createElement('div');
+        label.className = 'arcade-evt-cond__label';
+        label.textContent = labelText;
+        wrap.appendChild(label);
+        var row = document.createElement('div');
+        row.className = 'arcade-frames-linkrow';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.readOnly = true;
+        input.value = url;
+        input.setAttribute('aria-label', labelText);
+        row.appendChild(input);
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = ctaText;
+        copyBtn.addEventListener('click', function () {
+            copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); }, function () { flashButton(copyBtn, 'Copy failed', 2200); });
+        });
+        row.appendChild(copyBtn);
+        wrap.appendChild(row);
+        return wrap;
+    }
+
+    function renderFramesStyleConfig(host) {
+        var scopedName = null;
+        frameGuests.forEach(function (n) { if (guestSlug(n) === framesScopedGuest) scopedName = n; });
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Frames — border & style presets';
+        host.appendChild(title);
+        var scope = document.createElement('p');
+        scope.className = 'arcade-style-hint';
+        scope.textContent = scopedName
+            ? ('Framing: ' + scopedName + '’s camera — pair the CSS with their solo link (the guest row has it).')
+            : 'Framing: any camera or source — the CSS rides the OBS browser source, so it frames whatever you point it at.';
+        host.appendChild(scope);
+
+        var presetsRow = document.createElement('div');
+        presetsRow.className = 'arcade-frames-presets';
+        presetsRow.setAttribute('role', 'group');
+        presetsRow.setAttribute('aria-label', 'Frame presets');
+        FRAME_PRESETS.forEach(function (preset) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm';
+            btn.textContent = preset.name;
+            btn.setAttribute('aria-pressed', String(frameStyleDoc.preset === preset.id));
+            btn.addEventListener('click', function () {
+                frameStyleDoc.preset = preset.id;
+                frameStyleDoc.color = preset.color;
+                frameStyleDoc.width = preset.width;
+                frameStyleDoc.radius = preset.radius;
+                saveFrameStyle();
+                renderFramesConfig();
+            });
+            presetsRow.appendChild(btn);
+        });
+        host.appendChild(presetsRow);
+
+        host.appendChild(buildFrameStyleField('Border color', 'text', frameStyleDoc.color, '#33d6ff', '', function (v) {
+            frameStyleDoc.color = v.slice(0, 40) || '#33d6ff';
+        }));
+        host.appendChild(buildFrameStyleField('Border width (px)', 'number', String(frameStyleDoc.width), '4', '16', function (v) {
+            frameStyleDoc.width = Math.max(0, Math.min(16, Math.round(Number(v) || 0)));
+        }));
+        host.appendChild(buildFrameStyleField('Corner radius (px)', 'number', String(frameStyleDoc.radius), '10', '32', function (v) {
+            frameStyleDoc.radius = Math.max(0, Math.min(32, Math.round(Number(v) || 0)));
+        }));
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyCssBtn = document.createElement('button');
+        copyCssBtn.type = 'button';
+        copyCssBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyCssBtn.textContent = 'Copy frame CSS';
+        copyCssBtn.addEventListener('click', function () {
+            copyToClipboard(frameCssText()).then(function () { flashButton(copyCssBtn, 'Copied ✓'); }, function () { flashButton(copyCssBtn, 'Copy failed', 2200); });
+        });
+        actions.appendChild(copyCssBtn);
+        if (scopedName && framesRoom) {
+            var copySoloBtn = document.createElement('button');
+            copySoloBtn.type = 'button';
+            copySoloBtn.className = 'arcade-btn arcade-btn--sm';
+            copySoloBtn.textContent = 'Copy solo link';
+            copySoloBtn.addEventListener('click', function () {
+                copyToClipboard(guestSoloUrl(scopedName)).then(function () { flashButton(copySoloBtn, 'Copied ✓'); }, function () { flashButton(copySoloBtn, 'Copy failed', 2200); });
+            });
+            actions.appendChild(copySoloBtn);
+        }
+        host.appendChild(actions);
+        var how = document.createElement('p');
+        how.className = 'arcade-frames-honest';
+        how.textContent = 'How it lands: OBS browser source → Properties → Custom CSS — paste the frame CSS there. The frame rides the source; the room never sees it.';
+        host.appendChild(how);
+    }
+
+    function buildFrameStyleField(labelText, type, value, placeholder, max, apply) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-frames-field';
+        var label = document.createElement('label');
+        label.textContent = labelText;
+        var input = document.createElement('input');
+        input.type = type;
+        input.autocomplete = 'off';
+        input.value = value;
+        input.placeholder = placeholder;
+        if (type === 'number') { input.min = '0'; input.max = max || '32'; }
+        label.appendChild(input);
+        wrap.appendChild(label);
+        input.addEventListener('input', debounce(function () {
+            apply(input.value.trim());
+            saveFrameStyle();
+        }, 400));
+        return wrap;
+    }
+
+    function frameCssText() {
+        var st = frameStyleDoc;
+        var decls = 'box-sizing: border-box !important;';
+        if (st.width > 0) decls += ' border: ' + st.width + 'px ' + (st.preset === 'pixel' ? 'dashed' : 'solid') + ' ' + st.color + ' !important;';
+        if (st.radius > 0) decls += ' border-radius: ' + st.radius + 'px !important;';
+        if (st.preset === 'shadow') decls += ' filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.55)) !important;';
+        if (st.preset === 'pixel') decls += ' image-rendering: pixelated !important;';
+        return 'html, body { background: transparent !important; margin: 0 !important; }\nvideo { ' + decls + ' }';
+    }
+
+    // ---- Lane 2 — THE TIP JAR RAILS -----------------------------------------
+    // PLACEMENT LAW (ruled round 6): money configs live under the MONEY
+    // category of Add-ons — this interior opens from the Money cards' Set up
+    // button, NEVER inside Frames & Cameras or any other surface.
+    // WALLET LAW (absolute): receive-side public strings ONLY — no keys, no
+    // wallet-connect secrets, no NWC, nothing that signs. The rails RENDER
+    // on the jar overlay (tipjar-mini.html, extended this task — not a third
+    // jar): the lightning address/LNURL becomes a QR + link, the zap
+    // identifiers become text lines. Platform tips stay the legacy rail.
+    function buildTipjarPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-tipjar';
+        panel.setAttribute('aria-label', 'Tip jar');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">TIP JAR</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-tipjar-status"></span>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-tipjar-list" role="listbox" aria-label="Tip jar setup"></div>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-evt-config" id="arcade-tipjar-config"></div>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(panel);
+        attachArcadeListboxNav(panel.querySelector('#arcade-tipjar-list'), '[data-arcade-tipjar-key]',
+            function () { return tipjarSelectedKey; }, selectTipjarKey,
+            function (row) { return row.dataset.arcadeTipjarKey; });
+    }
+
+    function ensureTipjarPanelLive() {
+        // Re-entry re-reads (S47B doctrine); the sync-IPC settings read lands
+        // BEFORE any preview iframe src is set (S48 sendSync discipline).
+        loadTipRailsSettings().then(function () {
+            tipjarPanelLive = true;
+            renderTipjarList();
+            renderTipjarConfig();
+        });
+    }
+
+    function buildTipjarListRow(opts) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'arcade-evt-item';
+        row.dataset.arcadeTipjarKey = opts.key;
+        row.setAttribute('role', 'option');
+        var selected = tipjarSelectedKey === opts.key;
+        row.classList.toggle('is-on', selected);
+        row.setAttribute('aria-selected', String(selected));
+        var label = document.createElement('span');
+        label.className = 'arcade-evt-item__label';
+        label.textContent = (opts.icon ? opts.icon + ' ' : '') + opts.label;
+        row.appendChild(label);
+        if (opts.stateText) {
+            var state = document.createElement('span');
+            state.className = 'arcade-evt-state arcade-evt-state--off';
+            state.textContent = opts.stateText;
+            row.appendChild(state);
+        }
+        row.addEventListener('click', function () { selectTipjarKey(opts.key); });
+        return row;
+    }
+
+    function renderTipjarList() {
+        var list = document.getElementById('arcade-tipjar-list');
+        if (!list) return;
+        list.innerHTML = '';
+        list.appendChild(buildTipjarListRow({ key: TIPJAR_RAILS_KEY, icon: '⚡', label: 'Payment rails', stateText: 'set up' }));
+        var jarsHeader = document.createElement('div');
+        jarsHeader.className = 'arcade-evt-group__title';
+        jarsHeader.textContent = 'Jars';
+        list.appendChild(jarsHeader);
+        list.appendChild(buildTipjarListRow({ key: 'tipjar-mini', label: 'Tip Jar Mini', stateText: 'rails render here' }));
+        list.appendChild(buildTipjarListRow({ key: 'tipjar', label: 'Tip Jar (stock)', stateText: 'legacy' }));
+    }
+
+    function selectTipjarKey(key) {
+        tipjarSelectedKey = key;
+        renderTipjarList();
+        renderTipjarConfig();
+    }
+
+    function renderTipjarConfig() {
+        var host = document.getElementById('arcade-tipjar-config');
+        if (!host) return;
+        host.innerHTML = '';
+        if (tipjarSelectedKey === 'tipjar-mini') { renderTipjarMiniConfig(host); return; }
+        if (tipjarSelectedKey === 'tipjar') { renderTipjarStockConfig(host); return; }
+        renderTipjarRailsConfig(host);
+    }
+
+    function renderTipjarRailsConfig(host) {
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Payment rails — Set up';
+        host.appendChild(title);
+        var legacy = document.createElement('p');
+        legacy.className = 'arcade-style-hint';
+        legacy.textContent = 'Platform tips (superchats, bits, Ko-fi / Fourthwall webhooks) keep counting exactly as they always have — the legacy rail needs no setup.';
+        host.appendChild(legacy);
+
+        host.appendChild(buildTipjarRailField('Lightning address / LNURL', 'lightning', tipRails.lightning,
+            'you@wallet.com or LNURL1…',
+            'A public receive string — rendered as a QR + link on Tip Jar Mini.'));
+        host.appendChild(buildTipjarRailField('Zaps (nostr) — npub', 'npub', tipRails.npub,
+            'npub1…',
+            'A public identifier — shown as a zap line on the jar.'));
+        host.appendChild(buildTipjarRailField('Zaps — lud16 address', 'lud16', tipRails.lud16,
+            'you@wallet.com',
+            'The human-readable zap address — shown as a zap line on the jar.'));
+
+        // WALLET LAW (absolute) — carried on the UI, enforced on the save.
+        var note = document.createElement('p');
+        note.className = 'arcade-frames-honest';
+        note.textContent = 'Receive-side public strings only. No keys, no wallet-connect strings, nothing that signs — nothing here can send. Settlement truth stays with your payment provider; the jar only renders where tips can reach you.';
+        host.appendChild(note);
+    }
+
+    function buildTipjarRailField(labelText, field, value, placeholder, hintText) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-frames-field arcade-tipjar-rail';
+        var label = document.createElement('label');
+        label.textContent = labelText;
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.value = value;
+        input.placeholder = placeholder;
+        input.dataset.arcadeRailField = field;
+        label.appendChild(input);
+        wrap.appendChild(label);
+        var hint = document.createElement('div');
+        hint.className = 'arcade-tipjar-rail__hint';
+        hint.textContent = hintText;
+        wrap.appendChild(hint);
+        input.addEventListener('input', debounce(function () {
+            var clean = input.value.trim();
+            if (tipRailsSecretSmell(clean)) {
+                setTipjarStatus('that looks like a SECRET — receive-side public strings only; it was not saved', true);
+                return; // the wallet-law tripwire: refuse, save nothing
+            }
+            tipRails[field] = clean;
+            saveTipRails();
+            setTipjarStatus('rails saved — they render on Tip Jar Mini');
+            if (tipjarSelectedKey === 'tipjar-mini') initTipjarPreviewFrame();
+        }, 500));
+        return wrap;
+    }
+
+    function tipjarCardElement(id) {
+        var found = null;
+        ELEMENTS.forEach(function (el) { if (el.id === id) found = el; });
+        return found;
+    }
+
+    function renderTipjarMiniConfig(host) {
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Tip Jar Mini';
+        host.appendChild(title);
+        var hint = document.createElement('p');
+        hint.className = 'arcade-style-hint';
+        hint.textContent = 'The preview is a zero-network demo (scripted fake tips, DEMO ribbon) — the rails you set up render on the real overlay exactly as shown.';
+        host.appendChild(hint);
+        var preview = document.createElement('div');
+        preview.className = 'arcade-alerts-preview arcade-tipjar-preview';
+        var previewBar = document.createElement('div');
+        previewBar.className = 'arcade-alerts-preview-bar';
+        var reloadBtn = document.createElement('button');
+        reloadBtn.type = 'button';
+        reloadBtn.className = 'arcade-btn arcade-btn--sm';
+        reloadBtn.id = 'arcade-tipjar-reload';
+        reloadBtn.textContent = 'Reload preview';
+        previewBar.appendChild(reloadBtn);
+        preview.appendChild(previewBar);
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-tipjar-preview-frame';
+        frame.title = 'Tip Jar Mini preview — zero-network demo';
+        preview.appendChild(frame);
+        host.appendChild(preview);
+        reloadBtn.addEventListener('click', initTipjarPreviewFrame);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.id = 'arcade-tipjar-copy';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.addEventListener('click', function () {
+            var el = tipjarCardElement('tipjar-mini');
+            buildElementOverlayUrl(el, tipRailsUrlParams()).then(function (url) {
+                if (!url) throw new Error('no url');
+                return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
+            }).catch(function (e) {
+                console.error('[arcade-shell] copy tipjar-mini url failed:', e);
+                flashButton(copyBtn, 'Copy failed', 2200);
+            });
+        });
+        actions.appendChild(copyBtn);
+        host.appendChild(actions);
+        var defaults = document.createElement('p');
+        defaults.className = 'arcade-style-hint';
+        defaults.textContent = 'Goal, label and layout ride the gallery card defaults (goal 100 · “Tip Jar” · full layout).';
+        host.appendChild(defaults);
+        initTipjarPreviewFrame();
+    }
+
+    function initTipjarPreviewFrame() {
+        var frame = document.getElementById('arcade-tipjar-preview-frame');
+        if (!frame) return;
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        var el = tipjarCardElement('tipjar-mini');
+        // No session param at all — &demo never joins anything (the ruled
+        // mirror of Copy overlay URL, which always carries the real session).
+        var params = ['demo=1'].concat(el.params || []).concat(tipRailsUrlParams());
+        resolver('tipjar-mini.html', { extraParams: params }).then(function (resolved) {
+            if (resolved && resolved.url) frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] tipjar preview resolve failed:', e); });
+    }
+
+    function renderTipjarStockConfig(host) {
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = 'Tip Jar (stock)';
+        host.appendChild(title);
+        var about = document.createElement('p');
+        about.className = 'arcade-style-hint';
+        about.textContent = 'The full stock jar — themes, sound, confetti, leaderboard. No isolated preview here: sessionless it would join a shared public room, so it only ever loads with your real session.';
+        host.appendChild(about);
+        var rails = document.createElement('p');
+        rails.className = 'arcade-style-hint';
+        rails.textContent = 'Receive rails (lightning QR, zap lines) render on Tip Jar Mini — the stock jar has no rail slots.';
+        host.appendChild(rails);
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.addEventListener('click', function () {
+            var el = tipjarCardElement('tipjar');
+            buildElementOverlayUrl(el).then(function (url) {
+                if (!url) throw new Error('no url');
+                return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
+            }).catch(function (e) {
+                console.error('[arcade-shell] copy tipjar url failed:', e);
+                flashButton(copyBtn, 'Copy failed', 2200);
+            });
+        });
+        actions.appendChild(copyBtn);
+        host.appendChild(actions);
     }
 
     // --------------------------------------------------------------------
@@ -9892,6 +10844,8 @@
         buildGamesPanel(); // S48 — the hub panel exists from boot; contents lazy (ensureGamesPanelLive on first visit)
         buildCommandsPanel(); // S49 — commands + timers; contents lazy (ensureCommandsPanelLive on first visit)
         buildGoalsPanel();    // S49 — goal bars; contents lazy (ensureGoalsPanelLive on first visit)
+        buildFramesPanel();   // S50 — Frames & Cameras; contents lazy (ensureFramesPanelLive on first visit)
+        buildTipjarPanel();   // S50 — the Tip Jar interior (payment rails); contents lazy (ensureTipjarPanelLive on first visit)
         if (CUSTOM_TABS.ai) buildAiPanel();
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer
