@@ -1704,7 +1704,7 @@
         if (empty) {
             empty.hidden = visible !== 0;
             if (visible === 0) {
-                empty.textContent = 'No ' + addonTypeLabel(typeId) + ' add-ons yet — they land in this gallery in a later wave.';
+                empty.textContent = 'No ' + addonTypeLabel(typeId) + ' add-ons yet — they land in this gallery in a later update.';
             }
         }
     }
@@ -2891,7 +2891,7 @@
         // and no zone fit. Builder's pick (flagged for the Admiral's gate
         // ruling): a minimal "your published overlay" door here in Z3 —
         // copy-URL + the builder door, no config invented.
-        var orphanCard = buildAiZoneHead('Your published AI overlay', 'The AI Prompt Builder (aiprompt.html) publishes the pages it builds to aioverlay.html. Stock gives that overlay no settings group of its own — this is its door. (Flagged for the Admiral’s gate ruling — audit orphan.)');
+        var orphanCard = buildAiZoneHead('Your published AI overlay', 'The AI Prompt Builder (aiprompt.html) publishes the pages it builds to aioverlay.html. Stock gives that overlay no settings group of its own — this is its door.');
         var orphanBody = document.createElement('div');
         orphanBody.className = 'arcade-alert-card__body';
         var orphanDoors = document.createElement('div');
@@ -4175,7 +4175,7 @@
             select.appendChild(extra);
         }
         select.value = currentTier;
-        select.title = 'Tier names come from the shared tier list — its admin lands on the Points page (S51)';
+        select.title = 'Tier names come from the shared tier list — its admin lives on the Points page';
         select.addEventListener('change', function () { onChange(select.value); });
         row.appendChild(select);
         return row;
@@ -4700,7 +4700,7 @@
             var flow = {
                 id: mintAlertId('s47-' + (customEvt ? 'custom' : category)),
                 name: 'Alert: ' + label,
-                description: 'Seeded by the Arcade Alerts surface (S47) — trigger → overlay actions; refine freely.',
+                description: 'Seeded by the Arcade Alerts surface — trigger → overlay actions; refine freely.',
                 active: true,
                 nodes: spec.nodes,
                 connections: spec.connections
@@ -5546,7 +5546,7 @@
         // reads font-size/font-family params or &css — nothing to wire.
         var fontNote = document.createElement('div');
         fontNote.className = 'arcade-evt-cond__hint';
-        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 20; see the S48/S63 reports).';
+        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 20).';
         section.appendChild(fontNote);
     }
 
@@ -6858,7 +6858,7 @@
         var flow = {
             id: flowId,
             name: kind === 'timer' ? 'Timer: every 30m' : 'Command: !newcmd',
-            description: 'Seeded by the Arcade Commands surface (S49) — refine freely; heavy edits hand it back to the surface read-only.',
+            description: 'Seeded by the Arcade Commands surface — refine freely; heavy edits hand it back to the surface read-only.',
             active: false, // starts OFF — an empty response/message should never fire; the operator arms it
             nodes: [],
             connections: []
@@ -11288,7 +11288,7 @@
         if (!arcadeAnalytics.watchReady) return; // honest dash / "connecting…" until first sample
         arcadeFxSetNumber(valEl, arcadeAnalytics.watchViewerMs / 3600000, formatViewerHours); // S44 M3 — tick TO the real accrued value
         valEl.classList.remove('is-dash');
-        if (subEl) subEl.textContent = 'since boot · est';
+        if (subEl) subEl.textContent = 'since boot';
     }
 
     // --------------------------------------------------------------------
@@ -13014,6 +13014,7 @@
             var wf = document.getElementById('welcomeFrame');
             if (!wf || wf === welcomeHooked) return;
             welcomeHooked = wf;
+            if (!wf.title) wf.title = 'Welcome — getting started'; // shell-side honest title (H18-A); stock mints the frame without one
             injectDressIntoFrame(wf, 'arcade-dress-welcome', DRESS_WELCOME_CSS);
             wf.addEventListener('load', function () {
                 injectDressIntoFrame(wf, 'arcade-dress-welcome', DRESS_WELCOME_CSS);
