@@ -22,6 +22,9 @@ body.arcade-shell {
   --arc-edge-soft: #21252d;
   --arc-ink: #f2f0ea;
   --arc-muted: #9ba1ad;
+  /* DECORATIVE ONLY (dots, borders, dashes-as-ornament) — 3.18–3.67:1 on the
+     shell grounds fails the 4.5:1 body law, so TEXT never wears it
+     (TASK-69 contrast sweep: every text use moved to --arc-muted). */
   --arc-faint: #646b78;
 
   --arc-live: #39ff14;
@@ -433,12 +436,12 @@ body.arcade-shell .arcade-src__name b {
   font-size: 12px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-body.arcade-shell .arcade-src__state { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--arc-faint); }
+body.arcade-shell .arcade-src__state { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--arc-muted); }
 body.arcade-shell .arcade-src__state--danger { color: var(--arc-danger); }
 body.arcade-shell .arcade-src--error { border-color: rgba(229, 104, 107, 0.35); background: rgba(229, 104, 107, 0.04); }
 
 body.arcade-shell .arcade-src-empty {
-  padding: 18px 14px; color: var(--arc-faint); font-size: 12px; line-height: 1.6; text-align: center;
+  padding: 18px 14px; color: var(--arc-muted); font-size: 12px; line-height: 1.6; text-align: center;
 }
 
 body.arcade-shell .arcade-src-foot {
@@ -516,7 +519,7 @@ body.arcade-shell .arcade-field > label {
    viewers, follower delta) — see arcade-shell.js buildAnalyticsPaneMarkup()
    comment for exactly which tiles do vs don't and why. */
 body.arcade-shell .arcade-field__hint {
-  font: 400 10px/1.3 var(--arc-font-ui); color: var(--arc-faint);
+  font: 400 10px/1.3 var(--arc-font-ui); color: var(--arc-muted);
 }
 
 body.arcade-shell .arcade-period-row { display: flex; align-items: center; gap: 10px; }
@@ -547,9 +550,9 @@ body.arcade-shell .arcade-stat__value {
   font: 600 16px/1.2 var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-ink);
 }
 /* an un-tracked metric's value stays visually honest — dimmer than a real number */
-body.arcade-shell .arcade-stat__value.is-dash { color: var(--arc-faint); }
+body.arcade-shell .arcade-stat__value.is-dash { color: var(--arc-muted); }
 body.arcade-shell .arcade-stat__sub {
-  font: 400 10px/1.4 var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint);
+  font: 400 10px/1.4 var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-muted);
   white-space: normal; overflow-wrap: break-word;
 }
 
@@ -572,10 +575,10 @@ body.arcade-shell .arcade-frow .arcade-frow__label {
   min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 body.arcade-shell .arcade-frow .arcade-frow__total {
-  font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint);
+  font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-muted);
 }
 body.arcade-shell .arcade-frow .arcade-frow__delta {
-  font: 600 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint); text-align: right;
+  font: 600 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-muted); text-align: right;
 }
 /* real, signed delta since this shell booted — see arcade-shell.js's
    buildFollowerCountsFromMetaStore bridge comment. Not money; live/danger
@@ -589,7 +592,7 @@ body.arcade-shell .arcade-frow .arcade-frow__delta--down { color: var(--arc-dang
    see arcade-shell.js for exactly which of those two states is showing. */
 body.arcade-shell .arcade-nrow-empty {
   padding: 10px; border: 1px dashed var(--arc-edge); border-radius: var(--arc-r);
-  color: var(--arc-faint); font-size: 11px; line-height: 1.5;
+  color: var(--arc-muted); font-size: 11px; line-height: 1.5;
 }
 body.arcade-shell .arcade-nrow-list { list-style: none; margin: 0; padding: 0; }
 body.arcade-shell .arcade-nrow {
@@ -617,7 +620,7 @@ body.arcade-shell .arcade-nrow__detail {
 }
 body.arcade-shell .arcade-nrow__detail:empty { display: none; }
 body.arcade-shell .arcade-nrow__time {
-  grid-area: time; font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint); white-space: nowrap;
+  grid-area: time; font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-muted); white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------
@@ -660,7 +663,7 @@ body.arcade-shell[data-arcade-tab="addons"] .arcade-addons { display: flex; }
 
 body.arcade-shell .arcade-addons .arcade-el-hint {
   font: 400 11px/1.4 var(--arc-font-ui);
-  color: var(--arc-faint);
+  color: var(--arc-muted);
 }
 body.arcade-shell .arcade-addons-body {
   display: flex; flex: 1; min-height: 0;
@@ -695,7 +698,7 @@ body.arcade-shell .arcade-addons-types button.is-on {
 body.arcade-shell .arcade-addons-type__count {
   margin-left: auto;
   font: 400 10px/1 var(--arc-font-mono);
-  color: var(--arc-faint);
+  color: var(--arc-muted);
 }
 body.arcade-shell .arcade-addons-types button.is-on .arcade-addons-type__count { color: var(--arc-info); }
 
@@ -775,7 +778,7 @@ body.arcade-shell .arcade-addons-stage {
 body.arcade-shell .arcade-addons-empty {
   margin: 24px auto; max-width: 420px;
   font: 400 12px/1.6 var(--arc-font-ui);
-  color: var(--arc-faint);
+  color: var(--arc-muted);
   text-align: center;
 }
 body.arcade-shell .arcade-el-grid {
@@ -804,7 +807,7 @@ body.arcade-shell .arcade-el-card__blurb {
   margin: 0; font: 400 12px/1.5 var(--arc-font-ui); color: var(--arc-muted);
 }
 body.arcade-shell .arcade-el-card__params {
-  margin: 0; font: 400 11px/1.4 var(--arc-font-mono); color: var(--arc-faint);
+  margin: 0; font: 400 11px/1.4 var(--arc-font-mono); color: var(--arc-muted);
 }
 /* THE CARD-FOOTER LAW (the Admiral, 0018.06.03): on stretch-sibling cards the
    CTA row — and its path caption when present — pins to the card's BOTTOM
@@ -830,7 +833,7 @@ body.arcade-shell .arcade-el-cat--community { color: var(--arc-muted); }
 /* Status pill — READY reads INFO/cyan (available), never LIVE/neon
    (neon = a source is actually live). SOON is faint. */
 body.arcade-shell .arcade-el-status--ready { color: var(--arc-info); border-color: rgba(53, 208, 255, 0.35); background: rgba(53, 208, 255, 0.07); }
-body.arcade-shell .arcade-el-status--planned { color: var(--arc-faint); }
+body.arcade-shell .arcade-el-status--planned { color: var(--arc-muted); }
 
 @media (max-width: 760px) {
   body.arcade-shell .arcade-addons-stage { padding: 12px; }
@@ -1021,7 +1024,7 @@ body.arcade-shell .arcade-evt-tier--high {
    for off. Same semantics as .arcade-el-status--ready. */
 body.arcade-shell .arcade-evt-state { flex-shrink: 0; font: 600 10px/1 var(--arc-font-ui); }
 body.arcade-shell .arcade-evt-state--on { color: var(--arc-info); }
-body.arcade-shell .arcade-evt-state--off { color: var(--arc-faint); }
+body.arcade-shell .arcade-evt-state--off { color: var(--arc-muted); }
 
 /* S47 — RIGHT below the preview: the selected event's edit/config. Field
    rows reuse .arcade-alert-row byte-for-byte (same grid the AI MOVE cards
@@ -1075,9 +1078,9 @@ body.arcade-shell .arcade-evt-cond__opt select {
   background: var(--arc-panel-2); color: var(--arc-ink);
   font: 400 11px/1 var(--arc-font-ui);
 }
-body.arcade-shell .arcade-evt-cond__hint { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-faint); max-width: 560px; }
+body.arcade-shell .arcade-evt-cond__hint { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-muted); max-width: 560px; }
 body.arcade-shell .arcade-evt-cond__ft-on { margin-left: 8px; flex-shrink: 0; }
-body.arcade-shell .arcade-evt-flowline { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-faint); }
+body.arcade-shell .arcade-evt-flowline { font: 400 10px/1.4 var(--arc-font-ui); color: var(--arc-muted); }
 body.arcade-shell .arcade-evt-remove { align-self: flex-start; }
 
 /* S47 — "+ Add event" picker modal. */
@@ -1186,7 +1189,7 @@ body.arcade-shell .arcade-game-unlock input[type="text"] {
   font: 400 11px/1 var(--arc-font-ui);
 }
 body.arcade-shell .arcade-game-unlock__arrow {
-  text-align: center; font: 600 12px/1 var(--arc-font-ui); color: var(--arc-faint);
+  text-align: center; font: 600 12px/1 var(--arc-font-ui); color: var(--arc-muted);
 }
 
 @media (max-width: 900px) {
@@ -1486,7 +1489,10 @@ body.arcade-shell .arcade-style-group:first-child { padding-top: 4px; }
    at 280px; control widths trimmed slightly (110→96 / 150→120) to give the
    label column real room. */
 body.arcade-shell .arcade-style-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
+  /* TASK-69 sweep 3 — the label track gets a 96px floor: at the controls
+     column's real width the fluid track left 84px and "Text outline width"
+     clipped mid-word. Below the floor the ellipsis degrade still stands. */
+  display: grid; grid-template-columns: minmax(96px, 1fr) auto auto auto;
   align-items: center; gap: 6px; padding: 4px 6px;
   border-radius: var(--arc-r);
 }
@@ -1589,10 +1595,10 @@ body.arcade-shell .arcade-style #arcade-style-usercss {
   background: var(--arc-panel-2); color: var(--arc-ink);
   font: 400 11px/1.5 var(--arc-font-mono);
 }
-/* S30 contrast pass: the shared .arcade-field__hint token (--arc-faint,
-   3.18–3.67:1) fails the 4.5:1 body law; scoped bump to muted for THIS tab's
-   Custom-CSS hint only — the analytics dock's own field hints keep the
-   shared token (not this lane). */
+/* S30 contrast pass (superseded by TASK-69): the scoped muted bump below was
+   for THIS tab's Custom-CSS hint only; TASK-69's sweep moved EVERY text use
+   of --arc-faint to --arc-muted, so the base rule already wears muted — the
+   scoped override stays as a harmless pin. */
 body.arcade-shell .arcade-style .arcade-field__hint { color: var(--arc-muted); }
 
 @media (max-width: 900px) {
@@ -1864,7 +1870,7 @@ body.arcade-shell .arcade-onair__dot {
   background: transparent; border: 1.5px solid var(--arc-faint);
 }
 body.arcade-shell .arcade-onair__label {
-  font: 700 12px/1 var(--arc-font-mono); letter-spacing: 0.12em; color: var(--arc-faint);
+  font: 700 12px/1 var(--arc-font-mono); letter-spacing: 0.12em; color: var(--arc-muted);
 }
 body.arcade-shell .arcade-onair__sub {
   font: 400 10px/1.4 var(--arc-font-mono); font-variant-numeric: tabular-nums;
@@ -2016,6 +2022,7 @@ body.arcade-shell .arcade-deck-embed__note { margin: 0; }
 body.arcade-shell .arcade-deck-embed__frame {
   width: 100%;
   height: 520px;
+  flex-shrink: 0; /* TASK-69 sweep 2 — fitArcadeFrameToContent sizes the frame to its content; never let the flex wrap shrink it back into an inner scrollbar (the pane owns scrolling) */
   border: 1px solid var(--arc-edge);
   border-radius: var(--arc-r);
   background: var(--arc-panel);
@@ -2213,7 +2220,7 @@ body.arcade-shell .arcade-srcpop__grid {
   font: 400 11px var(--arc-font-ui);
   padding: 4px 2px;
 }
-body.arcade-shell .arcade-srcpop__k { color: var(--arc-faint); white-space: nowrap; }
+body.arcade-shell .arcade-srcpop__k { color: var(--arc-muted); white-space: nowrap; }
 body.arcade-shell .arcade-srcpop__v { color: var(--arc-ink); min-width: 0; overflow-wrap: anywhere; }
 body.arcade-shell .arcade-srcpop__actions { display: flex; flex-wrap: wrap; gap: 6px; }
 body.arcade-shell .arcade-srcpop__tune { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -2243,6 +2250,7 @@ body.arcade-shell .arcade-editchat-chip {
   background: var(--arc-panel-2); color: var(--arc-ink);
   border: 1px solid var(--arc-edge); border-radius: 999px;
   font: 600 11px var(--arc-font-ui); cursor: pointer;
+  white-space: nowrap; /* TASK-69 sweep 3 — a chip never wraps (3 lines at the 390px floor) */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 body.arcade-shell[data-arcade-tab="main"] .arcade-editchat-chip { display: block; }
@@ -2264,7 +2272,7 @@ body.arcade-shell .arcade-editchat-customfont {
 }
 body.arcade-shell .arcade-editchat-val {
   min-width: 44px; text-align: right;
-  font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-faint);
+  font: 11px var(--arc-font-mono); font-variant-numeric: tabular-nums; color: var(--arc-muted);
 }
 body.arcade-shell .arcade-editchat-modal .arcade-deck-embed__frame { min-height: 260px; }
 

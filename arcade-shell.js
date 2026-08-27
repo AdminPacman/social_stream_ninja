@@ -1704,7 +1704,7 @@
         if (empty) {
             empty.hidden = visible !== 0;
             if (visible === 0) {
-                empty.textContent = 'No ' + addonTypeLabel(typeId) + ' add-ons yet — they land in this gallery in a later wave.';
+                empty.textContent = 'No ' + addonTypeLabel(typeId) + ' add-ons yet — they land in this gallery in a later update.';
             }
         }
     }
@@ -2524,7 +2524,7 @@
         body.className = 'arcade-alert-card__body';
         body.appendChild(buildAiToggleRow('Enable the censor bot', 'Stock key: ollamaCensorBot', 'ollamaCensorBot', function () { renderAiZoneList(); }));
         var modeRow = document.createElement('div');
-        modeRow.className = 'arcade-alert-row';
+        modeRow.className = 'arcade-alert-row arcade-alert-row--wide'; // TASK-69 sweep 3 — the 68px base track crushed this label to 3 lines
         var modeLbl = document.createElement('label');
         modeLbl.textContent = 'When a message is judged bad';
         modeRow.appendChild(modeLbl);
@@ -2891,7 +2891,7 @@
         // and no zone fit. Builder's pick (flagged for the Admiral's gate
         // ruling): a minimal "your published overlay" door here in Z3 —
         // copy-URL + the builder door, no config invented.
-        var orphanCard = buildAiZoneHead('Your published AI overlay', 'The AI Prompt Builder (aiprompt.html) publishes the pages it builds to aioverlay.html. Stock gives that overlay no settings group of its own — this is its door. (Flagged for the Admiral’s gate ruling — audit orphan.)');
+        var orphanCard = buildAiZoneHead('Your published AI overlay', 'The AI Prompt Builder (aiprompt.html) publishes the pages it builds to aioverlay.html. Stock gives that overlay no settings group of its own — this is its door.');
         var orphanBody = document.createElement('div');
         orphanBody.className = 'arcade-alert-card__body';
         var orphanDoors = document.createElement('div');
@@ -4175,7 +4175,7 @@
             select.appendChild(extra);
         }
         select.value = currentTier;
-        select.title = 'Tier names come from the shared tier list — its admin lands on the Points page (S51)';
+        select.title = 'Tier names come from the shared tier list — its admin lives on the Points page';
         select.addEventListener('change', function () { onChange(select.value); });
         row.appendChild(select);
         return row;
@@ -4700,7 +4700,7 @@
             var flow = {
                 id: mintAlertId('s47-' + (customEvt ? 'custom' : category)),
                 name: 'Alert: ' + label,
-                description: 'Seeded by the Arcade Alerts surface (S47) — trigger → overlay actions; refine freely.',
+                description: 'Seeded by the Arcade Alerts surface — trigger → overlay actions; refine freely.',
                 active: true,
                 nodes: spec.nodes,
                 connections: spec.connections
@@ -5546,7 +5546,7 @@
         // reads font-size/font-family params or &css — nothing to wire.
         var fontNote = document.createElement('div');
         fontNote.className = 'arcade-evt-cond__hint';
-        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 20; see the S48/S63 reports).';
+        fontNote.textContent = 'Font size / font family: not supported — no stock game reads font params (measured across all 20).';
         section.appendChild(fontNote);
     }
 
@@ -6858,7 +6858,7 @@
         var flow = {
             id: flowId,
             name: kind === 'timer' ? 'Timer: every 30m' : 'Command: !newcmd',
-            description: 'Seeded by the Arcade Commands surface (S49) — refine freely; heavy edits hand it back to the surface read-only.',
+            description: 'Seeded by the Arcade Commands surface — refine freely; heavy edits hand it back to the surface read-only.',
             active: false, // starts OFF — an empty response/message should never fire; the operator arms it
             nodes: [],
             connections: []
@@ -7879,11 +7879,18 @@
             try {
                 var doc = frame.contentDocument;
                 if (!doc || !doc.documentElement) return;
-                var h = Math.max(
-                    doc.documentElement.scrollHeight || 0,
-                    doc.body ? doc.body.scrollHeight : 0,
-                    360 // never collapse to nothing — the honest floor
-                );
+                // TASK-69: popup.html pins html/body to height:100%, so
+                // scrollHeight RATCHETS (never drops below the current frame
+                // height — collapsing a berthed group left dead space). The
+                // berthed root's own box is the honest content height.
+                var root = doc.getElementById('arcade-deck-popup-root');
+                var h = root
+                    ? Math.ceil(root.getBoundingClientRect().height) + 12
+                    : Math.max(
+                        doc.documentElement.scrollHeight || 0,
+                        doc.body ? doc.body.scrollHeight : 0
+                    );
+                h = Math.max(h, 360); // never collapse to nothing — the honest floor
                 // only write on a real change — a redundant write re-feeds the observer
                 if (Math.abs((parseFloat(frame.style.height) || 0) - h) > 2) frame.style.height = h + 'px';
             } catch (e) { /* cross-origin — the CSS fallback stands */ }
@@ -7891,12 +7898,33 @@
         apply();
         try {
             var doc = frame.contentDocument;
-            if (doc && doc.body && typeof ResizeObserver === 'function') {
-                // rAF-deferred: a synchronous write inside the callback loops
-                // the observer (the frame's new height changes the observed
-                // body) and Chromium fires "ResizeObserver loop" errors.
-                var ro = new ResizeObserver(function () { requestAnimationFrame(apply); });
-                ro.observe(doc.body);
+            if (doc && doc.body && typeof MutationObserver === 'function') {
+                // TASK-69: the re-measure trigger is a MutationObserver, NOT a
+                // ResizeObserver. An RO on the embedded body pairs with the
+                // height write as a feedback loop in Chromium's delivery
+                // cycle — every frames-tab visit spammed ~180 "ResizeObserver
+                // loop completed with undelivered notifications" errors
+                // (caught by the console census). Content changes are what
+                // actually matter (collapsibles, popup.js late injects), and
+                // those are mutations. rAF-throttled + deduped writes.
+                var pending = false;
+                var schedule = function () {
+                    if (pending) return;
+                    pending = true;
+                    requestAnimationFrame(function () { pending = false; apply(); });
+                };
+                var mo = new MutationObserver(schedule);
+                mo.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+                // stock's collapsibles flip display via :checked — a pure CSS
+                // state change, invisible to the MutationObserver. Any click
+                // inside the embed re-fits (after the 0.25s transition).
+                doc.addEventListener('click', function () {
+                    schedule();
+                    setTimeout(apply, 450);
+                });
+                // pure reflow without a mutation (window narrowed, text wraps
+                // taller) — the shell window's resize is the signal.
+                window.addEventListener('resize', schedule);
             }
         } catch (e) { /* noop */ }
     }
@@ -11288,7 +11316,7 @@
         if (!arcadeAnalytics.watchReady) return; // honest dash / "connecting…" until first sample
         arcadeFxSetNumber(valEl, arcadeAnalytics.watchViewerMs / 3600000, formatViewerHours); // S44 M3 — tick TO the real accrued value
         valEl.classList.remove('is-dash');
-        if (subEl) subEl.textContent = 'since boot · est';
+        if (subEl) subEl.textContent = 'since boot';
     }
 
     // --------------------------------------------------------------------
@@ -12592,7 +12620,22 @@
         '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;cursor:pointer;}',
         '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}',
         '#sessionid{filter:blur(6px);transition:filter .15s ease;}',
-        '#sessionid:hover,#sessionid:focus{filter:none;}'
+        '#sessionid:hover,#sessionid:focus{filter:none;}',
+        /* TASK-69 (WALK 2B sweep 1) — contrast closes on the dressed stock
+           surfaces, token literals only (same palette as the :root remap
+           above). Measured by the contrast walker (work/task-69):
+           - the TTS info box's <small> sat BLACK on --color-accent-subtle
+             (1.24:1 — the Admiral's black-on-black): muted text now;
+           - stock's .lightblue anchors (#006f93, 3.18:1) and one bare
+             link-blue anchor (1.93:1) → the info token;
+           - the TTS test buttons (white on #007bff, 3.98:1) dress like the
+             house buttons (panel-2 ground, edge border, ink text);
+           - the backups file-handle status row (white on mid-gray, 1.97:1)
+             gets the panel-2 ground. */
+        '#arcade-deck-popup-root small { color: #9ba1ad; }',
+        '#arcade-deck-popup-root a, #arcade-deck-popup-root a:link, #arcade-deck-popup-root a:visited, #arcade-deck-popup-root a.lightblue { color: #35d0ff; }',
+        '#arcade-deck-popup-root .tts-test-button { background: #191c22; border: 1px solid #2a2e37; color: #f2f0ea; }',
+        '#arcade-deck-popup-root .file-handle-status .status-row { background: #191c22; }'
     ].join('\n');
 
     var DRESS_DASHBOARD_CSS = [
@@ -13014,6 +13057,7 @@
             var wf = document.getElementById('welcomeFrame');
             if (!wf || wf === welcomeHooked) return;
             welcomeHooked = wf;
+            if (!wf.title) wf.title = 'Welcome — getting started'; // shell-side honest title (H18-A); stock mints the frame without one
             injectDressIntoFrame(wf, 'arcade-dress-welcome', DRESS_WELCOME_CSS);
             wf.addEventListener('load', function () {
                 injectDressIntoFrame(wf, 'arcade-dress-welcome', DRESS_WELCOME_CSS);
@@ -13615,6 +13659,13 @@
                 } catch (err) {
                     console.error('[arcade-shell] deck popup filter failed:', err);
                 }
+                // TASK-69 (WALK 2B sweep 2) — the embed FILLS the pane: size
+                // the frame to its content (re-measured on resize, the
+                // TASK-68 camera-frame idiom) so the PANE owns scrolling and
+                // the frame never grows a scrollbar-within-scrollbar (the
+                // Admiral's Speech TTS frame). Cross-origin/hosted frames
+                // keep the 520px CSS fallback honestly.
+                fitArcadeFrameToContent(frame);
                 // TASK-68 — first-paint mask law fallback: if the filter
                 // couldn't run (hosted frame, cross-origin), don't hold the
                 // pane hidden forever — reveal at 6s regardless.
@@ -15168,7 +15219,7 @@
         seSpec.textContent = 'SE has no one-click export — save the JSON from the public loyalty endpoints instead: resolve your channel id at api.streamelements.com/kappa/v2/channels/<channel>, then download …/kappa/v2/points/<id>/top (and /alltime, /watchtime) with ?limit=100&offset=0 pages. Feed any of those JSON files here — usernames with points and/or minutes are picked up. SE values land in separate se* fields and NEVER overwrite SSN points.';
         body.appendChild(seSpec);
         var seRow = document.createElement('div');
-        seRow.className = 'arcade-alert-row';
+        seRow.className = 'arcade-alert-row arcade-alert-row--wide'; // TASK-69 sweep 3 — same 68px crush as the moderation row
         var sePlatLabel = document.createElement('label');
         sePlatLabel.textContent = 'Platform the export belongs to';
         sePlatLabel.setAttribute('for', 'arcade-deck-se-platform');
