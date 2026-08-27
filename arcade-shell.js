@@ -12592,7 +12592,22 @@
         '.arcade-deck-masked{filter:blur(6px);transition:filter .15s ease;cursor:pointer;}',
         '.arcade-deck-masked:hover,.arcade-deck-masked:focus,.arcade-deck-masked:focus-within{filter:none;}',
         '#sessionid{filter:blur(6px);transition:filter .15s ease;}',
-        '#sessionid:hover,#sessionid:focus{filter:none;}'
+        '#sessionid:hover,#sessionid:focus{filter:none;}',
+        /* TASK-69 (WALK 2B sweep 1) — contrast closes on the dressed stock
+           surfaces, token literals only (same palette as the :root remap
+           above). Measured by the contrast walker (work/task-69):
+           - the TTS info box's <small> sat BLACK on --color-accent-subtle
+             (1.24:1 — the Admiral's black-on-black): muted text now;
+           - stock's .lightblue anchors (#006f93, 3.18:1) and one bare
+             link-blue anchor (1.93:1) → the info token;
+           - the TTS test buttons (white on #007bff, 3.98:1) dress like the
+             house buttons (panel-2 ground, edge border, ink text);
+           - the backups file-handle status row (white on mid-gray, 1.97:1)
+             gets the panel-2 ground. */
+        '#arcade-deck-popup-root small { color: #9ba1ad; }',
+        '#arcade-deck-popup-root a, #arcade-deck-popup-root a:link, #arcade-deck-popup-root a:visited, #arcade-deck-popup-root a.lightblue { color: #35d0ff; }',
+        '#arcade-deck-popup-root .tts-test-button { background: #191c22; border: 1px solid #2a2e37; color: #f2f0ea; }',
+        '#arcade-deck-popup-root .file-handle-status .status-row { background: #191c22; }'
     ].join('\n');
 
     var DRESS_DASHBOARD_CSS = [
