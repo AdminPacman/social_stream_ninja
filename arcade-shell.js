@@ -358,7 +358,7 @@
             '<button type="button" class="is-on" data-arcade-clock-mode="bft" aria-pressed="true">BFT</button>' +
             '<button type="button" data-arcade-clock-mode="local" aria-pressed="false">LOCAL</button>' +
             '</div>' +
-            '<label class="arcade-clock-seconds"><input type="checkbox" id="arcade-clock-seconds"><span>seconds</span></label>' +
+            '<label class="arcade-toggle arcade-clock-seconds"><input type="checkbox" class="arcade-toggle__input" id="arcade-clock-seconds"><span class="arcade-toggle__track" aria-hidden="true"><span class="arcade-toggle__thumb"></span></span><span class="arcade-toggle__label">seconds</span></label>' +
             '</div>' +
             '<span class="arcade-field__hint arcade-clock-pop-hint" id="arcade-clock-pop-hint" hidden>won’t persist — settings bridge unavailable</span>';
         wrap.appendChild(pop);
@@ -570,11 +570,89 @@
         }
     }
 
+    // --------------------------------------------------------------------
+    // TASK-68 (WALK 2A item 10) — the BFT clock TRUNCATES HONESTLY at
+    // narrow widths: drop the block height first, then the date; the TIME
+    // always keeps its seat (the ruled order). Measured thresholds, the
+    // S46B fold idiom: natural sub-widths measured once off the full face
+    // (fonts settled), free space computed off the same seat bill the
+    // hamburger fold pays, hysteresis band against flicker. Below the
+    // RULED 390px floor the layout clamps instead (arcade-shell.css
+    // min-width + horizontal scroll) — this trim is what keeps 390px
+    // itself honest: time + burger + brand fit inside it.
+    // --------------------------------------------------------------------
+    var clockTrimLevel = 0;   // 0 = full face · 1 = block height dropped · 2 = time only
+    var clockNatural = null;  // measured full-face sub-widths { pad, gap, date, ab, time, height }
+
+    function clockApplyTrim(level) {
+        var header = document.querySelector('.arcade-topbar');
+        if (!header) return;
+        clockTrimLevel = level;
+        header.classList.toggle('is-clock-noh', level >= 1);
+        header.classList.toggle('is-clock-not', level >= 2);
+    }
+
+    function measureClockTrim() {
+        var header = document.querySelector('.arcade-topbar');
+        if (!header) return;
+        var bft = header.querySelector('.arcade-bft');
+        if (!bft) return;
+        if (!clockNatural) {
+            // Measure off the FULL face — drop the trim classes for the
+            // measurement (same synchronous frame, nothing paints between).
+            if (clockTrimLevel !== 0) clockApplyTrim(0);
+            var bcs = getComputedStyle(bft);
+            var w = function (sel) { var el = bft.querySelector(sel); return el ? el.offsetWidth : 0; };
+            var measured = {
+                pad: (parseFloat(bcs.paddingLeft) || 0) + (parseFloat(bcs.paddingRight) || 0),
+                gap: parseFloat(bcs.columnGap) || 0,
+                date: w('.date'), ab: w('.ab'), time: w('.time'), height: w('.height')
+            };
+            if (!measured.time) return; // fonts not settled — the fonts.ready pass re-runs us
+            clockNatural = measured;
+        }
+        var n = clockNatural;
+        var faceW = [ // the honest bill per trim level
+            n.pad + n.date + n.ab + n.time + n.height + n.gap * 3, // 0 full
+            n.pad + n.date + n.ab + n.time + n.gap * 2,            // 1 no height
+            n.pad + n.time                                          // 2 time only
+        ];
+        // Free space = the header minus every OTHER seat (brand, the nav
+        // cluster or its burger, the beta chip, gaps) — the same accounting
+        // measureTopbarFold does, reading its CURRENT fold state.
+        var cs = getComputedStyle(header);
+        var gap = parseFloat(cs.columnGap) || 0;
+        var others = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        var seats = 1; // the clock itself, for the gap count
+        var brand = header.querySelector('.arcade-brand');
+        if (brand) { others += brand.offsetWidth; seats++; }
+        if (topbarFolded) {
+            var burger = header.querySelector('.arcade-burger');
+            if (burger) { others += burger.offsetWidth; seats++; }
+        } else {
+            var nav = header.querySelector('.arcade-nav');
+            var more = header.querySelector('.arcade-more');
+            if (nav) { others += (topbarNavNatural !== null ? topbarNavNatural : nav.scrollWidth); seats++; }
+            if (more) { others += (topbarMoreNatural !== null ? topbarMoreNatural : more.offsetWidth); seats++; }
+        }
+        var beta = header.querySelector('.arcade-pill');
+        if (beta) { others += beta.offsetWidth; seats++; }
+        others += gap * (seats + 1 - 1); // +1 for the spacer, −1: N children have N−1 gaps
+        var free = header.clientWidth - others;
+
+        // Narrow at the exact bill; widen only past the hysteresis band.
+        var level = clockTrimLevel;
+        while (level < 2 && faceW[level] > free) level++;
+        while (level > 0 && faceW[level - 1] <= free - FOLD_HYSTERESIS_PX) level--;
+        if (level !== clockTrimLevel) clockApplyTrim(level);
+    }
+
     var foldMeasureRaf = 0;
     function requestFoldMeasures() {
         if (foldMeasureRaf) return;
         foldMeasureRaf = requestAnimationFrame(function () {
             foldMeasureRaf = 0;
+            measureClockTrim();   // TASK-68 — trim first: the fold math reads the clock's live width
             measureTopbarFold();
             measureAddonsTypesFold();
         });
@@ -943,6 +1021,7 @@
         if (typeof bftRenderDisplay === 'function') bftRenderDisplay();
         if (typeof bftRescheduleTick === 'function') bftRescheduleTick();
         if (typeof bftRescheduleSecondsTimer === 'function') bftRescheduleSecondsTimer();
+        clockNatural = null; // TASK-68 — the trim's measured face widths must follow the face change (before the fold pass runs)
         requestFoldMeasures(); // S46B — seconds/mode changes the clock face's real width
         // Toggling seconds ON with a real height already known and no anchor
         // yet: kick the cold-start timestamp fetch immediately so seconds
@@ -1080,6 +1159,7 @@
     }
 
     function navigateArcadeTab(tabId) {
+        navPushCurrent(); // TASK-68 — the nav stack remembers where you came from
         requestFoldMeasures(); // S46B — a panel becoming visible changes what the fold math sees
         if (CUSTOM_TABS[tabId]) {
             // Custom in-shell panel (e.g. Elements): no stock page to drive —
@@ -1106,6 +1186,184 @@
         setArcadeTab(tabId);
     }
     window.arcadeNavigateTab = navigateArcadeTab; // exposed for debugging/CDP verification
+
+    // --------------------------------------------------------------------
+    // TASK-68 (WALK 2A — the navigation doctrine) — the shell NAV-HISTORY
+    // STACK. Every surface change (tab, interior selection, deck section)
+    // pushes the location you LEFT; mouse back/forward buttons (and
+    // Alt+←/→) walk it: back returns to the previous surface, forward
+    // re-enters. A location = { tab, sub } where sub is the panel's own
+    // selection (game / command / goal / section / zone), so back lands
+    // you exactly where you were, not just on the right tab.
+    //
+    // Mouse-button research (this build, Linux/X11): Electron's
+    // main-process 'app-command' (browser-backward/-forward) is the
+    // Windows WM_APPCOMMAND lane and does NOT fire for X11 mouse buttons,
+    // and wiring it would mean a main.js change (banned by the brief). On
+    // X11 the physical back/forward buttons arrive in the renderer as
+    // mousedown button 3 / button 4 — that is the wired lane, here and
+    // (via wireArcadeNavFrame) inside every same-origin embedded frame,
+    // whose events never bubble to the shell document.
+    // --------------------------------------------------------------------
+    var NAV_STACK_MAX = 60;
+    var shellNavStack = [];
+    var shellNavIndex = -1;
+    var shellNavApplying = false;
+
+    // Per-panel sub-state: the selection that makes a surface "where you
+    // were". Getters read the live module vars; setters ride the panels'
+    // own select functions (they re-render + keep aria in sync). All are
+    // called defensively — a panel that isn't live yet simply isn't set.
+    var NAV_SUBSTATE = {
+        addons:   { get: function () { return { type: addonsActiveType }; },
+                    set: function (s) { if (s && s.type) applyAddonsFilter(s.type); } },
+        games:    { get: function () { return { key: gamesSelectedKey }; },
+                    set: function (s) { if (s && s.key && gamesPanelLive) selectGamesKey(s.key); } },
+        commands: { get: function () { return { id: cmdSelectedId }; },
+                    set: function (s) { if (s && s.id && commandsPanelLive) selectCmdRow(s.id); } },
+        goals:    { get: function () { return { id: goalsSelectedId }; },
+                    set: function (s) { if (s && s.id && goalsPanelLive) selectGoalRow(s.id); } },
+        alerts:   { get: function () { return { key: alertsSelectedKey }; },
+                    set: function (s) { if (s && s.key && alertsPanelLive) selectAlertsKey(s.key); } },
+        frames:   { get: function () { return { key: framesSelectedKey }; },
+                    set: function (s) { if (s && s.key && framesPanelLive) selectFramesKey(s.key); } },
+        tipjar:   { get: function () { return { key: tipjarSelectedKey }; },
+                    set: function (s) { if (s && s.key && tipjarPanelLive) selectTipjarKey(s.key); } },
+        settings: { get: function () { return { section: deckSelectedSection, view: deckDiagnosticsView }; },
+                    set: function (s) {
+                        if (!s || !s.section || !deckSettingsLive) return;
+                        if (s.view) deckDiagnosticsView = s.view;
+                        selectDeckSection(s.section, false);
+                    } },
+        ai:       { get: function () { return { zone: aiSelectedZone }; },
+                    set: function (s) { if (s && s.zone && aiPanelLive) selectAiZone(s.zone); } }
+    };
+
+    function navCapture() {
+        var tab = document.body.dataset.arcadeTab || 'main';
+        var sub = null;
+        try { if (NAV_SUBSTATE[tab]) sub = NAV_SUBSTATE[tab].get(); } catch (e) { sub = null; }
+        return { tab: tab, sub: sub };
+    }
+
+    function navSameLoc(a, b) {
+        if (!a || !b) return false;
+        if (a.tab !== b.tab) return false;
+        return JSON.stringify(a.sub || null) === JSON.stringify(b.sub || null);
+    }
+
+    // Push WHERE WE ARE before a change leaves it. Dedupes against the
+    // current position so no-op selects and re-renders never stack junk;
+    // a fresh push truncates the forward lane (classic history doctrine).
+    function navPushCurrent() {
+        if (shellNavApplying) return;
+        var here = navCapture();
+        if (shellNavIndex >= 0 && navSameLoc(shellNavStack[shellNavIndex], here)) return;
+        shellNavStack = shellNavStack.slice(0, shellNavIndex + 1);
+        shellNavStack.push(here);
+        if (shellNavStack.length > NAV_STACK_MAX) shellNavStack.shift();
+        shellNavIndex = shellNavStack.length - 1;
+    }
+
+    function navApplyLocation(loc) {
+        if (!loc || !loc.tab) return;
+        shellNavApplying = true;
+        try {
+            if ((document.body.dataset.arcadeTab || 'main') !== loc.tab) navigateArcadeTab(loc.tab);
+        } catch (e) { /* noop */ }
+        // Sub-state: panels are lazy (ensure*PanelLive resolves async), so
+        // the set is attempted now and retried twice — but only while the
+        // user is still on that tab (never yank a later navigation back).
+        var attempts = [0, 450, 1300];
+        attempts.forEach(function (delay, i) {
+            setTimeout(function () {
+                try {
+                    // never yank a later navigation back — only set while
+                    // the user is still on that tab
+                    if ((document.body.dataset.arcadeTab || 'main') === loc.tab && NAV_SUBSTATE[loc.tab] && loc.sub) {
+                        NAV_SUBSTATE[loc.tab].set(loc.sub);
+                    }
+                } catch (e) { /* noop */ }
+                // the flag clears UNCONDITIONALLY on the last attempt — an
+                // early return above must never freeze the stack (it did:
+                // a quick navigate-away left shellNavApplying stuck true and
+                // every later push was silently swallowed).
+                if (i === attempts.length - 1) shellNavApplying = false;
+            }, delay);
+        });
+    }
+
+    function arcadeNavBack() {
+        navPushCurrent(); // the surface we're leaving becomes the forward lane
+        if (shellNavIndex <= 0) return false;
+        shellNavIndex--;
+        navApplyLocation(shellNavStack[shellNavIndex]);
+        return true;
+    }
+
+    function arcadeNavForward() {
+        if (shellNavIndex >= shellNavStack.length - 1) return false;
+        shellNavIndex++;
+        navApplyLocation(shellNavStack[shellNavIndex]);
+        return true;
+    }
+    window.arcadeNavBack = arcadeNavBack;     // exposed for CDP verification + the Event Flow ← Back door
+    window.arcadeNavForward = arcadeNavForward;
+    window.arcadeNavState = function () { return { depth: shellNavIndex, length: shellNavStack.length, tabs: shellNavStack.map(function (l) { return l.tab; }) }; };
+
+    // Mouse back/forward: mousedown button 3 (back) / 4 (forward) — the X11
+    // lane (see the research note above). preventDefault so no embedded
+    // stock page interprets the gesture on its own.
+    document.addEventListener('mousedown', function (e) {
+        if (e.button === 3) { e.preventDefault(); arcadeNavBack(); }
+        else if (e.button === 4) { e.preventDefault(); arcadeNavForward(); }
+    });
+    // Keyboard lane (H18-A): Alt+← / Alt+→ walk the same stack.
+    document.addEventListener('keydown', function (e) {
+        if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); arcadeNavBack(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); arcadeNavForward(); }
+    });
+
+    // Frame wiring: iframe content swallows mouse events before the shell
+    // document ever sees them, so the same back/forward listener is wired
+    // INSIDE every same-origin frame (the stock frames, the chat dock, the
+    // deck embeds, the device page). Cross-origin frames skip silently.
+    function wireArcadeNavFrame(frame) {
+        if (!frame) return;
+        var hook = function () {
+            try {
+                var doc = frame.contentDocument;
+                if (!doc || doc.__arcadeNavWired) return;
+                doc.__arcadeNavWired = true;
+                doc.addEventListener('mousedown', function (e) {
+                    if (e.button === 3) { e.preventDefault(); arcadeNavBack(); }
+                    else if (e.button === 4) { e.preventDefault(); arcadeNavForward(); }
+                });
+            } catch (e) { /* cross-origin — skip */ }
+        };
+        hook();
+        frame.addEventListener('load', hook);
+    }
+
+    // Interior selection changes are surfaces too: wrap every panel's
+    // select function so a pick pushes where you were. Function
+    // declarations hoist, so the originals are already live at this point;
+    // navPushCurrent's dedupe makes the early-return no-op picks free.
+    function navWrapSelect(fn) {
+        if (typeof fn !== 'function') return fn;
+        return function () { navPushCurrent(); return fn.apply(null, arguments); };
+    }
+    selectGamesKey = navWrapSelect(selectGamesKey);
+    selectCmdRow = navWrapSelect(selectCmdRow);
+    selectGoalRow = navWrapSelect(selectGoalRow);
+    selectAlertsKey = navWrapSelect(selectAlertsKey);
+    selectFramesKey = navWrapSelect(selectFramesKey);
+    selectTipjarKey = navWrapSelect(selectTipjarKey);
+    selectAiZone = navWrapSelect(selectAiZone);
+    applyAddonsFilter = navWrapSelect(applyAddonsFilter);
+    selectDeckSection = navWrapSelect(selectDeckSection);
+
 
     // --------------------------------------------------------------------
     // H17-B (TASK-46/S49 ruled rider) — after a hamburger-sheet pick,
@@ -1451,22 +1709,27 @@
         }
     }
 
-    // Door card — same card shell as an element card (arcade-el-card, CTAs
-    // pinned to the bottom edge per the card-footer law), but its CTA opens
-    // an EXISTING surface in place (the tab id rides the pre-S46 machinery:
-    // ARCADE_TAB_PAGE / CUSTOM_TABS / scroll memory all unchanged).
+    // Door card — TASK-68 (WALK 2A item 4): the card AUTO-OPENS its
+    // interior — no separate "Open" step. The accessible control is the
+    // card's NAME (a real button, focusable, Enter/Space activates); a
+    // click anywhere else on the card delegates to it. The card's other
+    // doors (none on door cards) stay small secondary controls.
     function buildAddonDoorCard(door) {
         var card = document.createElement('article');
-        card.className = 'arcade-el-card';
+        card.className = 'arcade-el-card arcade-el-card--opens';
         card.dataset.arcadeAddon = door.id;
         card.dataset.arcadeAddonCardType = door.addonType || '';
 
         var head = document.createElement('div');
         head.className = 'arcade-el-card__head';
-        var name = document.createElement('h3');
-        name.className = 'arcade-el-card__name';
-        name.textContent = door.name;
-        head.appendChild(name);
+        var nameBtn = document.createElement('button');
+        nameBtn.type = 'button';
+        nameBtn.className = 'arcade-el-card__namebtn';
+        nameBtn.textContent = door.name;
+        nameBtn.setAttribute('aria-label', 'Open ' + door.name);
+        nameBtn.title = door.cta || ('Open ' + door.name);
+        nameBtn.addEventListener('click', function () { navigateArcadeTab(door.tab); });
+        head.appendChild(nameBtn);
         var cat = document.createElement('span');
         cat.className = 'arcade-pill arcade-el-cat';
         cat.textContent = addonTypeLabel(door.addonType).toUpperCase();
@@ -1484,13 +1747,18 @@
 
         var actions = document.createElement('div');
         actions.className = 'arcade-el-card__actions';
-        var openBtn = document.createElement('button');
-        openBtn.type = 'button';
-        openBtn.className = 'arcade-btn arcade-btn--primary';
-        openBtn.textContent = door.cta || 'Open';
-        openBtn.addEventListener('click', function () { navigateArcadeTab(door.tab); });
-        actions.appendChild(openBtn);
+        var openHint = document.createElement('span');
+        openHint.className = 'arcade-el-card__openhint';
+        openHint.textContent = 'Click the card to open ›';
+        actions.appendChild(openHint);
         card.appendChild(actions);
+
+        // Card-body click delegates to the name button (nested controls
+        // keep their own behavior).
+        card.addEventListener('click', function (e) {
+            if (e.target.closest('button, a, input, select, textarea')) return;
+            nameBtn.click();
+        });
 
         return card;
     }
@@ -1507,18 +1775,34 @@
 
     function buildElementCard(el) {
         var ready = el.status === 'ready';
+        // TASK-68 (item 4) — auto-open: a card with an interior (the jars'
+        // Set up → the Tip Jar interior) opens it from the card itself;
+        // overlay-only cards (no interior exists yet) keep Copy as their
+        // primary door and say so honestly.
+        var opensInterior = ready && !!el.setup;
         var card = document.createElement('article');
-        card.className = 'arcade-el-card' + (ready ? '' : ' arcade-el-card--planned');
+        card.className = 'arcade-el-card' + (ready ? '' : ' arcade-el-card--planned') + (opensInterior ? ' arcade-el-card--opens' : '');
         card.dataset.arcadeElement = el.id;
         card.dataset.arcadeElementCategory = el.category || '';
         card.dataset.arcadeAddonCardType = el.addonType || '';
 
         var head = document.createElement('div');
         head.className = 'arcade-el-card__head';
-        var name = document.createElement('h3');
-        name.className = 'arcade-el-card__name';
-        name.textContent = el.name;
-        head.appendChild(name);
+        var nameEl;
+        if (opensInterior) {
+            nameEl = document.createElement('button');
+            nameEl.type = 'button';
+            nameEl.className = 'arcade-el-card__namebtn';
+            nameEl.textContent = el.name;
+            nameEl.setAttribute('aria-label', 'Open ' + el.name + ' setup');
+            nameEl.title = 'Open the ' + el.name + ' interior';
+            nameEl.addEventListener('click', function () { navigateArcadeTab('tipjar'); });
+        } else {
+            nameEl = document.createElement('h3');
+            nameEl.className = 'arcade-el-card__name';
+            nameEl.textContent = el.name;
+        }
+        head.appendChild(nameEl);
         var cat = document.createElement('span');
         cat.className = 'arcade-pill arcade-el-cat arcade-el-cat--' + (el.category || 'default');
         cat.textContent = elementCategoryLabel(el.category);
@@ -1546,16 +1830,21 @@
             actions.className = 'arcade-el-card__actions';
             var copyBtn = document.createElement('button');
             copyBtn.type = 'button';
-            copyBtn.className = 'arcade-btn arcade-btn--primary';
+            // TASK-68 — the auto-open doctrine demotes Copy to the small
+            // secondary door on cards that open; overlay-only cards keep it
+            // primary (copying IS their interior-less workflow).
+            copyBtn.className = opensInterior ? 'arcade-btn arcade-btn--sm' : 'arcade-btn arcade-btn--primary';
             copyBtn.textContent = 'Copy overlay URL';
             copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
             actions.appendChild(copyBtn);
             // S50 — MONEY placement law: the Tip Jar's Set up opens from the
             // Money card, NEVER inside Frames & Cameras or any other surface.
+            // TASK-68 — on an auto-open card the whole card IS the Set up
+            // door; the small secondary button stays for discoverability.
             if (el.setup) {
                 var setupBtn = document.createElement('button');
                 setupBtn.type = 'button';
-                setupBtn.className = 'arcade-btn';
+                setupBtn.className = 'arcade-btn arcade-btn--sm';
                 setupBtn.textContent = 'Set up';
                 setupBtn.addEventListener('click', function () { navigateArcadeTab('tipjar'); });
                 actions.appendChild(setupBtn);
@@ -1563,7 +1852,64 @@
             card.appendChild(actions);
         }
 
+        if (opensInterior) {
+            card.addEventListener('click', function (e) {
+                if (e.target.closest('button, a, input, select, textarea')) return;
+                nameEl.click();
+            });
+        }
+
         return card;
+    }
+
+    // TASK-68 (WALK 2A item 4) — the breadcrumb trail every Add-ons door
+    // interior carries at the TOP of its left list: where you came from
+    // (‹ Add-ons — climbs back one level, the nav stack's forward lane
+    // re-enters here) and where you are. Keyboard: it's a real button in
+    // the column's tab order, first stop in the interior.
+    function buildAddonsCrumb(currentLabel) {
+        var nav = document.createElement('nav');
+        nav.className = 'arcade-crumb';
+        nav.setAttribute('aria-label', 'Breadcrumb');
+        var back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'arcade-crumb__back';
+        back.textContent = '‹ Add-ons';
+        back.title = 'Back to the Add-ons gallery';
+        back.setAttribute('aria-label', 'Back to the Add-ons gallery');
+        back.addEventListener('click', function () { navigateArcadeTab('addons'); });
+        nav.appendChild(back);
+        var sep = document.createElement('span');
+        sep.className = 'arcade-crumb__sep';
+        sep.setAttribute('aria-hidden', 'true');
+        sep.textContent = '/';
+        nav.appendChild(sep);
+        var here = document.createElement('span');
+        here.className = 'arcade-crumb__here';
+        here.setAttribute('aria-current', 'location');
+        here.textContent = currentLabel;
+        nav.appendChild(here);
+        return nav;
+    }
+
+    // One crumb per door interior, prepended to its left list column at
+    // boot. Event Flow + VDO are stock-underlay tabs (no shell left list) —
+    // Event Flow's trail is its ← Back door (item 6); VDO keeps none.
+    function installAddonsCrumbs() {
+        [
+            ['.arcade-alerts', 'Alerts'],
+            ['.arcade-games', 'Games'],
+            ['.arcade-commands', 'Commands'],
+            ['.arcade-goals', 'Goal Bars'],
+            ['.arcade-frames', 'Frames & Cameras'],
+            ['.arcade-tipjar', 'Tip Jar']
+        ].forEach(function (entry) {
+            var panel = document.querySelector(entry[0]);
+            if (!panel) return;
+            var col = panel.querySelector('.arcade-evt-list-col');
+            if (!col || col.querySelector('.arcade-crumb')) return;
+            col.insertBefore(buildAddonsCrumb(entry[1]), col.firstChild);
+        });
     }
 
     // Build the copyable OBS overlay URL for an element via the app's OWN
@@ -1991,23 +2337,18 @@
     }
 
     function buildAiToggleRow(label, title, key, onAfter) {
-        var row = document.createElement('div');
-        row.className = 'arcade-alert-row';
-        var lbl = document.createElement('label');
-        lbl.textContent = label;
-        if (title) lbl.title = title;
-        row.appendChild(lbl);
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = aiSettingFlag(key);
-        input.setAttribute('aria-label', label);
-        input.addEventListener('change', function () {
-            aiSettings[key] = { setting: input.checked }; // keep the snapshot honest for dependent rows
-            saveDeckSetting('setting', key, input.checked);
-            if (onAfter) onAfter(input.checked);
+        // TASK-68 — the shared .arcade-toggle component (item 8 sweep).
+        return buildArcadeToggle({
+            label: label,
+            hint: title,
+            ariaLabel: label,
+            checked: aiSettingFlag(key),
+            onChange: function (checked) {
+                aiSettings[key] = { setting: checked }; // keep the snapshot honest for dependent rows
+                saveDeckSetting('setting', key, checked);
+                if (onAfter) onAfter(checked);
+            }
         });
-        row.appendChild(input);
-        return row;
     }
 
     function buildAiTextRow(label, key, placeholder, onAfter) {
@@ -3922,20 +4263,15 @@
             var styleSection = document.createElement('div');
             styleSection.className = 'arcade-evt-style';
 
-            var enableRow = document.createElement('div');
-            enableRow.className = 'arcade-alert-row';
-            var enableLbl = document.createElement('label');
-            enableLbl.textContent = 'Enabled';
-            enableRow.appendChild(enableLbl);
-            var enableInput = document.createElement('input');
-            enableInput.type = 'checkbox';
-            enableInput.checked = st.enabled;
-            enableInput.dataset.arcadeAlertField = 'enabled';
-            enableInput.addEventListener('change', function () {
-                setAlertField(category, 'enabled', enableInput.checked, null);
-                renderAlertsConfig();
+            var enableRow = buildArcadeToggle({ // TASK-68 — shared .arcade-toggle (item 8 sweep)
+                label: 'Enabled',
+                checked: st.enabled,
+                onChange: function (checked) {
+                    setAlertField(category, 'enabled', checked, null);
+                    renderAlertsConfig();
+                }
             });
-            enableRow.appendChild(enableInput);
+            enableRow.querySelector('input').dataset.arcadeAlertField = 'enabled';
             styleSection.appendChild(enableRow);
 
             var accentRow = buildAlertFieldRow(category, 'accent', 'Accent', CATEGORY_ACCENT_DEFAULTS[category] || '#9146ff');
@@ -4022,19 +4358,17 @@
         title.textContent = 'Priority condition — this variant’s flow fires only when:';
         box.appendChild(title);
 
-        var ftLabel = document.createElement('label');
-        ftLabel.className = 'arcade-evt-cond__opt';
-        var ftInput = document.createElement('input');
-        ftInput.type = 'checkbox';
-        ftInput.checked = !!variant.condition.firsttime;
-        ftInput.title = 'Rides the real firsttime message property — needs the stock first-timers setting on (background.js sets firsttime only then)';
-        ftInput.addEventListener('change', function () {
-            variant.condition.firsttime = ftInput.checked;
-            saveAlertsDoc();
-            syncVariantFlowCondition(category, variant);
+        var ftLabel = buildArcadeToggle({ // TASK-68 — shared .arcade-toggle (item 8 sweep)
+            label: 'first-time chatter',
+            hint: 'Rides the real firsttime message property — needs the stock first-timers setting on (background.js sets firsttime only then)',
+            checked: !!variant.condition.firsttime,
+            onChange: function (checked) {
+                variant.condition.firsttime = checked;
+                saveAlertsDoc();
+                syncVariantFlowCondition(category, variant);
+            }
         });
-        ftLabel.appendChild(ftInput);
-        ftLabel.appendChild(document.createTextNode('first-time chatter'));
+        ftLabel.classList.add('arcade-evt-cond__opt-toggle');
         // S47B (ruled D1-B) — one-click first-timers switch, rendered ONLY
         // while the stock `firsttimers` setting is off (state re-read from
         // the background page on every render — no polling, NO auto-enable
@@ -5014,12 +5348,14 @@
         config.innerHTML = '';
         var copyBtn = document.getElementById('arcade-games-copy');
         if (gamesSelectedKey === GAME_POINTS_KEY) {
-            if (copyBtn) copyBtn.textContent = 'Copy leaderboard URL';
+            // TASK-68 — the head copy door NAMES what it copies (the Admiral's
+            // "weird link" was an unlabelled copy of whatever was selected).
+            if (copyBtn) copyBtn.textContent = 'Copy URL — Leaderboard';
             renderPointsConfig(config);
             return;
         }
-        if (copyBtn) copyBtn.textContent = 'Copy overlay URL';
         var game = findGame(gamesSelectedKey);
+        if (copyBtn) copyBtn.textContent = game ? ('Copy URL — ' + game.name) : 'Copy overlay URL';
         if (!game) {
             var empty = document.createElement('p');
             empty.className = 'arcade-evt-blurb';
@@ -5110,6 +5446,15 @@
 
         var doors = document.createElement('div');
         doors.className = 'arcade-evt-doors';
+        // TASK-68 — the per-game copy door INSIDE the config: unambiguous
+        // about what it copies (the head button follows the selection).
+        var cfgCopyBtn = document.createElement('button');
+        cfgCopyBtn.type = 'button';
+        cfgCopyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        cfgCopyBtn.textContent = 'Copy overlay URL';
+        cfgCopyBtn.title = 'The live overlay URL for ' + game.name + ' — real session, your style flags, never the demo';
+        cfgCopyBtn.addEventListener('click', function () { copyGamesOverlayUrl(cfgCopyBtn); });
+        doors.appendChild(cfgCopyBtn);
         var styleBtn = document.createElement('button');
         styleBtn.type = 'button';
         styleBtn.className = 'arcade-btn arcade-btn--sm';
@@ -5205,27 +5550,66 @@
         section.appendChild(fontNote);
     }
 
-    function buildGameToggleRow(game, field, label, hint) {
-        var row = document.createElement('div');
-        row.className = 'arcade-evt-cond__opt';
+    // --------------------------------------------------------------------
+    // TASK-68 (WALK 2A item 8) — .arcade-toggle, the ONE shared switch for
+    // every enable-class checkbox on NATIVE arcade surfaces. Real toggle
+    // look (track + thumb, clear on/off color states — the CSS lives in
+    // arcade-shell.css, body.arcade-shell-scoped), label + control ADJACENT
+    // (the old label-left / checkbox-far-right grid gap is gone), label
+    // text never wraps under the control. The input stays a real checkbox
+    // inside the label — keyboard (Tab/Space) and screen-reader semantics
+    // are the native ones; aria-label/labelledby carry over per call site.
+    // Embedded STOCK checkboxes (inside dressed stock frames) stay stock —
+    // dress only — per the ruling.
+    // --------------------------------------------------------------------
+    function buildArcadeToggle(opts) {
+        // opts: { id, label, checked, hint, ariaLabel, bare, onChange(checked) }
+        // bare: no text span — the surrounding row already carries the label
+        // (the Style builder's control rows); label + control adjacency is
+        // then the row's own grid, the switch is the control.
+        var wrap = document.createElement('label');
+        wrap.className = 'arcade-toggle' + (opts.bare ? ' arcade-toggle--bare' : '');
         var input = document.createElement('input');
         input.type = 'checkbox';
-        input.id = 'arcade-game-' + field + '-' + game.id;
-        input.checked = !!gameStyleFor(game.id)[field];
-        var lbl = document.createElement('label');
-        lbl.htmlFor = input.id;
-        lbl.textContent = label;
-        if (hint) lbl.title = hint;
-        input.addEventListener('change', function () {
-            var st = gameStyleDoc[game.id] && typeof gameStyleDoc[game.id] === 'object' ? gameStyleDoc[game.id] : {};
-            st[field] = !!input.checked;
-            gameStyleDoc[game.id] = st;
-            saveGameStyles();
-            queueGamesPreviewReload(); // the preview wears the configured look
+        input.className = 'arcade-toggle__input';
+        if (opts.id) input.id = opts.id;
+        input.checked = !!opts.checked;
+        if (opts.ariaLabel) input.setAttribute('aria-label', opts.ariaLabel);
+        var track = document.createElement('span');
+        track.className = 'arcade-toggle__track';
+        track.setAttribute('aria-hidden', 'true');
+        var thumb = document.createElement('span');
+        thumb.className = 'arcade-toggle__thumb';
+        track.appendChild(thumb);
+        wrap.appendChild(input);
+        wrap.appendChild(track);
+        if (!opts.bare) {
+            var text = document.createElement('span');
+            text.className = 'arcade-toggle__label';
+            text.textContent = opts.label;
+            wrap.appendChild(text);
+        }
+        if (opts.hint) { wrap.title = opts.hint; }
+        if (typeof opts.onChange === 'function') {
+            input.addEventListener('change', function () { opts.onChange(!!input.checked); });
+        }
+        return wrap;
+    }
+
+    function buildGameToggleRow(game, field, label, hint) {
+        return buildArcadeToggle({
+            id: 'arcade-game-' + field + '-' + game.id,
+            label: label,
+            hint: hint,
+            checked: !!gameStyleFor(game.id)[field],
+            onChange: function (checked) {
+                var st = gameStyleDoc[game.id] && typeof gameStyleDoc[game.id] === 'object' ? gameStyleDoc[game.id] : {};
+                st[field] = checked;
+                gameStyleDoc[game.id] = st;
+                saveGameStyles();
+                queueGamesPreviewReload(); // the preview wears the configured look
+            }
         });
-        row.appendChild(input);
-        row.appendChild(lbl);
-        return row;
     }
 
     // --------------------------------------------------------------------
@@ -5356,7 +5740,23 @@
         }
         buildGamesOverlayUrl().then(function (url) {
             if (!url) throw new Error('empty overlay url');
-            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
+            return copyToClipboard(url).then(function () {
+                flashButton(btn, 'Copied ✓');
+                // TASK-68 — the copy SAYS what rode (the Admiral's copy
+                // "lost &transparent" with no hint of what was in it). The
+                // session id itself is never echoed — names and flags only.
+                var game = gamesSelectedKey === GAME_POINTS_KEY ? null : findGame(gamesSelectedKey);
+                var rode = [];
+                if (game) {
+                    var st = gameStyleFor(game.id);
+                    if (game.chroma && st.chroma) rode.push('chroma');
+                    if (game.transparent && st.transparent) rode.push('transparent');
+                    if (game.dark && st.dark) rode.push('darkmode');
+                    var suffix = sanitizeGameCmdSuffix(gameCmdSuffix[game.id] || '');
+                    if (game.cmdsuffix && suffix) rode.push('cmdsuffix=' + suffix);
+                }
+                setGamesStatus('Copied — ' + (game ? game.name + ' overlay' : 'leaderboard') + ' URL: real session' + (rode.length ? ' + ' + rode.join(' + ') : '') + ', never the demo room.');
+            });
         }).catch(function (e) {
             console.error('[arcade-shell] copy games overlay url failed:', e);
             flashButton(btn, 'Copy failed', 2200);
@@ -6041,10 +6441,22 @@
             empty.textContent = 'No commands yet — “+ New command” seeds a real event flow.';
             list.appendChild(empty);
         }
-        cmdRows.forEach(function (row) {
+
+        // TASK-68 (WALK 2A item 7) — the user's ACTIVE commands lead as
+        // sub-items of the Commands crumb (indented one notch under the
+        // breadcrumb trail); paused commands, timers and the imported house
+        // flows follow under their own small group captions. Click any row
+        // = its config on the right (unchanged selectCmdRow contract).
+        function caption(text) {
+            var cap = document.createElement('div');
+            cap.className = 'arcade-evt-group__title';
+            cap.textContent = text;
+            list.appendChild(cap);
+        }
+        function cmdRowBtn(row, sub) {
             var btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'arcade-evt-item';
+            btn.className = 'arcade-evt-item' + (sub ? ' arcade-evt-item--sub' : '');
             btn.dataset.arcadeCmdId = row.flowId;
             btn.setAttribute('role', 'option');
             var selected = cmdSelectedId === row.flowId;
@@ -6062,8 +6474,30 @@
             state.title = row.active ? 'The backing flow is active' : 'The backing flow is paused';
             btn.appendChild(state);
             btn.addEventListener('click', function () { selectCmdRow(row.flowId); });
-            list.appendChild(btn);
-        });
+            return btn;
+        }
+
+        var activeCmds = cmdRows.filter(function (r) { return r.kind === 'command' && r.active; });
+        var pausedCmds = cmdRows.filter(function (r) { return r.kind === 'command' && !r.active; });
+        var timers = cmdRows.filter(function (r) { return r.kind === 'timer'; });
+        var imported = cmdRows.filter(function (r) { return r.kind === 'imported'; });
+
+        if (activeCmds.length) {
+            caption('Active commands');
+            activeCmds.forEach(function (row) { list.appendChild(cmdRowBtn(row, true)); });
+        }
+        if (pausedCmds.length) {
+            caption('Paused');
+            pausedCmds.forEach(function (row) { list.appendChild(cmdRowBtn(row, true)); });
+        }
+        if (timers.length) {
+            caption('Timers');
+            timers.forEach(function (row) { list.appendChild(cmdRowBtn(row, true)); });
+        }
+        if (imported.length) {
+            caption('Imported');
+            imported.forEach(function (row) { list.appendChild(cmdRowBtn(row, true)); });
+        }
         // Honest import hint — the S41 house flows only exist once the
         // operator imports them (outbox task-38-s41 JSONs).
         if (!cmdRows.some(function (r) { return r.kind === 'imported'; })) {
@@ -6283,29 +6717,25 @@
     }
 
     function appendCmdActiveAndDelete(config, row) {
-        var activeRow = document.createElement('label');
-        activeRow.className = 'arcade-clock-seconds arcade-cmd-active';
-        var activeInput = document.createElement('input');
-        activeInput.type = 'checkbox';
-        activeInput.checked = row.active;
-        activeInput.addEventListener('change', function () {
-            row.active = activeInput.checked;
-            if (!row.restructured) queueCmdSave(row);
-            else {
-                // Restructured flows only get their active flag touched —
-                // never a node rewrite.
-                withAlertFlowSystem(function (fsys) {
-                    var flow = fsys.flows.find(function (f) { return f.id === row.flowId; });
-                    if (flow) { flow.active = row.active; return fsys.saveFlow(flow); }
-                    return null;
-                }).catch(function (e) { console.error('[arcade-shell] command active-toggle failed:', e); });
+        var activeRow = buildArcadeToggle({ // TASK-68 — shared .arcade-toggle (item 8 sweep)
+            label: 'active (the flow fires)',
+            checked: row.active,
+            onChange: function (checked) {
+                row.active = checked;
+                if (!row.restructured) queueCmdSave(row);
+                else {
+                    // Restructured flows only get their active flag touched —
+                    // never a node rewrite.
+                    withAlertFlowSystem(function (fsys) {
+                        var flow = fsys.flows.find(function (f) { return f.id === row.flowId; });
+                        if (flow) { flow.active = row.active; return fsys.saveFlow(flow); }
+                        return null;
+                    }).catch(function (e) { console.error('[arcade-shell] command active-toggle failed:', e); });
+                }
+                renderCmdList();
             }
-            renderCmdList();
         });
-        activeRow.appendChild(activeInput);
-        var activeSpan = document.createElement('span');
-        activeSpan.textContent = 'active (the flow fires)';
-        activeRow.appendChild(activeSpan);
+        activeRow.classList.add('arcade-cmd-active');
         config.appendChild(activeRow);
 
         var doors = document.createElement('div');
@@ -7344,7 +7774,7 @@
     function buildFramesListRow(opts) {
         var row = document.createElement('button');
         row.type = 'button';
-        row.className = 'arcade-evt-item';
+        row.className = 'arcade-evt-item' + (opts.sub ? ' arcade-evt-item--sub' : '');
         row.dataset.arcadeFramesKey = opts.key;
         row.setAttribute('role', 'option');
         var selected = framesSelectedKey === opts.key;
@@ -7368,7 +7798,39 @@
         var list = document.getElementById('arcade-frames-list');
         if (!list) return;
         list.innerHTML = '';
-        list.appendChild(buildFramesListRow({ key: FRAMES_DEVICE_KEY, icon: '📷', label: 'Add a device' }));
+        // TASK-68 (WALK 2A item 9) — "Add a device" and "Frames" fold under
+        // ONE left entry (the nesting the Admiral drew): a collapsible
+        // Camera & frames group, expanded by default, sub-rows indented.
+        // The group head is a disclosure control, NOT a listbox option —
+        // arrow-walking still lands only on real destinations.
+        var group = document.createElement('button');
+        group.type = 'button';
+        group.className = 'arcade-evt-item arcade-frames-grouphead';
+        group.setAttribute('aria-expanded', list.dataset.framesGroupOpen !== '0' ? 'true' : 'false');
+        group.setAttribute('aria-label', 'Camera and frames — fold or unfold the group');
+        var groupLabel = document.createElement('span');
+        groupLabel.className = 'arcade-evt-item__label';
+        groupLabel.textContent = '📷 Camera & frames';
+        group.appendChild(groupLabel);
+        var chevron = document.createElement('span');
+        chevron.className = 'arcade-frames-grouphead__chev';
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.textContent = list.dataset.framesGroupOpen !== '0' ? '▾' : '▸';
+        group.appendChild(chevron);
+        list.appendChild(group);
+        var subs = document.createElement('div');
+        subs.className = 'arcade-frames-groupsubs';
+        subs.hidden = list.dataset.framesGroupOpen === '0';
+        subs.appendChild(buildFramesListRow({ key: FRAMES_DEVICE_KEY, icon: '➕', label: 'Add a device', sub: true }));
+        subs.appendChild(buildFramesListRow({ key: FRAMES_STYLE_ZONE_KEY, icon: '🖼', label: 'Frames', sub: true }));
+        list.appendChild(subs);
+        group.addEventListener('click', function () {
+            var open = list.dataset.framesGroupOpen !== '0';
+            list.dataset.framesGroupOpen = open ? '0' : '1';
+            subs.hidden = open;
+            group.setAttribute('aria-expanded', String(!open));
+            chevron.textContent = open ? '▸' : '▾';
+        });
         var guestsHeader = document.createElement('div');
         guestsHeader.className = 'arcade-evt-group__title';
         guestsHeader.textContent = 'Guests';
@@ -7382,7 +7844,6 @@
             none.textContent = 'No guests yet — an invite link mints from a name.';
             list.appendChild(none);
         }
-        list.appendChild(buildFramesListRow({ key: FRAMES_STYLE_ZONE_KEY, icon: '🖼', label: 'Frames' }));
     }
 
     function selectFramesKey(key) {
@@ -7405,6 +7866,39 @@
         framesSelectedKey = FRAMES_DEVICE_KEY;
         renderFramesList();
         renderFramesDeviceConfig(host);
+    }
+
+    // TASK-68 (WALK 2A item 9) — the embedded camera page FILLS the pane:
+    // the frame is sized to its content's real height (same-origin measure,
+    // re-measured on content resize), so the PANE scrolls and the frame
+    // never grows its own inner scrollbar. Cross-origin/hosted frames keep
+    // the CSS fallback height honestly (can't measure what we can't reach).
+    function fitArcadeFrameToContent(frame) {
+        if (!frame) return;
+        var apply = function () {
+            try {
+                var doc = frame.contentDocument;
+                if (!doc || !doc.documentElement) return;
+                var h = Math.max(
+                    doc.documentElement.scrollHeight || 0,
+                    doc.body ? doc.body.scrollHeight : 0,
+                    360 // never collapse to nothing — the honest floor
+                );
+                // only write on a real change — a redundant write re-feeds the observer
+                if (Math.abs((parseFloat(frame.style.height) || 0) - h) > 2) frame.style.height = h + 'px';
+            } catch (e) { /* cross-origin — the CSS fallback stands */ }
+        };
+        apply();
+        try {
+            var doc = frame.contentDocument;
+            if (doc && doc.body && typeof ResizeObserver === 'function') {
+                // rAF-deferred: a synchronous write inside the callback loops
+                // the observer (the frame's new height changes the observed
+                // body) and Chromium fires "ResizeObserver loop" errors.
+                var ro = new ResizeObserver(function () { requestAnimationFrame(apply); });
+                ro.observe(doc.body);
+            }
+        } catch (e) { /* noop */ }
     }
 
     function renderFramesDeviceConfig(host) {
@@ -7434,6 +7928,9 @@
                     frame.addEventListener('load', function () {
                         injectDressIntoFrame(frame, 'arcade-dress-vdo', DRESS_VDO_CSS);
                         maskSessionIdSurfaces(frame.contentDocument, null);
+                        wireArcadeNavFrame(frame); // TASK-68 — mouse back/forward inside the embed drives the shell stack
+                        fitArcadeFrameToContent(frame); // TASK-68 — the frame FILLS the pane; the pane scrolls, never the frame
+                        frame.classList.add('is-live'); // TASK-68 — hidden until dress + first mask pass (no unmasked first paint)
                     });
                     frame.src = resolved.url;
                 }
@@ -9424,6 +9921,7 @@
         if (ctl.kind === 'toggle') {
             input = document.createElement('input');
             input.type = 'checkbox';
+            input.className = 'arcade-toggle__input'; // TASK-68 — the shared switch look (item 8 sweep); the row's own label stays the text side
             input.addEventListener('change', function () { setStyleValue(ctl.id, input.checked ? true : ''); syncStyleControlsFromState(); });
         } else if (ctl.kind === 'color') {
             input = document.createElement('input');
@@ -9479,6 +9977,15 @@
         }
         input.id = 'arcade-style-ctl-' + ctl.id;
         row.appendChild(input);
+        if (ctl.kind === 'toggle') { // TASK-68 — the switch's track rides the shared .arcade-toggle CSS (input + track sibling idiom)
+            var styleTrack = document.createElement('span');
+            styleTrack.className = 'arcade-toggle__track';
+            styleTrack.setAttribute('aria-hidden', 'true');
+            var styleThumb = document.createElement('span');
+            styleThumb.className = 'arcade-toggle__thumb';
+            styleTrack.appendChild(styleThumb);
+            row.appendChild(styleTrack);
+        }
         if (input.__fontCustom) row.appendChild(input.__fontCustom);
         if (ctl.kind === 'range') {
             var val = document.createElement('span');
@@ -12071,6 +12578,13 @@
         '.glowingButton:before, .glowingButton:after { background: rgba(53, 208, 255, 0.16); border-radius: 6px; }',
         '#searchInput { background: #191c22; border: 1px solid #2a2e37; border-radius: 6px; color: #f2f0ea; }',
         '#searchInput::placeholder { color: #9ba1ad; }',
+        /* TASK-68 (WALK 2A item 3) — the session embed's floating labels
+           become PROPER ROWS (stock's .textInput + label idiom parks the
+           label ON the input until focus; in the embed that read as the
+           password box / session box / description text overlapping). */
+        '#arcade-deck-popup-root .textInputContainer { display: block; width: 100% !important; margin: 10px 0 2px; }',
+        '#arcade-deck-popup-root .textInput + label { position: static; display: block; padding: 2px 0 0; font-size: 1em; color: #9ba1ad; cursor: default; pointer-events: none; }',
+        '#arcade-deck-popup-root .textInput + label::before { display: none; }',
         /* TASK-66 — the session id goes quiet: the mask class (JS pass adds it
            wherever the id renders) + the raw session field itself, which
            popup.js fills asynchronously (popup.js:3984) — CSS catches the
@@ -12376,17 +12890,119 @@
         setTimeout(run, 3000);
     }
 
+    // TASK-68 (WALK 2A item 3) — NO UNMASKED FIRST PAINT. The stock frames
+    // boot visibility:hidden (CSS, from stylesheet parse) and are revealed
+    // only after the dress <style> (which CSS-masks every known session
+    // carrier: #session-id, #sessionid, #debugOutput, the vdo links/QR) is
+    // confirmed IN the frame document and the first text/value mask pass
+    // has run. A safety timer reveals regardless at 6s — a hosted/cross-
+    // origin frame can't be dressed, and a stuck-hidden pane is worse than
+    // a dressed-late one.
+    function revealStockFrameWhenMasked(frame) {
+        if (!frame || frame.dataset.arcadeMaskGate === 'done') return;
+        var reveal = function () {
+            if (frame.dataset.arcadeMaskGate === 'done') return;
+            frame.dataset.arcadeMaskGate = 'done';
+            frame.classList.add('arcade-frame-live');
+        };
+        var tryReveal = function () {
+            if (frame.dataset.arcadeMaskGate === 'done') return;
+            try {
+                var doc = frame.contentDocument;
+                if (!doc || !doc.head) return; // not loaded yet — the load listener re-fires us
+                var dressed = doc.getElementById('arcade-dress-popup') || doc.getElementById('arcade-dress-dashboard') || doc.getElementById('arcade-dress-vdo');
+                if (!dressed) return; // dress pending — wait for the next tick/load
+                maskSessionIdSurfaces(doc, null); // first text/value pass BEFORE reveal
+                reveal();
+            } catch (e) {
+                reveal(); // cross-origin/hosted — can't dress, don't hold the pane hostage
+            }
+        };
+        // Poll briefly across the load window (the dress lands on the same
+        // load event; ordering between listeners isn't guaranteed).
+        var tries = 0;
+        var tick = function () {
+            if (frame.dataset.arcadeMaskGate === 'done') return;
+            tryReveal();
+            if (++tries < 12 && frame.dataset.arcadeMaskGate !== 'done') setTimeout(tick, 250);
+        };
+        tick();
+        setTimeout(reveal, 6000); // the safety valve, documented above
+    }
+
+    // TASK-68 (WALK 2A item 6) — the Event Flow editor's "← Back to
+    // Dashboard" was misleading (it always landed on the connection-status
+    // dashboard, never where the user came from). Rewired in place: the
+    // button becomes "← Back" and walks the shell's nav stack (capture-
+    // phase, ahead of dashboard.js's own listener — which stays as the
+    // honest fallback when the stack is empty). The in-frame "Open the
+    // Action Flow Editor" door pushes the current location first, so back
+    // from the editor lands exactly whence the user came.
+    function wireEventFlowBackDoor(frame) {
+        if (!frame) return;
+        var hook = function () {
+            var doc;
+            try { doc = frame.contentDocument; } catch (e) { return; }
+            if (!doc) return;
+            try {
+                var openBtn = doc.getElementById('showEditorViewButton');
+                if (openBtn && openBtn.dataset.arcadeNavPush !== '1') {
+                    openBtn.dataset.arcadeNavPush = '1';
+                    openBtn.addEventListener('click', function () { navPushCurrent(); }, true);
+                }
+                var btn = doc.getElementById('back-to-dashboard');
+                if (!btn || btn.dataset.arcadeBackWired === '1') return;
+                btn.dataset.arcadeBackWired = '1';
+                btn.textContent = '← Back';
+                btn.setAttribute('aria-label', 'Back — return to where you came from');
+                btn.title = 'Back to where you came from — the shell remembers your path (empty path: the dashboard, stock behaviour)';
+                btn.addEventListener('click', function (e) {
+                    if (shellNavIndex > 0 && arcadeNavBack()) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation(); // ahead of dashboard.js's showDashboardView
+                    } // empty stack: fall through to the stock dashboard, honestly
+                }, true);
+            } catch (e) { /* noop */ }
+        };
+        hook();
+        frame.addEventListener('load', hook);
+    }
+
     function installStockFrameDressing() {
         dressStockFrame('frame1', 'arcade-dress-popup', DRESS_POPUP_CSS);
         dressStockFrame('frame2', 'arcade-dress-dashboard', DRESS_DASHBOARD_CSS);
         dressStockFrame('frame3', 'arcade-dress-vdo', DRESS_VDO_CSS);
+        // TASK-68 — the stock frames get honest accessible names (H18-A);
+        // arcade-mode DOM only, stock untouched.
+        try {
+            var titles = { frame1: 'Stock settings page', frame2: 'Status, logs and the Event Flow editor', frame3: 'VDO.Ninja cameras' };
+            Object.keys(titles).forEach(function (fid) {
+                var fr = document.getElementById(fid);
+                if (fr && !fr.getAttribute('title')) fr.setAttribute('title', titles[fid]);
+            });
+        } catch (e) { /* noop */ }
         // TASK-66 — the mask pass rides the same frames (load + re-runs).
         ['frame1', 'frame2', 'frame3'].forEach(function (frameId) {
             var frame = document.getElementById(frameId);
             if (!frame) return;
             maskStockFrame(frame);
             frame.addEventListener('load', function () { maskStockFrame(frame); });
+            // TASK-68 — first-paint mask law: the frame starts visibility-
+            // hidden (arcade-shell.css, from stylesheet parse — before any
+            // paint) and is revealed only once the dress (whose CSS masks
+            // every known session carrier) AND the first mask pass have
+            // landed. The 6s fallback keeps a dress failure (hosted frame,
+            // cross-origin) from ever pinning a pane invisible — a missed
+            // dress is cosmetic, a dead pane is not.
+            revealStockFrameWhenMasked(frame);
+            frame.addEventListener('load', function () { revealStockFrameWhenMasked(frame); });
+            // TASK-68 — mouse back/forward inside the frame's document
+            // drives the shell nav stack (iframe events never bubble up).
+            wireArcadeNavFrame(frame);
         });
+        wireArcadeNavFrame(document.getElementById('chat-dock-frame'));
+        // TASK-68 — the Event Flow editor's ← Back door (frame2 document).
+        wireEventFlowBackDoor(document.getElementById('frame2'));
 
         // welcomeFrame is created/destroyed on demand by libs.js's
         // manageWelcomePage() (only while zero sources are configured) — watch
@@ -12768,8 +13384,16 @@
     // same gesture as a relaunch). Byte-identity law: the switched-stock
     // path is cmp-proven identical to base stock, exactly like SSN_SHELL=stock.
     // --------------------------------------------------------------------
-    var SHELL_INTERFACE_KEY = 'arcadeShellInterface'; // canonical record: 'arcade' | 'stock'
-    var SHELL_INTERFACE_LS = 'ssnShellInterface';     // boot-read mirror (index.html reads it synchronously)
+    // TASK-68 (WALK 2A, ruled semantics) — switching to Stock is THIS
+    // SESSION ONLY: the flag never persists stock, and it is consumed at
+    // boot (index.html removes it after reading), so closing/reloading
+    // ALWAYS boots the arcade again. SSN_SHELL=stock stays the persistent
+    // stock lane. The session flag also beats an exported SSN_SHELL=arcade —
+    // the in-app switch must work even where a launcher exports the var
+    // (that pin was why the confirm→reload "did nothing": the click saved
+    // a flag the boot then ignored).
+    var SHELL_INTERFACE_KEY = 'arcadeShellInterface'; // canonical record: only ever 'arcade' now (stock is never persisted)
+    var SHELL_INTERFACE_LS = 'ssnShellInterface';     // session stock flag — consume-once at boot (index.html)
 
     function currentShellInterface() {
         try {
@@ -12777,12 +13401,11 @@
             if (typeof process !== 'undefined' && process && process.env && process.env.SSN_SHELL) {
                 envShell = String(process.env.SSN_SHELL).toLowerCase();
             }
-            if (envShell === 'stock' || envShell === 'arcade') return { mode: envShell, source: 'env' };
+            if (envShell === 'stock') return { mode: 'stock', source: 'env' };
         } catch (e) { /* noop */ }
         var ls = '';
         try { ls = String(localStorage.getItem(SHELL_INTERFACE_LS) || '').toLowerCase(); } catch (e) { /* noop */ }
-        if (ls === 'stock') return { mode: 'stock', source: 'switch' };
-        if (ls === 'arcade') return { mode: 'arcade', source: 'switch' };
+        if (ls === 'stock') return { mode: 'stock', source: 'switch' }; // this boot only — the boot script has consumed it for next time
         return { mode: 'arcade', source: 'default' };
     }
 
@@ -12802,7 +13425,7 @@
 
         var line = document.createElement('p');
         line.className = 'arcade-evt-blurb';
-        line.textContent = 'Arcade is this fork’s default chrome — an additive layer over the same app. Stock is Steve’s original UI, byte-for-byte unchanged. Switching reloads the window: everything re-boots in the other interface. From Stock, the way back is launching once with SSN_SHELL=arcade (the environment wins) and re-picking Arcade here.';
+        line.textContent = 'Arcade is this fork’s default chrome — an additive layer over the same app. Stock is Steve’s original UI, byte-for-byte unchanged. Switching reloads the window: everything re-boots in the other interface. Stock is a this-window-only visit — close or reload and you boot right back into the Arcade. (Launching with SSN_SHELL=stock is the persistent stock lane.)';
         body.appendChild(line);
 
         var group = document.createElement('div');
@@ -12826,8 +13449,8 @@
         var state = document.createElement('div');
         state.className = 'arcade-evt-cond__hint';
         state.textContent = cur.source === 'env'
-            ? ('Currently: ' + cur.mode + ' — pinned by the SSN_SHELL environment variable at launch; the switch is ignored while that variable is set.')
-            : (cur.source === 'switch' ? ('Currently: ' + cur.mode + ' — chosen here.') : 'Currently: arcade — the fork default (nothing chosen yet).');
+            ? 'Currently: stock — pinned by SSN_SHELL=stock at launch (the persistent stock lane).'
+            : 'Currently: arcade — the fork default. A stock visit from here never sticks: the next boot is always arcade.';
         body.appendChild(state);
 
         var confirmLine = document.createElement('div');
@@ -12926,16 +13549,6 @@
     function deckSwitchInterface(mode, btn) {
         var cur = currentShellInterface();
         var note = document.getElementById('arcade-interface-confirm');
-        if (cur.source === 'env') {
-            // The env var wins AT BOOT, but the flag stays writable — this is
-            // the honest door back from a stock flag: launch once with
-            // SSN_SHELL=arcade, re-pick Arcade here, and the next env-less
-            // launch follows the flag again.
-            saveDeckSetting('textparam1', SHELL_INTERFACE_KEY, mode);
-            try { localStorage.setItem(SHELL_INTERFACE_LS, mode); } catch (e) { /* noop */ }
-            if (note) note.textContent = 'Saved "' + mode + '" for launches without SSN_SHELL. This window stays ' + cur.mode + ' — the environment variable pins it until you launch without it.';
-            return;
-        }
         if (cur.mode === mode) {
             if (note) note.textContent = 'Already running ' + mode + '.';
             return;
@@ -12944,15 +13557,21 @@
             btn.dataset.confirm = '1';
             btn.textContent = mode === 'stock' ? 'Switch to Stock — reload now?' : 'Switch to Arcade — reload now?';
             if (note) note.textContent = mode === 'stock'
-                ? 'The window reloads into Steve’s original interface. The way back: launch once with SSN_SHELL=arcade (the environment wins) and re-pick Arcade here. Same app, other chrome — settings, sources and flows are untouched.'
+                ? 'The window reloads into Steve’s original interface — for THIS window only. Close it or reload and you boot back into the Arcade; nothing is persisted. Same app, other chrome — settings, sources and flows are untouched.'
                 : 'The window reloads into the arcade interface. Same app, other chrome — settings, sources and flows are untouched.';
             return;
         }
-        // Canonical record + the boot-read mirror, then reload. The setting
-        // write rides the S48 async idiom; the localStorage mirror is what
-        // index.html's synchronous boot switch actually reads.
-        saveDeckSetting('textparam1', SHELL_INTERFACE_KEY, mode);
-        try { localStorage.setItem(SHELL_INTERFACE_LS, mode); } catch (e) { /* noop */ }
+        // Stock is session-only (TASK-68 ruled semantics): the localStorage
+        // flag is the one-shot token index.html's boot script reads AND
+        // consumes — it is never written to the canonical settings, so no
+        // launch ever boots stock because of a past visit. The arcade pick
+        // keeps its canonical record + mirror (the env-less default anyway).
+        if (mode === 'arcade') {
+            saveDeckSetting('textparam1', SHELL_INTERFACE_KEY, mode);
+            try { localStorage.setItem(SHELL_INTERFACE_LS, mode); } catch (e) { /* noop */ }
+        } else {
+            try { localStorage.setItem(SHELL_INTERFACE_LS, 'stock'); } catch (e) { /* noop */ }
+        }
         if (note) note.textContent = 'Reloading into ' + mode + '…';
         setTimeout(function () { window.location.reload(); }, 250);
     }
@@ -12996,6 +13615,10 @@
                 } catch (err) {
                     console.error('[arcade-shell] deck popup filter failed:', err);
                 }
+                // TASK-68 — first-paint mask law fallback: if the filter
+                // couldn't run (hosted frame, cross-origin), don't hold the
+                // pane hidden forever — reveal at 6s regardless.
+                setTimeout(function () { frame.classList.add('is-live'); }, 6000);
             });
             frame.src = resolved.url;
         }).catch(function (e) { console.error('[arcade-shell] deck popup embed resolve failed:', e); });
@@ -13067,6 +13690,9 @@
         maskSessionIdSurfaces(doc, root);
         setTimeout(function () { maskSessionIdSurfaces(doc, root); }, 1200);
         setTimeout(function () { maskSessionIdSurfaces(doc, root); }, 3000);
+        // TASK-68 — the embed stayed visibility:hidden until THIS point
+        // (dress + first mask pass done): no unmasked frame ever paints.
+        frame.classList.add('is-live');
     }
 
     // --------------------------------------------------------------------
@@ -14032,27 +14658,22 @@
     function renderDeckPointsEarn(stage) {
         var body = deckPointsCard(stage, 'Earn');
 
-        var toggleRow = document.createElement('div');
-        toggleRow.className = 'arcade-alert-row';
-        var toggleLabel = document.createElement('label');
-        toggleLabel.textContent = 'Points system';
-        toggleLabel.setAttribute('for', 'arcade-deck-points-toggle');
-        toggleRow.appendChild(toggleLabel);
-        var toggle = document.createElement('input');
-        toggle.type = 'checkbox';
-        toggle.id = 'arcade-deck-points-toggle';
-        toggle.checked = deckPointsState.enabled;
-        toggle.addEventListener('change', function () {
-            deckPointsState.enabled = toggle.checked;
-            saveDeckSetting('setting', 'enablePointsSystem', toggle.checked);
-            renderDeckList();
-        });
-        toggleRow.appendChild(toggle);
-        body.appendChild(toggleRow);
+        // TASK-68 — the shared .arcade-toggle (item 8 sweep): label +
+        // switch adjacent, no label-left/control-far-right gap.
+        body.appendChild(buildArcadeToggle({
+            id: 'arcade-deck-points-toggle',
+            label: 'Points system',
+            checked: deckPointsState.enabled,
+            onChange: function (checked) {
+                deckPointsState.enabled = checked;
+                saveDeckSetting('setting', 'enablePointsSystem', checked);
+                renderDeckList();
+            }
+        }));
 
         function rateRow(id, label, value, key) {
             var row = document.createElement('div');
-            row.className = 'arcade-alert-row';
+            row.className = 'arcade-alert-row arcade-alert-row--wide';
             var lbl = document.createElement('label');
             lbl.textContent = label;
             lbl.setAttribute('for', id);
@@ -14091,21 +14712,15 @@
             { key: 'enableLeaderboardCommand', label: '!leaderboard — link the board', stateKey: 'cmdLeaderboard' },
             { key: 'enableRewardsCommand', label: '!rewards — list redemptions', stateKey: 'cmdRewards' }
         ].forEach(function (cmd) {
-            var row = document.createElement('div');
-            row.className = 'arcade-alert-row';
-            var lbl = document.createElement('label');
-            lbl.textContent = cmd.label;
-            row.appendChild(lbl);
-            var input = document.createElement('input');
-            input.type = 'checkbox';
-            input.checked = deckPointsState[cmd.stateKey];
-            input.setAttribute('aria-label', cmd.label);
-            input.addEventListener('change', function () {
-                deckPointsState[cmd.stateKey] = input.checked;
-                saveDeckSetting('setting', cmd.key, input.checked);
-            });
-            row.appendChild(input);
-            body.appendChild(row);
+            body.appendChild(buildArcadeToggle({ // TASK-68 — shared .arcade-toggle (item 8 sweep)
+                label: cmd.label,
+                ariaLabel: cmd.label,
+                checked: deckPointsState[cmd.stateKey],
+                onChange: function (checked) {
+                    deckPointsState[cmd.stateKey] = checked;
+                    saveDeckSetting('setting', cmd.key, checked);
+                }
+            }));
         });
     }
 
@@ -14732,6 +15347,7 @@
         buildTipjarPanel();   // S50 — the Tip Jar interior (payment rails); contents lazy (ensureTipjarPanelLive on first visit)
         buildDeckSettingsPanel(); // S51 — Deck Settings; contents lazy (ensureDeckSettingsLive on first visit)
         buildAiPanel();           // TASK-64 — the AI console; contents lazy (ensureAiPanelLive on first visit)
+        installAddonsCrumbs();    // TASK-68 — the breadcrumb trail at the top of every door interior's left list
         installArcadeColumnToggles(); // TASK-67 — one shared collapse mechanism on every interior's left column
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer
