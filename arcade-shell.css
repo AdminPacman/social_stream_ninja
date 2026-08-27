@@ -2019,6 +2019,7 @@ body.arcade-shell .arcade-deck-embed__note { margin: 0; }
 body.arcade-shell .arcade-deck-embed__frame {
   width: 100%;
   height: 520px;
+  flex-shrink: 0; /* TASK-69 sweep 2 — fitArcadeFrameToContent sizes the frame to its content; never let the flex wrap shrink it back into an inner scrollbar (the pane owns scrolling) */
   border: 1px solid var(--arc-edge);
   border-radius: var(--arc-r);
   background: var(--arc-panel);

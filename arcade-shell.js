@@ -13631,6 +13631,13 @@
                 } catch (err) {
                     console.error('[arcade-shell] deck popup filter failed:', err);
                 }
+                // TASK-69 (WALK 2B sweep 2) — the embed FILLS the pane: size
+                // the frame to its content (re-measured on resize, the
+                // TASK-68 camera-frame idiom) so the PANE owns scrolling and
+                // the frame never grows a scrollbar-within-scrollbar (the
+                // Admiral's Speech TTS frame). Cross-origin/hosted frames
+                // keep the 520px CSS fallback honestly.
+                fitArcadeFrameToContent(frame);
                 // TASK-68 — first-paint mask law fallback: if the filter
                 // couldn't run (hosted frame, cross-origin), don't hold the
                 // pane hidden forever — reveal at 6s regardless.
