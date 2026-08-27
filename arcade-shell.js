@@ -2524,7 +2524,7 @@
         body.className = 'arcade-alert-card__body';
         body.appendChild(buildAiToggleRow('Enable the censor bot', 'Stock key: ollamaCensorBot', 'ollamaCensorBot', function () { renderAiZoneList(); }));
         var modeRow = document.createElement('div');
-        modeRow.className = 'arcade-alert-row';
+        modeRow.className = 'arcade-alert-row arcade-alert-row--wide'; // TASK-69 sweep 3 — the 68px base track crushed this label to 3 lines
         var modeLbl = document.createElement('label');
         modeLbl.textContent = 'When a message is judged bad';
         modeRow.appendChild(modeLbl);
@@ -15191,7 +15191,7 @@
         seSpec.textContent = 'SE has no one-click export — save the JSON from the public loyalty endpoints instead: resolve your channel id at api.streamelements.com/kappa/v2/channels/<channel>, then download …/kappa/v2/points/<id>/top (and /alltime, /watchtime) with ?limit=100&offset=0 pages. Feed any of those JSON files here — usernames with points and/or minutes are picked up. SE values land in separate se* fields and NEVER overwrite SSN points.';
         body.appendChild(seSpec);
         var seRow = document.createElement('div');
-        seRow.className = 'arcade-alert-row';
+        seRow.className = 'arcade-alert-row arcade-alert-row--wide'; // TASK-69 sweep 3 — same 68px crush as the moderation row
         var sePlatLabel = document.createElement('label');
         sePlatLabel.textContent = 'Platform the export belongs to';
         sePlatLabel.setAttribute('for', 'arcade-deck-se-platform');

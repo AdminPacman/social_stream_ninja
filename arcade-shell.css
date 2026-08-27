@@ -1489,7 +1489,10 @@ body.arcade-shell .arcade-style-group:first-child { padding-top: 4px; }
    at 280px; control widths trimmed slightly (110→96 / 150→120) to give the
    label column real room. */
 body.arcade-shell .arcade-style-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
+  /* TASK-69 sweep 3 — the label track gets a 96px floor: at the controls
+     column's real width the fluid track left 84px and "Text outline width"
+     clipped mid-word. Below the floor the ellipsis degrade still stands. */
+  display: grid; grid-template-columns: minmax(96px, 1fr) auto auto auto;
   align-items: center; gap: 6px; padding: 4px 6px;
   border-radius: var(--arc-r);
 }
@@ -2247,6 +2250,7 @@ body.arcade-shell .arcade-editchat-chip {
   background: var(--arc-panel-2); color: var(--arc-ink);
   border: 1px solid var(--arc-edge); border-radius: 999px;
   font: 600 11px var(--arc-font-ui); cursor: pointer;
+  white-space: nowrap; /* TASK-69 sweep 3 — a chip never wraps (3 lines at the 390px floor) */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 body.arcade-shell[data-arcade-tab="main"] .arcade-editchat-chip { display: block; }
