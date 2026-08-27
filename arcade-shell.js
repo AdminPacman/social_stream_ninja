@@ -7879,11 +7879,18 @@
             try {
                 var doc = frame.contentDocument;
                 if (!doc || !doc.documentElement) return;
-                var h = Math.max(
-                    doc.documentElement.scrollHeight || 0,
-                    doc.body ? doc.body.scrollHeight : 0,
-                    360 // never collapse to nothing — the honest floor
-                );
+                // TASK-69: popup.html pins html/body to height:100%, so
+                // scrollHeight RATCHETS (never drops below the current frame
+                // height — collapsing a berthed group left dead space). The
+                // berthed root's own box is the honest content height.
+                var root = doc.getElementById('arcade-deck-popup-root');
+                var h = root
+                    ? Math.ceil(root.getBoundingClientRect().height) + 12
+                    : Math.max(
+                        doc.documentElement.scrollHeight || 0,
+                        doc.body ? doc.body.scrollHeight : 0
+                    );
+                h = Math.max(h, 360); // never collapse to nothing — the honest floor
                 // only write on a real change — a redundant write re-feeds the observer
                 if (Math.abs((parseFloat(frame.style.height) || 0) - h) > 2) frame.style.height = h + 'px';
             } catch (e) { /* cross-origin — the CSS fallback stands */ }
@@ -7891,12 +7898,33 @@
         apply();
         try {
             var doc = frame.contentDocument;
-            if (doc && doc.body && typeof ResizeObserver === 'function') {
-                // rAF-deferred: a synchronous write inside the callback loops
-                // the observer (the frame's new height changes the observed
-                // body) and Chromium fires "ResizeObserver loop" errors.
-                var ro = new ResizeObserver(function () { requestAnimationFrame(apply); });
-                ro.observe(doc.body);
+            if (doc && doc.body && typeof MutationObserver === 'function') {
+                // TASK-69: the re-measure trigger is a MutationObserver, NOT a
+                // ResizeObserver. An RO on the embedded body pairs with the
+                // height write as a feedback loop in Chromium's delivery
+                // cycle — every frames-tab visit spammed ~180 "ResizeObserver
+                // loop completed with undelivered notifications" errors
+                // (caught by the console census). Content changes are what
+                // actually matter (collapsibles, popup.js late injects), and
+                // those are mutations. rAF-throttled + deduped writes.
+                var pending = false;
+                var schedule = function () {
+                    if (pending) return;
+                    pending = true;
+                    requestAnimationFrame(function () { pending = false; apply(); });
+                };
+                var mo = new MutationObserver(schedule);
+                mo.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+                // stock's collapsibles flip display via :checked — a pure CSS
+                // state change, invisible to the MutationObserver. Any click
+                // inside the embed re-fits (after the 0.25s transition).
+                doc.addEventListener('click', function () {
+                    schedule();
+                    setTimeout(apply, 450);
+                });
+                // pure reflow without a mutation (window narrowed, text wraps
+                // taller) — the shell window's resize is the signal.
+                window.addEventListener('resize', schedule);
             }
         } catch (e) { /* noop */ }
     }
