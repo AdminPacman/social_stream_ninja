@@ -80,56 +80,63 @@
 
     // --------------------------------------------------------------------
     // Element registry — the ONE source of truth for selectable overlay
-    // ELEMENTS (music / tip jar / hype / map). Adding an element is one entry
-    // here (plus its overlay page, when built). See pacsarcade design-briefs/
-    // ssn-ui-overhaul/element-registry-spec.md. status 'ready' = the overlay
-    // page ships and the card is live (Copy overlay URL); 'planned' = an
-    // honest SOON stub with no actions. Music, Tip Jar (two variants — stock
-    // + house tipjar-mini), and Hype Train ship ready
-    // (watchtime-loyalty-elements-spec.md items 1-3). Fren Map stays
-    // planned — no geo data source exists.
+    // ELEMENTS (music / tip jar / hype / map / featured). Adding an element
+    // is one entry here (plus its overlay page, when built). See pacsarcade
+    // design-briefs/ssn-ui-overhaul/element-registry-spec.md. status 'ready'
+    // = the overlay page ships and the card is live (Copy overlay URL);
+    // 'planned' = an honest SOON stub with no actions.
+    //
+    // TASK-70 (WALK 2C) — every ready element now carries `setup` + `tab`:
+    // its own Add-ons interior (preview top, config below). Lane 2 merged
+    // the two jar cards into ONE Tip Jar card (the interior carries both
+    // jars); Lane 1 added Featured Chat (the three-chat model); Lane 3
+    // un-stubbed Fren Map (stock map.html is a real overlay).
     //
     // S46: the standalone Elements tab is gone from the nav; these cards are
     // re-homed inside the Add-ons gallery, filed under the gallery TYPE each
-    // entry declares in addonType ('money' | 'widgets') — Add-On Arcade
-    // round 3: "Elements' 5 cards re-homed here under Money/Widgets".
+    // entry declares in addonType ('money' | 'widgets' | 'chat') — Add-On
+    // Arcade round 3: "Elements' 5 cards re-homed here under Money/Widgets".
     // --------------------------------------------------------------------
     var ELEMENTS = [
         {
             id: 'music', name: 'Now Playing', category: 'music', status: 'ready', addonType: 'widgets',
             overlayPage: 'music-widget.html',
             params: ['layout=horizontal'],
+            setup: true, tab: 'music', // TASK-70 (Lane 3) — Set up opens the Now Playing interior (Spotify groups berth there)
             blurb: 'Spotify now-playing overlay — transparent, Tuna-grade.'
         },
         {
             id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'ready', addonType: 'money',
             overlayPage: 'tipjar.html',
-            // Stock SSN overlay (unmodified upstream) — themes/sound/confetti/
-            // leaderboard/CSV export. theme accepts default|neon|gold (read from
-            // its own source, resources/social_stream_fallback/main/tipjar.html
-            // ~line 764: `const theme = urlParams.get('theme') || 'default';
-            // // default, neon, gold`) — gold picked to match the house
-            // money-gold palette lock; everything else left at its own sensible
-            // stock default rather than guessed.
-            params: ['theme=gold'],
-            setup: true, // S50 — Set up opens the Tip Jar interior (payment rails), per the MONEY placement law
-            blurb: 'Full-featured stock tip jar — themes, sound, confetti, leaderboard. Display-only, no wallet.'
-        },
-        {
-            id: 'tipjar-mini', name: 'Tip Jar Mini', category: 'tips', status: 'ready', addonType: 'money',
-            overlayPage: 'tipjar-mini.html',
-            params: ['goal=100', 'label=Tip Jar', 'layout=full'],
-            setup: true, // S50 — the rails (lightning / zaps) render on THIS jar; Set up opens the interior
-            blurb: 'Lean house variant — running total + goal bar, honest empty states, lightning/zap receive rails. No wallet.'
+            // TASK-70 (Lane 2) — ONE Tip Jar card (the Admiral: "tips and tips
+            // mini jar are the same menu"). The interior carries both jars:
+            // Goal jar (stock tipjar.html — themes/sound/confetti/leaderboard)
+            // and Visual jar (house tipjar-mini — receive rails). The look
+            // (5 jar styles + your own jar image) is picked inside; this
+            // card's Copy takes the Goal jar wearing the chosen look.
+            setup: true, tab: 'tipjar',
+            blurb: 'One jar, two faces — Goal jar (stock: themes, sound, leaderboard) and Visual jar (lean, lightning/zap rails). Pick the look inside.'
         },
         {
             id: 'hype', name: 'Hype Train', category: 'hype', status: 'ready', addonType: 'widgets',
             overlayPage: 'hype.html',
+            setup: true, tab: 'hype', // TASK-70 (Lane 3) — Set up opens the Hype Train interior (preview + real stock hype params)
             blurb: 'Live viewer/chatter counts by platform, straight from the session.'
         },
         {
-            id: 'map', name: 'Fren Map', category: 'community', status: 'planned', addonType: 'widgets',
-            blurb: 'Where the frens are — a live viewer map.'
+            id: 'map', name: 'Fren Map', category: 'community', status: 'ready', addonType: 'widgets',
+            overlayPage: 'map.html',
+            setup: true, tab: 'map', // TASK-70 (Lane 3) — un-stubbed: stock's map overlay as a real card (preview + config + copy URL)
+            blurb: 'Where the frens are — a live viewer map (stock map.html; viewers pin themselves by command).'
+        },
+        {
+            // TASK-70 (Lane 1) — the three-chat model (ruled 0018.06.05): home
+            // chat (dock), featured chat (THIS), normal chat. Featured = FOCUS
+            // MODE: its own Add-ons card + interior on stock's featured.html.
+            id: 'featured', name: 'Featured Chat', category: 'chat', status: 'ready', addonType: 'chat',
+            overlayPage: 'featured.html',
+            setup: true, tab: 'featured',
+            blurb: 'Focus mode — the messages that matter, alone on their own overlay: VIPs, privileged users, or hand-picked from the dock.'
         }
     ];
 
@@ -139,13 +146,13 @@
     // (the sources-rail pattern), card grid on the right. v1 cards open what
     // exists TODAY — interior redesigns are S47–S51.
     //
-    // ADDON_TYPES is the ruled left-column order. ADDON_DOORS are the four
+    // ADDON_TYPES is the ruled left-column order. ADDON_DOORS are the
     // door cards: each opens an EXISTING surface whose rail tab left the
     // nav (tab ids match ARCADE_TAB_PAGE / CUSTOM_TABS, so the existing tab
     // machinery — scroll memory, lazy panels, the boot guard — keeps working
     // unchanged). Element cards (ELEMENTS above) file under 'money' and
-    // 'widgets'. 'chat' has no v1 cards — the grid shows an honest empty
-    // state for it, never a fake one.
+    // 'widgets' (and 'chat' since TASK-70 — Featured Chat + the Overlay
+    // templates door landed the type's first cards).
     // --------------------------------------------------------------------
     var ADDON_TYPES = [
         { id: 'all', label: 'All' },
@@ -188,13 +195,20 @@
             id: 'goals', name: 'Goal Bars', addonType: 'widgets', tab: 'goals',
             cta: 'Open Goal Bars',
             blurb: 'Progress bars for followers, viewers, subs, sats — real counts only, dashes when unknown. Preset sets for platform programs.'
+        },
+        {
+            // TASK-70 (Lane 4) — Steve's templated FULL-SCREEN overlays,
+            // surface-only (no builder this round — ruled).
+            id: 'overlays', name: 'Overlay templates', addonType: 'chat', tab: 'overlays',
+            cta: 'Open Overlay templates',
+            blurb: 'Steve’s ready-made full-screen overlays — chat themes, featured-message styles, credits, danmaku, news ticker. Preview one, copy its URL into OBS.'
         }
     ];
 
     // Door tabs keep no nav berth of their own — while one is open, the
     // Add-ons nav button carries the is-on mark (the door lives INSIDE the
     // add-ons world). Also whitelists door tabs for boot-restore.
-    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons', commands: 'addons', goals: 'addons', frames: 'addons', tipjar: 'addons' };
+    var DOOR_PARENT = { alerts: 'addons', games: 'addons', vdo: 'addons', eventflow: 'addons', commands: 'addons', goals: 'addons', frames: 'addons', tipjar: 'addons', featured: 'addons', music: 'addons', hype: 'addons', map: 'addons', overlays: 'addons' };
 
     // --------------------------------------------------------------------
     // Analytics IPC bridge state (pacsarcade design-briefs/ssn-ui-overhaul/
@@ -1150,7 +1164,10 @@
     // TASK-64: 'ai' is a static member like every sibling since the delock
     // (the v1/v2 conditional-berth machinery is retired — see the TASK-64
     // note at the top of the file).
-    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true, frames: true, tipjar: true, settings: true };
+    // S50: 'frames' (Frames & Cameras) and 'tipjar' (the Tip Jar interior).
+    // TASK-70: 'featured' (Lane 1), 'music'/'hype'/'map' (Lane 3 widget
+    // interiors), 'overlays' (Lane 4 template gallery).
+    var CUSTOM_TABS = { addons: true, style: true, alerts: true, games: true, commands: true, goals: true, frames: true, tipjar: true, settings: true, featured: true, music: true, hype: true, map: true, overlays: true };
     var bootGraceUntil = 0; // set on init(); see installBootGuard() below
 
     function clickStockNav(pageId) {
@@ -1175,6 +1192,11 @@
             if (tabId === 'frames') ensureFramesPanelLive(); // lazy (S50): load guests/frame style, then the device frame (sendSync-before-churn order)
             if (tabId === 'tipjar') ensureTipjarPanelLive(); // lazy (S50): load payment rails + first demo preview on first visit
             if (tabId === 'settings') ensureDeckSettingsLive(); // lazy (S51): load deck settings + first section on first visit
+            if (tabId === 'featured') ensureFeaturedPanelLive(); // lazy (TASK-70): load featured options + first demo preview on first visit
+            if (tabId === 'music') ensureMusicPanelLive(); // lazy (TASK-70)
+            if (tabId === 'hype') ensureHypePanelLive(); // lazy (TASK-70)
+            if (tabId === 'map') ensureMapPanelLive(); // lazy (TASK-70)
+            if (tabId === 'overlays') ensureOverlaysPanelLive(); // lazy (TASK-70)
             if (tabId === 'ai') ensureAiPanelLive(); // lazy (TASK-64): load AI settings + first zone on first visit
             return;
         }
@@ -1229,6 +1251,8 @@
                     set: function (s) { if (s && s.key && framesPanelLive) selectFramesKey(s.key); } },
         tipjar:   { get: function () { return { key: tipjarSelectedKey }; },
                     set: function (s) { if (s && s.key && tipjarPanelLive) selectTipjarKey(s.key); } },
+        overlays: { get: function () { return { file: overlaysSelectedFile }; },
+                    set: function (s) { if (s && s.file && overlaysPanelLive) selectOverlayTemplate(s.file); } },
         settings: { get: function () { return { section: deckSelectedSection, view: deckDiagnosticsView }; },
                     set: function (s) {
                         if (!s || !s.section || !deckSettingsLive) return;
@@ -1377,7 +1401,9 @@
     var CUSTOM_TAB_PANEL = {
         addons: '.arcade-addons', style: '.arcade-style', alerts: '.arcade-alerts',
         games: '.arcade-games', commands: '.arcade-commands', goals: '.arcade-goals', ai: '.arcade-ai',
-        frames: '.arcade-frames', tipjar: '.arcade-tipjar', settings: '.arcade-settings'
+        frames: '.arcade-frames', tipjar: '.arcade-tipjar', settings: '.arcade-settings',
+        featured: '.arcade-featured', music: '.arcade-music', hype: '.arcade-hype',
+        map: '.arcade-map', overlays: '.arcade-overlays'
     };
 
     function focusFirstInteractiveIn(root, fallbackEl) {
@@ -1769,6 +1795,7 @@
             case 'tips': return 'TIPS';
             case 'hype': return 'HYPE';
             case 'community': return 'COMMUNITY';
+            case 'chat': return 'CHAT';
             default: return String(cat || '').toUpperCase();
         }
     }
@@ -1796,7 +1823,9 @@
             nameEl.textContent = el.name;
             nameEl.setAttribute('aria-label', 'Open ' + el.name + ' setup');
             nameEl.title = 'Open the ' + el.name + ' interior';
-            nameEl.addEventListener('click', function () { navigateArcadeTab('tipjar'); });
+            // TASK-70 — the interior tab rides the entry (every widget card
+            // has its own interior now), no longer hardcoded to tipjar.
+            nameEl.addEventListener('click', function () { navigateArcadeTab(el.tab || 'tipjar'); });
         } else {
             nameEl = document.createElement('h3');
             nameEl.className = 'arcade-el-card__name';
@@ -1846,7 +1875,7 @@
                 setupBtn.type = 'button';
                 setupBtn.className = 'arcade-btn arcade-btn--sm';
                 setupBtn.textContent = 'Set up';
-                setupBtn.addEventListener('click', function () { navigateArcadeTab('tipjar'); });
+                setupBtn.addEventListener('click', function () { navigateArcadeTab(el.tab || 'tipjar'); });
                 actions.appendChild(setupBtn);
             }
             card.appendChild(actions);
@@ -1895,6 +1924,8 @@
     // One crumb per door interior, prepended to its left list column at
     // boot. Event Flow + VDO are stock-underlay tabs (no shell left list) —
     // Event Flow's trail is its ← Back door (item 6); VDO keeps none.
+    // TASK-70: the single-widget interiors (Lanes 1/3) have no left list —
+    // their crumb rides the STAGE top instead.
     function installAddonsCrumbs() {
         [
             ['.arcade-alerts', 'Alerts'],
@@ -1902,13 +1933,26 @@
             ['.arcade-commands', 'Commands'],
             ['.arcade-goals', 'Goal Bars'],
             ['.arcade-frames', 'Frames & Cameras'],
-            ['.arcade-tipjar', 'Tip Jar']
+            ['.arcade-tipjar', 'Tip Jar'],
+            ['.arcade-overlays', 'Overlay templates']
         ].forEach(function (entry) {
             var panel = document.querySelector(entry[0]);
             if (!panel) return;
             var col = panel.querySelector('.arcade-evt-list-col');
             if (!col || col.querySelector('.arcade-crumb')) return;
             col.insertBefore(buildAddonsCrumb(entry[1]), col.firstChild);
+        });
+        [
+            ['.arcade-featured', 'Featured Chat'],
+            ['.arcade-music', 'Now Playing'],
+            ['.arcade-hype', 'Hype Train'],
+            ['.arcade-map', 'Fren Map']
+        ].forEach(function (entry) {
+            var panel = document.querySelector(entry[0]);
+            if (!panel) return;
+            var stage = panel.querySelector('.arcade-widget-stage');
+            if (!stage || stage.querySelector('.arcade-crumb')) return;
+            stage.insertBefore(buildAddonsCrumb(entry[1]), stage.firstChild);
         });
     }
 
@@ -1978,12 +2022,23 @@
     // only ever placed on the clipboard by explicit click, never displayed in
     // the shell (masking law is about on-screen display, honored here).
     function copyElementOverlayUrl(el, btn) {
-        // S50 — the mini jar's copy composes the payment rails too, so a jar
-        // the operator configured in Set up doesn't silently lose its rails
-        // when copied from the gallery card. Other elements: unchanged.
-        var urlPromise = (el.id === 'tipjar-mini')
-            ? loadTipRailsSettings().then(function () { return buildElementOverlayUrl(el, tipRailsUrlParams()); })
-            : buildElementOverlayUrl(el);
+        // TASK-70 — the card copy composes the operator's configured extras:
+        // the Tip Jar card copies the GOAL jar wearing the interior's chosen
+        // look (Lane 2); Featured Chat carries the whitelist filter (Lane 1);
+        // Hype/Fren Map carry their option toggles (Lane 3). Everything else
+        // composes exactly as before.
+        var urlPromise;
+        if (el.id === 'tipjar') {
+            urlPromise = loadTipjarStyleSettings().then(function () { return buildElementOverlayUrl(el, tipjarStyleUrlParams()); });
+        } else if (el.id === 'featured') {
+            urlPromise = loadFeaturedOptions().then(function () { return buildElementOverlayUrl(el, featuredUrlParams()); });
+        } else if (el.id === 'hype') {
+            urlPromise = loadHypeOptions().then(function () { return buildElementOverlayUrl(el, hypeUrlParams()); });
+        } else if (el.id === 'map') {
+            urlPromise = loadMapOptions().then(function () { return buildElementOverlayUrl(el, mapUrlParams()); });
+        } else {
+            urlPromise = buildElementOverlayUrl(el);
+        }
         urlPromise.then(function (url) {
             if (!url) throw new Error('empty overlay url');
             return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ✓'); });
@@ -4289,9 +4344,15 @@
             var mediaRow = buildAlertFieldRow(category, 'media', 'Fallback media', 'https://…');
             syncAlertFieldRow(mediaRow, 'media', st.media);
             styleSection.appendChild(mediaRow);
+            // TASK-70 (Lane 3) — "upload a media file": the SAME mechanism
+            // Event Flow already uses for local media (preload's localMedia
+            // bridge → the app's local media server → a 127.0.0.1 media URL),
+            // reused verbatim — never a new upload path.
+            mediaRow.appendChild(buildAlertMediaUploadBtn(category, 'media', 'image'));
             var soundRow = buildAlertFieldRow(category, 'sound', 'Sound URL', 'https://…');
             syncAlertFieldRow(soundRow, 'sound', st.sound);
             styleSection.appendChild(soundRow);
+            soundRow.appendChild(buildAlertMediaUploadBtn(category, 'sound', 'audio'));
 
             host.appendChild(styleSection);
         }
@@ -4318,6 +4379,44 @@
         if (!input) return;
         input.value = value || (field === 'style' ? 'twitch' : '');
         row.classList.toggle('is-set', !isBlankAlertField(field, input.value));
+    }
+
+    // TASK-70 (Lane 3) — the per-event Style section's "upload a media
+    // file". The mechanism is Event Flow's own local-media rail VERBATIM
+    // (actions/EventFlowEditor.js:6788's chooseLocalMediaBtn handler):
+    // localMedia.select → localMedia.start → localMedia.getMediaUrl(asset.id)
+    // → the URL lands in the field. No new upload path, no data-URIs.
+    function buildAlertMediaUploadBtn(category, field, mediaType) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm arcade-alert-upload';
+        btn.textContent = 'Upload…';
+        btn.title = 'Choose a local ' + (mediaType === 'audio' ? 'audio' : 'image/gif') + ' file — served by the app’s local media server (the same rail Event Flow’s Choose Local File uses)';
+        btn.setAttribute('aria-label', 'Upload a local ' + (mediaType === 'audio' ? 'sound' : 'media') + ' file for the ' + category + ' alert');
+        btn.addEventListener('click', function () {
+            var lm = window.ninjafy && window.ninjafy.localMedia;
+            if (!lm || typeof lm.select !== 'function') {
+                setAlertsStatus('local media rail unavailable in this build', true);
+                return;
+            }
+            btn.disabled = true;
+            lm.select({ mediaType: mediaType }).then(function (result) {
+                if (!result || !result.success || !result.asset) return null; // canceled
+                return lm.start().then(function () { return lm.getMediaUrl(result.asset.id); });
+            }).then(function (res) {
+                if (!res) return;
+                if (!res.url) throw new Error('no media url');
+                var row = btn.closest('.arcade-alert-row');
+                var input = row && row.querySelector('[data-arcade-alert-field="' + field + '"]');
+                if (input) input.value = res.url;
+                setAlertField(category, field, res.url, row);
+                setAlertsStatus(field + ' uploaded — local media URL set on ' + category);
+            }).catch(function (e) {
+                console.error('[arcade-shell] alert media upload failed:', e);
+                setAlertsStatus('upload failed — ' + (e && e.message ? e.message : e), true);
+            }).finally(function () { btn.disabled = false; });
+        });
+        return btn;
     }
 
     function startVariantRename(variant, btn) {
@@ -7573,6 +7672,92 @@
     var framesPanelLive = false;
     var tipjarPanelLive = false;
 
+    // --------------------------------------------------------------------
+    // TASK-70 (Lane 2) — the GOAL JAR LOOK. One house doc (canonical
+    // saveSetting, textparam1 — the same rail the games/jar docs ride)
+    // carries the chosen jar style + optional own jar image; both compose
+    // into the demo-isolated live preview AND the real-session copy URL.
+    //
+    // THE 5 LOOKS — stock ships 3 themes (tipjar.html:765 `// default, neon,
+    // gold`, classes at :312-335); the 2 house looks are CSS-only, delivered
+    // through stock's own &b64css param (featured.html:1573's block, the
+    // same idiom the Style builder rides) plus stock's own fill/track URL
+    // params (tipjar.html:796-809). Zero stock bytes touched.
+    //
+    // UPLOAD YOUR OWN — the jar's image slot is stock's &jarimage param
+    // (tipjar.html:774, applied at :860 to #cup-overlay). Stock's own
+    // in-page upload (:2274, &controls panel) is FileReader→data-URI→
+    // localStorage — trapped on the machine/browser that uploaded it, so it
+    // can never reach an OBS browser source. The HONEST mechanism here is
+    // the app's existing local-media rail (the SAME one Event Flow's "Choose
+    // Local File" uses — preload.js localMedia bridge → the app's local
+    // media server): pick a file, get a http://127.0.0.1:<port>/media/<id>
+    // URL, carry it on &jarimage=. OBS on this machine can load that.
+    // --------------------------------------------------------------------
+    var TIPJAR_STYLE_KEY = 'arcadeTipjarStyle';
+    var tipjarStyle = { look: 'default', jarimage: '' };
+    var TIPJAR_LOOKS = [
+        { id: 'default', label: 'Classic', origin: 'stock', params: [] },
+        { id: 'neon', label: 'Neon', origin: 'stock', params: ['theme=neon'] },
+        { id: 'gold', label: 'Gold', origin: 'stock', params: ['theme=gold'] },
+        {
+            id: 'ice', label: 'Glacier', origin: 'house',
+            params: ['fillstart=' + encodeURIComponent('#33d6ff'), 'fillend=' + encodeURIComponent('#7c5cff'), 'trackcolor=' + encodeURIComponent('#10131a'), 'barradius=14'],
+            css: '#tip-text { color: #d8f4ff !important; text-shadow: 0 0 12px rgba(51, 214, 255, 0.65) !important; }\n' +
+                '.goal-meter-container { border: 1px solid #33d6ff !important; box-shadow: 0 0 24px rgba(51, 214, 255, 0.35) !important; background: rgba(10, 16, 24, 0.85) !important; }'
+        },
+        {
+            id: 'ember', label: 'Ember', origin: 'house',
+            params: ['fillstart=' + encodeURIComponent('#ffb03c'), 'fillend=' + encodeURIComponent('#ff4455'), 'trackcolor=' + encodeURIComponent('#1a1010'), 'barradius=14'],
+            css: '#tip-text { color: #ffe9d8 !important; text-shadow: 0 0 12px rgba(255, 68, 85, 0.6) !important; }\n' +
+                '.goal-meter-container { border: 1px solid #ff9a3c !important; box-shadow: 0 0 24px rgba(255, 68, 85, 0.35) !important; background: rgba(24, 10, 10, 0.85) !important; }'
+        }
+    ];
+
+    function tipjarLookById(id) {
+        var found = TIPJAR_LOOKS[0];
+        TIPJAR_LOOKS.forEach(function (l) { if (l.id === id) found = l; });
+        return found;
+    }
+
+    // The look's full URL params (theme/fill/css + the uploaded jar image),
+    // shared by the preview and the copy URL.
+    function tipjarStyleUrlParams() {
+        var look = tipjarLookById(tipjarStyle.look);
+        var params = look.params.slice();
+        if (look.css) params.push('b64css=' + encodeCssB64(look.css));
+        if (tipjarStyle.jarimage) params.push('jarimage=' + encodeURIComponent(tipjarStyle.jarimage));
+        return params;
+    }
+
+    function loadTipjarStyleSettings() {
+        return new Promise(function (resolve) {
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var entry = settings[TIPJAR_STYLE_KEY];
+                            var doc = null;
+                            try { doc = JSON.parse((entry && typeof entry.textparam1 === 'string') ? entry.textparam1 : ''); } catch (e) { doc = null; }
+                            if (doc && typeof doc === 'object') {
+                                tipjarStyle = {
+                                    look: TIPJAR_LOOKS.some(function (l) { return l.id === doc.look; }) ? doc.look : 'default',
+                                    jarimage: typeof doc.jarimage === 'string' ? doc.jarimage.slice(0, 300) : ''
+                                };
+                            }
+                        } catch (e) { console.error('[arcade-shell] tipjar style parse failed:', e); }
+                        resolve();
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] tipjar style load failed:', e); }
+            resolve();
+        });
+    }
+
+    function saveTipjarStyle() { saveGameSetting(TIPJAR_STYLE_KEY, JSON.stringify(tipjarStyle)); }
+
     function setFramesStatus(text, isError) {
         var el = document.getElementById('arcade-frames-status');
         if (!el) return;
@@ -8249,6 +8434,8 @@
         // Re-entry re-reads (S47B doctrine); the sync-IPC settings read lands
         // BEFORE any preview iframe src is set (S48 sendSync discipline).
         loadTipRailsSettings().then(function () {
+            return loadTipjarStyleSettings(); // TASK-70 (Lane 2) — the jar look doc
+        }).then(function () {
             tipjarPanelLive = true;
             renderTipjarList();
             renderTipjarConfig();
@@ -8287,8 +8474,11 @@
         jarsHeader.className = 'arcade-evt-group__title';
         jarsHeader.textContent = 'Jars';
         list.appendChild(jarsHeader);
-        list.appendChild(buildTipjarListRow({ key: 'tipjar-mini', label: 'Tip Jar Mini', stateText: 'rails render here' }));
-        list.appendChild(buildTipjarListRow({ key: 'tipjar', label: 'Tip Jar (stock)', stateText: 'legacy' }));
+        // TASK-70 (Lane 2) — the Admiral: "tips and tips mini jar are the
+        // same menu, one is a goal and one is a visual." One interior, both
+        // jars, renamed to what they ARE.
+        list.appendChild(buildTipjarListRow({ key: 'tipjar', label: 'Goal jar', stateText: 'stock tipjar.html' }));
+        list.appendChild(buildTipjarListRow({ key: 'tipjar-mini', label: 'Visual jar', stateText: 'rails render here' }));
     }
 
     function selectTipjarKey(key) {
@@ -8313,12 +8503,12 @@
         host.appendChild(title);
         var legacy = document.createElement('p');
         legacy.className = 'arcade-style-hint';
-        legacy.textContent = 'Platform tips (superchats, bits, Ko-fi / Fourthwall webhooks) keep counting exactly as they always have — the legacy rail needs no setup.';
+        legacy.textContent = 'Platform tips (superchats, bits, Ko-fi / Fourthwall webhooks) keep counting exactly as they always have — the legacy rail needs no setup. These rails render on the Visual jar.';
         host.appendChild(legacy);
 
         host.appendChild(buildTipjarRailField('Lightning address / LNURL', 'lightning', tipRails.lightning,
             'you@wallet.com or LNURL1…',
-            'A public receive string — rendered as a QR + link on Tip Jar Mini.'));
+            'A public receive string — rendered as a QR + link on the Visual jar.'));
         host.appendChild(buildTipjarRailField('Zaps (nostr) — npub', 'npub', tipRails.npub,
             'npub1…',
             'A public identifier — shown as a zap line on the jar.'));
@@ -8359,13 +8549,15 @@
             }
             tipRails[field] = clean;
             saveTipRails();
-            setTipjarStatus('rails saved — they render on Tip Jar Mini');
+            setTipjarStatus('rails saved — they render on the Visual jar');
             if (tipjarSelectedKey === 'tipjar-mini') initTipjarPreviewFrame();
         }, 500));
         return wrap;
     }
 
-    function tipjarCardElement(id) {
+    // TASK-70 — renamed from tipjarCardElement (S50): a generic ELEMENTS
+    // finder now that featured/music/hype/map ride it too.
+    function elementCardById(id) {
         var found = null;
         ELEMENTS.forEach(function (el) { if (el.id === id) found = el; });
         return found;
@@ -8374,11 +8566,11 @@
     function renderTipjarMiniConfig(host) {
         var title = document.createElement('div');
         title.className = 'arcade-evt-cond__title';
-        title.textContent = 'Tip Jar Mini';
+        title.textContent = 'Visual jar';
         host.appendChild(title);
         var hint = document.createElement('p');
         hint.className = 'arcade-style-hint';
-        hint.textContent = 'The preview is a zero-network demo (scripted fake tips, DEMO ribbon) — the rails you set up render on the real overlay exactly as shown.';
+        hint.textContent = 'The lean house jar (tipjar-mini) — running total + goal bar + your receive rails. The preview is a zero-network demo (scripted fake tips, DEMO ribbon) — the rails you set up render on the real overlay exactly as shown.';
         host.appendChild(hint);
         var preview = document.createElement('div');
         preview.className = 'arcade-alerts-preview arcade-tipjar-preview';
@@ -8393,7 +8585,7 @@
         preview.appendChild(previewBar);
         var frame = document.createElement('iframe');
         frame.id = 'arcade-tipjar-preview-frame';
-        frame.title = 'Tip Jar Mini preview — zero-network demo';
+        frame.title = 'Visual jar preview — zero-network demo';
         preview.appendChild(frame);
         host.appendChild(preview);
         reloadBtn.addEventListener('click', initTipjarPreviewFrame);
@@ -8406,7 +8598,10 @@
         copyBtn.id = 'arcade-tipjar-copy';
         copyBtn.textContent = 'Copy overlay URL';
         copyBtn.addEventListener('click', function () {
-            var el = tipjarCardElement('tipjar-mini');
+            // TASK-70 (Lane 2) — the Visual jar's own defaults live inline
+            // now (the gallery's second jar card merged into the one Tip
+            // Jar card); the rails still compose in.
+            var el = { id: 'tipjar-mini', overlayPage: 'tipjar-mini.html', params: ['goal=100', 'label=Tip Jar', 'layout=full'] };
             buildElementOverlayUrl(el, tipRailsUrlParams()).then(function (url) {
                 if (!url) throw new Error('no url');
                 return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
@@ -8419,7 +8614,7 @@
         host.appendChild(actions);
         var defaults = document.createElement('p');
         defaults.className = 'arcade-style-hint';
-        defaults.textContent = 'Goal, label and layout ride the gallery card defaults (goal 100 · “Tip Jar” · full layout).';
+        defaults.textContent = 'Goal, label and layout ride the defaults (goal 100 · “Tip Jar” · full layout).';
         host.appendChild(defaults);
         initTipjarPreviewFrame();
     }
@@ -8429,28 +8624,144 @@
         if (!frame) return;
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') return;
-        var el = tipjarCardElement('tipjar-mini');
         // No session param at all — &demo never joins anything (the ruled
         // mirror of Copy overlay URL, which always carries the real session).
-        var params = ['demo=1'].concat(el.params || []).concat(tipRailsUrlParams());
+        var params = ['demo=1', 'goal=100', 'label=Tip Jar', 'layout=full'].concat(tipRailsUrlParams());
         resolver('tipjar-mini.html', { extraParams: params }).then(function (resolved) {
             if (resolved && resolved.url) frame.src = resolved.url;
         }).catch(function (e) { console.error('[arcade-shell] tipjar preview resolve failed:', e); });
     }
 
+    // TASK-70 (Lane 2) — the Goal jar zone: demo-isolated LIVE preview on
+    // top (stock tipjar.html + the house &demo mode — scripted fake tips
+    // through the page's REAL processTip, a throwaway preview room, zero
+    // network), then the style chooser (5 looks: stock's 3 themes + 2 house
+    // CSS-only looks — cited at TIPJAR_LOOKS), upload-your-own jar image via
+    // the app's local-media rail, and the real-session copy.
+    var tipjarStockPreviewToken = 0;
+
+    function initTipjarStockPreviewFrame() {
+        var frame = document.getElementById('arcade-tipjar-stock-preview-frame');
+        if (!frame) return;
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        var myToken = ++tipjarStockPreviewToken;
+        // &demo + a throwaway preview room — never the operator's session
+        // (the ruled mirror of Copy overlay URL below).
+        var params = ['demo=1', 'session=' + encodeURIComponent(gamesPreviewRoom)].concat(tipjarStyleUrlParams());
+        resolver('tipjar.html', { extraParams: params }).then(function (resolved) {
+            if (myToken !== tipjarStockPreviewToken) return;
+            if (resolved && resolved.url) frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] tipjar stock preview resolve failed:', e); });
+    }
+
     function renderTipjarStockConfig(host) {
         var title = document.createElement('div');
         title.className = 'arcade-evt-cond__title';
-        title.textContent = 'Tip Jar (stock)';
+        title.textContent = 'Goal jar';
         host.appendChild(title);
         var about = document.createElement('p');
         about.className = 'arcade-style-hint';
-        about.textContent = 'The full stock jar — themes, sound, confetti, leaderboard. No isolated preview here: sessionless it would join a shared public room, so it only ever loads with your real session.';
+        about.textContent = 'The full stock jar — themes, sound, confetti, leaderboard. The preview is a zero-network demo (scripted fake tips, DEMO ribbon, isolated room) — never your live session.';
         host.appendChild(about);
-        var rails = document.createElement('p');
-        rails.className = 'arcade-style-hint';
-        rails.textContent = 'Receive rails (lightning QR, zap lines) render on Tip Jar Mini — the stock jar has no rail slots.';
-        host.appendChild(rails);
+
+        var preview = document.createElement('div');
+        preview.className = 'arcade-alerts-preview arcade-tipjar-preview';
+        var previewBar = document.createElement('div');
+        previewBar.className = 'arcade-alerts-preview-bar';
+        var reloadBtn = document.createElement('button');
+        reloadBtn.type = 'button';
+        reloadBtn.className = 'arcade-btn arcade-btn--sm';
+        reloadBtn.textContent = 'Reload preview';
+        previewBar.appendChild(reloadBtn);
+        preview.appendChild(previewBar);
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-tipjar-stock-preview-frame';
+        frame.title = 'Goal jar preview — zero-network demo';
+        preview.appendChild(frame);
+        host.appendChild(preview);
+        reloadBtn.addEventListener('click', initTipjarStockPreviewFrame);
+
+        // ---- the style chooser: ~5 jar looks (3 stock themes + 2 house) ----
+        var lookTitle = document.createElement('div');
+        lookTitle.className = 'arcade-evt-cond__title';
+        lookTitle.textContent = 'Jar look';
+        host.appendChild(lookTitle);
+        var looks = document.createElement('div');
+        looks.className = 'arcade-frames-presets';
+        looks.setAttribute('role', 'group');
+        looks.setAttribute('aria-label', 'Jar look');
+        TIPJAR_LOOKS.forEach(function (look) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'arcade-btn arcade-btn--sm';
+            chip.textContent = look.label + (look.origin === 'house' ? ' ⌂' : '');
+            chip.title = (look.origin === 'stock' ? 'Stock theme' : 'House look (CSS-only, rides stock’s own params)') + ' — ' + look.id;
+            chip.setAttribute('aria-pressed', String(tipjarStyle.look === look.id));
+            chip.addEventListener('click', function () {
+                tipjarStyle.look = look.id;
+                saveTipjarStyle();
+                renderTipjarConfig(); // re-render syncs the chips + preview
+                setTipjarStatus('jar look: ' + look.label);
+            });
+            looks.appendChild(chip);
+        });
+        host.appendChild(looks);
+
+        // ---- upload your own jar image (the local-media rail) ----
+        var uploadRow = document.createElement('div');
+        uploadRow.className = 'arcade-frames-actions';
+        var uploadBtn = document.createElement('button');
+        uploadBtn.type = 'button';
+        uploadBtn.className = 'arcade-btn arcade-btn--sm';
+        uploadBtn.textContent = 'Upload your own jar image';
+        uploadBtn.title = 'Pick an image file — it rides the app’s local media server (the same rail Event Flow’s Choose Local File uses) and lands in the jar’s image slot';
+        uploadBtn.addEventListener('click', function () {
+            var lm = window.ninjafy && window.ninjafy.localMedia;
+            if (!lm || typeof lm.select !== 'function') {
+                setTipjarStatus('local media rail unavailable in this build', true);
+                return;
+            }
+            uploadBtn.disabled = true;
+            lm.select({ mediaType: 'image' }).then(function (result) {
+                if (!result || !result.success || !result.asset) return null; // canceled — nothing to say
+                return lm.start().then(function () { return lm.getMediaUrl(result.asset.id); });
+            }).then(function (res) {
+                if (!res) return;
+                if (!res.url) throw new Error('no media url');
+                tipjarStyle.jarimage = res.url;
+                saveTipjarStyle();
+                renderTipjarConfig();
+                setTipjarStatus('jar image set — it renders on the Goal jar overlay');
+            }).catch(function (e) {
+                console.error('[arcade-shell] jar image upload failed:', e);
+                setTipjarStatus('jar image upload failed — ' + (e && e.message ? e.message : e), true);
+            }).finally(function () { uploadBtn.disabled = false; });
+        });
+        uploadRow.appendChild(uploadBtn);
+        if (tipjarStyle.jarimage) {
+            var clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'arcade-btn arcade-btn--sm';
+            clearBtn.textContent = 'Remove jar image';
+            clearBtn.addEventListener('click', function () {
+                tipjarStyle.jarimage = '';
+                saveTipjarStyle();
+                renderTipjarConfig();
+                setTipjarStatus('jar image removed — stock jar art restored');
+            });
+            uploadRow.appendChild(clearBtn);
+            var current = document.createElement('span');
+            current.className = 'arcade-evt-cond__hint';
+            current.textContent = 'Own jar image active (local media server — OBS on this machine can reach it).';
+            uploadRow.appendChild(current);
+        }
+        host.appendChild(uploadRow);
+        var uploadNote = document.createElement('p');
+        uploadNote.className = 'arcade-evt-cond__hint';
+        uploadNote.textContent = 'The jar look and your image ride the copy URL below — stock’s &theme / fill / &b64css / &jarimage params, no forked jar.';
+        host.appendChild(uploadNote);
+
         var actions = document.createElement('div');
         actions.className = 'arcade-frames-actions';
         var copyBtn = document.createElement('button');
@@ -8458,8 +8769,8 @@
         copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
         copyBtn.textContent = 'Copy overlay URL';
         copyBtn.addEventListener('click', function () {
-            var el = tipjarCardElement('tipjar');
-            buildElementOverlayUrl(el).then(function (url) {
+            var el = elementCardById('tipjar');
+            buildElementOverlayUrl(el, tipjarStyleUrlParams()).then(function (url) {
                 if (!url) throw new Error('no url');
                 return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
             }).catch(function (e) {
@@ -8469,6 +8780,825 @@
         });
         actions.appendChild(copyBtn);
         host.appendChild(actions);
+        initTipjarStockPreviewFrame();
+    }
+
+    // ====================================================================
+    // TASK-70 (WALK 2C) — THE WIDGET INTERIORS. One shared shape for the
+    // single-widget Add-ons interiors (Lanes 1/3): panel head + ONE stage
+    // column (no left list — one widget per interior): the Add-ons crumb on
+    // top, then a demo-isolated preview card, then the config cards below.
+    // Reuses the .arcade-alerts-preview / .arcade-evt-* idioms; every write
+    // rides canonical saveSetting (saveGameSetting/saveDeckSetting), every
+    // copy URL carries the REAL session, every preview an isolated throwaway
+    // room or the page's own zero-network demo mode.
+    // ====================================================================
+
+    // One settings-doc loader for the small house option docs this task adds
+    // (featured whitelist, hype toggles, map toggles, music look). Same
+    // getSettings shape loadTipRailsSettings uses; parse failures degrade to
+    // the defaults, never throw.
+    function loadHouseDoc(key, defaults, sanitize) {
+        return new Promise(function (resolve) {
+            var doc = JSON.parse(JSON.stringify(defaults));
+            try {
+                if (window.ninjafy && typeof window.ninjafy.sendMessage === 'function') {
+                    window.ninjafy.sendMessage(null, { getSettings: true }, function (response) {
+                        try {
+                            var settings = (response && response.settings) || {};
+                            var entry = settings[key];
+                            var parsed = null;
+                            try { parsed = JSON.parse((entry && typeof entry.textparam1 === 'string') ? entry.textparam1 : ''); } catch (e) { parsed = null; }
+                            if (parsed && typeof parsed === 'object') {
+                                Object.keys(defaults).forEach(function (k) {
+                                    if (parsed[k] !== undefined && typeof parsed[k] === typeof defaults[k]) doc[k] = parsed[k];
+                                });
+                                if (typeof sanitize === 'function') doc = sanitize(doc) || doc;
+                            }
+                        } catch (e) { console.error('[arcade-shell] house doc parse failed (' + key + '):', e); }
+                        resolve(doc);
+                    });
+                    return;
+                }
+            } catch (e) { console.error('[arcade-shell] house doc load failed (' + key + '):', e); }
+            resolve(doc);
+        });
+    }
+
+    // The shared widget-panel skeleton. Returns the panel; the interior
+    // fills #arcade-<id>-stage. The crumb is prepended at live time by
+    // installAddonsCrumbs (stage-top variant — these panels have no left
+    // list column).
+    function buildWidgetPanel(id, titleText, ariaLabel) {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-widget arcade-' + id;
+        panel.setAttribute('aria-label', ariaLabel);
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">' + titleText + '</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-' + id + '-status"></span>' +
+            '</div>' +
+            '<div class="arcade-widget-stage" id="arcade-' + id + '-stage"></div>';
+        document.body.appendChild(panel);
+        return panel;
+    }
+
+    function widgetStatus(id, text, isError) {
+        var el = document.getElementById('arcade-' + id + '-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    // The demo-isolated preview card (bar with reload + the frame). The
+    // loader callback composes params and resolves the frame src; it owns
+    // the isolation contract (&demo / throwaway room — never the live
+    // session).
+    function buildWidgetPreviewCard(id, titleText, hintText, loader) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arcade-alerts-preview arcade-widget-preview';
+        var bar = document.createElement('div');
+        bar.className = 'arcade-alerts-preview-bar';
+        var label = document.createElement('span');
+        label.className = 'arcade-widget-preview__label';
+        label.textContent = titleText;
+        bar.appendChild(label);
+        var reloadBtn = document.createElement('button');
+        reloadBtn.type = 'button';
+        reloadBtn.className = 'arcade-btn arcade-btn--sm';
+        reloadBtn.textContent = 'Reload preview';
+        reloadBtn.addEventListener('click', loader);
+        bar.appendChild(reloadBtn);
+        wrap.appendChild(bar);
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-' + id + '-preview-frame';
+        frame.title = titleText + ' — demo-isolated preview';
+        wrap.appendChild(frame);
+        var host = document.createElement('div');
+        host.appendChild(wrap);
+        if (hintText) {
+            var hint = document.createElement('p');
+            hint.className = 'arcade-style-hint';
+            hint.textContent = hintText;
+            host.appendChild(hint);
+        }
+        return host;
+    }
+
+    function widgetPreviewResolve(frameId, page, params, tokenCheck) {
+        var frame = document.getElementById(frameId);
+        if (!frame) return;
+        var resolver = window.resolveSocialStreamPage;
+        if (typeof resolver !== 'function') return;
+        resolver(page, { extraParams: params }).then(function (resolved) {
+            if (tokenCheck && !tokenCheck()) return;
+            if (resolved && resolved.url) frame.src = resolved.url;
+        }).catch(function (e) { console.error('[arcade-shell] widget preview resolve failed (' + page + '):', e); });
+    }
+
+    // Small config-card primitives (the arcade-alert-card idiom).
+    function buildWidgetCard(titleText) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = titleText;
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+        card.appendChild(body);
+        return { card: card, body: body };
+    }
+
+    function widgetHint(body, text) {
+        var hint = document.createElement('p');
+        hint.className = 'arcade-style-hint';
+        hint.textContent = text;
+        body.appendChild(hint);
+        return hint;
+    }
+
+    // --------------------------------------------------------------------
+    // LANE 1 — FEATURED CHAT (the ruled three-chat model: home chat = dock,
+    // featured chat = THIS, normal chat). Focus mode: who gets featured +
+    // the message filters, plainly. The preview is stock featured.html in
+    // the house &demo mode (mirror-mastered this task — zero network, two
+    // scripted messages through the REAL processData filter chain, so a set
+    // whitelist visibly filters in the preview).
+    //
+    // WHO GETS FEATURED — stock's REAL doors (cited):
+    //  - Manual from the dock: click a message = feature instantly, CTRL+
+    //    click = queue, ALT+click = pin (dock.html:12025's own title).
+    //  - Auto-feature VIP messages (stock key autofeaturevip, dock.html:4362
+    //    + :12008) and auto-feature privileged users (autofeaturepriv,
+    //    dock.html:4363 + :11997) — the two toggles below write those keys
+    //    through the canonical saveSetting, exactly like the popup's own
+    //    checkboxes (they live in stock's hostbot group, honestly noted).
+    //  - FIRST-TIMERS: NO stock setting auto-features first-timer messages —
+    //    featured.html has zero firsttime handling (skill map confirms).
+    //    Flagged, not faked: the honest line below says so.
+    //
+    // MESSAGE FILTERS — featured.html's REAL filter params (its own source,
+    // :1689-1700 + :1542-1545 + :2760-2776): &onlyfrom/&hidefrom (platforms),
+    // &filterevents, and &filterfeaturedusers (a name whitelist — only those
+    // chatters may be featured at all). The whitelist is surfaced natively
+    // here (rides the preview + copy URL). "Skip emoji-only" is DOCK-ONLY
+    // stock (&noemojisonly, dock.html:5704) — featured.html does NOT read
+    // it; flagged to the Admiral, honestly stated, not wired.
+    // --------------------------------------------------------------------
+    var FEATURED_OPTS_KEY = 'arcadeFeaturedOptions';
+    var featuredOpts = { whitelist: '' };
+    var featuredPanelLive = false;
+    var featuredPreviewToken = 0;
+
+    function loadFeaturedOptions() {
+        return loadHouseDoc(FEATURED_OPTS_KEY, { whitelist: '' }, function (doc) {
+            doc.whitelist = String(doc.whitelist || '').slice(0, 300);
+            return doc;
+        }).then(function (doc) { featuredOpts = doc; });
+    }
+    function saveFeaturedOptions() { saveGameSetting(FEATURED_OPTS_KEY, JSON.stringify(featuredOpts)); }
+
+    function featuredUrlParams() {
+        var wl = featuredOpts.whitelist.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        return wl.length ? ['filterfeaturedusers=' + encodeURIComponent(wl.join(','))] : [];
+    }
+
+    function initFeaturedPreviewFrame() {
+        var myToken = ++featuredPreviewToken;
+        // &demo: zero-network; the page's own seeds ride processData — with a
+        // whitelist set, only "DemoFren" renders (the filter REALLY filters).
+        var params = ['demo=1', 'session=' + encodeURIComponent(gamesPreviewRoom)].concat(featuredUrlParams());
+        widgetPreviewResolve('arcade-featured-preview-frame', 'featured.html', params, function () { return myToken === featuredPreviewToken; });
+    }
+
+    function buildFeaturedPanel() {
+        buildWidgetPanel('featured', 'FEATURED CHAT', 'Featured Chat');
+    }
+
+    function ensureFeaturedPanelLive() {
+        loadFeaturedOptions().then(function () {
+            featuredPanelLive = true;
+            renderFeaturedStage();
+        });
+    }
+
+    function renderFeaturedStage() {
+        var stage = document.getElementById('arcade-featured-stage');
+        if (!stage) return;
+        stage.innerHTML = '';
+        stage.appendChild(buildWidgetPreviewCard('featured', 'Featured overlay',
+            'Zero-network demo — two scripted fake messages ride the real filter chain. Set the whitelist below and only “DemoFren” shows; the filter really filters.',
+            initFeaturedPreviewFrame));
+
+        // ---- Who gets featured ----
+        var who = buildWidgetCard('Who gets featured');
+        widgetHint(who.body, 'Hand-picked from the dock: on the Main chat, click any message to feature it instantly — CTRL+click adds it to the queue, ALT+click pins it. (The dock’s own message path — nothing to set up here.)');
+        var ftBg = getBackgroundWindow();
+        [
+            { key: 'autofeaturevip', label: 'Auto-feature VIP messages', hint: 'Stock key autofeaturevip — messages from VIP-marked users feature themselves (dock.html:4362).' },
+            { key: 'autofeaturepriv', label: 'Auto-feature privileged users', hint: 'Stock key autofeaturepriv — admins/hosts/mods feature themselves (dock.html:4363).' }
+        ].forEach(function (opt) {
+            var on = !!(ftBg && typeof ftBg.getSettingFlag === 'function' && ftBg.getSettingFlag(opt.key));
+            var row = buildArcadeToggle({
+                label: opt.label,
+                hint: opt.hint,
+                checked: on,
+                onChange: function (checked) {
+                    saveDeckSetting('setting', opt.key, checked); // canonical, the popup's own write shape
+                    widgetStatus('featured', opt.label + (checked ? ': on' : ': off') + ' — applies to the dock on its next load');
+                }
+            });
+            who.body.appendChild(row);
+        });
+        widgetHint(who.body, 'First-timers: stock has NO auto-feature setting for first-timer messages (featured.html has zero firsttime handling) — flagged to the Admiral; not faked here. First-timer DETECTION for alerts/flows lives in Deck Settings → AI.');
+        stage.appendChild(who.card);
+
+        // ---- Message filters ----
+        var filters = buildWidgetCard('Message filters');
+        widgetHint(filters.body, 'Whitelist (stock’s &filterfeaturedusers): when set, ONLY these chatters can be featured at all — the focus-mode switch. Comma-separated names; add :platform to pin one (e.g. DemoFren:twitch).');
+        var wlRow = document.createElement('div');
+        wlRow.className = 'arcade-frames-field';
+        var wlLabel = document.createElement('label');
+        wlLabel.textContent = 'Featured-users whitelist';
+        var wlInput = document.createElement('input');
+        wlInput.type = 'text';
+        wlInput.autocomplete = 'off';
+        wlInput.spellcheck = false;
+        wlInput.placeholder = 'empty = anyone can be featured';
+        wlInput.value = featuredOpts.whitelist;
+        wlInput.setAttribute('aria-label', 'Featured-users whitelist');
+        wlInput.addEventListener('input', debounce(function () {
+            featuredOpts.whitelist = wlInput.value.trim();
+            saveFeaturedOptions();
+            initFeaturedPreviewFrame(); // the live preview re-runs the demo under the new filter
+            widgetStatus('featured', featuredOpts.whitelist ? 'whitelist on — the preview shows the filter working' : 'whitelist cleared');
+        }, 500));
+        wlLabel.appendChild(wlInput);
+        wlRow.appendChild(wlLabel);
+        filters.body.appendChild(wlRow);
+        widgetHint(filters.body, 'Skip emoji-only messages: exists for the DOCK only (stock &noemojisonly) — the featured overlay doesn’t read it. Flagged to the Admiral, not wired. Platform and event filters live in the stock groups below (Visibility).');
+        stage.appendChild(filters.card);
+
+        // ---- the berthed stock groups (S51 embed driver, same keys) ----
+        var stockCard = buildWidgetCard('Stock featured settings');
+        widgetHint(stockCard.body, 'Stock’s full featured groups — overlay, mechanics, visibility, styling, effects. Same stock page, same keys, berthed here. (Featured TTS stays in Deck Settings → Speech.)');
+        stage.appendChild(stockCard.card);
+        buildDeckPopupEmbed(stage, 'featured', null);
+
+        // ---- copy ----
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.title = 'The REAL session, never the demo — the whitelist rides along when set';
+        copyBtn.addEventListener('click', function () {
+            var el = elementCardById('featured');
+            buildElementOverlayUrl(el, featuredUrlParams()).then(function (url) {
+                if (!url) throw new Error('no url');
+                return copyToClipboard(url).then(function () {
+                    flashButton(copyBtn, 'Copied ✓');
+                    widgetStatus('featured', 'Copied — real session' + (featuredOpts.whitelist ? ' + whitelist filter' : '') + ', never the demo.');
+                });
+            }).catch(function (e) {
+                console.error('[arcade-shell] copy featured url failed:', e);
+                flashButton(copyBtn, 'Copy failed', 2200);
+            });
+        });
+        actions.appendChild(copyBtn);
+        stage.appendChild(actions);
+
+        initFeaturedPreviewFrame();
+    }
+
+    // --------------------------------------------------------------------
+    // LANE 3 — NOW PLAYING. Preview = the house music-widget in &demo (zero
+    // network; the demo title is deliberately LONG so every preview proves
+    // song-title containment). The four stock Spotify groups BERTH here
+    // (setup / overlay / announcements / commands — the S51 embed driver).
+    // The look knobs are the widget's OWN URL params (its header documents
+    // them), stored in a house doc and composed into preview + copy.
+    // --------------------------------------------------------------------
+    var MUSIC_OPTS_KEY = 'arcadeMusicOptions';
+    var musicOpts = { layout: 'horizontal', width: '', titlesize: '', fg: '', accent: '' };
+    var musicPanelLive = false;
+    var musicPreviewToken = 0;
+
+    function loadMusicOptions() {
+        return loadHouseDoc(MUSIC_OPTS_KEY, { layout: 'horizontal', width: '', titlesize: '', fg: '', accent: '' }, function (doc) {
+            if (['horizontal', 'vertical', 'compact'].indexOf(doc.layout) === -1) doc.layout = 'horizontal';
+            ['width', 'titlesize'].forEach(function (k) { doc[k] = /^\d{0,4}$/.test(doc[k]) ? doc[k] : ''; });
+            ['fg', 'accent'].forEach(function (k) { doc[k] = /^#[0-9a-fA-F]{0,8}$/.test(doc[k]) ? doc[k] : ''; });
+            return doc;
+        }).then(function (doc) { musicOpts = doc; });
+    }
+    function saveMusicOptions() { saveGameSetting(MUSIC_OPTS_KEY, JSON.stringify(musicOpts)); }
+
+    function musicUrlParams() {
+        var params = ['layout=' + musicOpts.layout];
+        if (musicOpts.width) params.push('width=' + musicOpts.width);
+        if (musicOpts.titlesize) params.push('titlesize=' + musicOpts.titlesize);
+        if (musicOpts.fg) params.push('fg=' + encodeURIComponent(musicOpts.fg));
+        if (musicOpts.accent) params.push('progresscolor=' + encodeURIComponent(musicOpts.accent));
+        return params;
+    }
+
+    function initMusicPreviewFrame() {
+        var myToken = ++musicPreviewToken;
+        var params = ['demo=1'].concat(musicUrlParams());
+        widgetPreviewResolve('arcade-music-preview-frame', 'music-widget.html', params, function () { return myToken === musicPreviewToken; });
+    }
+
+    function buildMusicPanel() {
+        buildWidgetPanel('music', 'NOW PLAYING', 'Now Playing');
+    }
+
+    function ensureMusicPanelLive() {
+        loadMusicOptions().then(function () {
+            musicPanelLive = true;
+            renderMusicStage();
+        });
+    }
+
+    function renderMusicStage() {
+        var stage = document.getElementById('arcade-music-stage');
+        if (!stage) return;
+        stage.innerHTML = '';
+        stage.appendChild(buildWidgetPreviewCard('music', 'Now Playing overlay',
+            'Zero-network demo — the demo track’s title is deliberately long on purpose: it must stay INSIDE the widget (ellipsis / wrapped), never overflow.',
+            initMusicPreviewFrame));
+
+        // ---- the look ----
+        var look = buildWidgetCard('The look');
+        var layoutRow = document.createElement('div');
+        layoutRow.className = 'arcade-alert-row';
+        var layoutLbl = document.createElement('label');
+        layoutLbl.textContent = 'Layout';
+        layoutRow.appendChild(layoutLbl);
+        var layoutSel = document.createElement('select');
+        layoutSel.setAttribute('aria-label', 'Now Playing layout');
+        ['horizontal', 'vertical', 'compact'].forEach(function (v) {
+            var o = document.createElement('option');
+            o.value = v;
+            o.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+            if (musicOpts.layout === v) o.selected = true;
+            layoutSel.appendChild(o);
+        });
+        layoutSel.addEventListener('change', function () {
+            musicOpts.layout = layoutSel.value;
+            saveMusicOptions();
+            initMusicPreviewFrame();
+        });
+        layoutRow.appendChild(layoutSel);
+        look.body.appendChild(layoutRow);
+
+        function musicField(labelText, field, placeholder, hint) {
+            var row = document.createElement('div');
+            row.className = 'arcade-frames-field';
+            var lbl = document.createElement('label');
+            lbl.textContent = labelText;
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+            input.placeholder = placeholder;
+            input.value = musicOpts[field];
+            input.setAttribute('aria-label', labelText);
+            input.addEventListener('input', debounce(function () {
+                musicOpts[field] = input.value.trim();
+                saveMusicOptions();
+                initMusicPreviewFrame();
+            }, 500));
+            lbl.appendChild(input);
+            row.appendChild(lbl);
+            if (hint) {
+                var h = document.createElement('div');
+                h.className = 'arcade-tipjar-rail__hint';
+                h.textContent = hint;
+                row.appendChild(h);
+            }
+            return row;
+        }
+        look.body.appendChild(musicField('Width (px)', 'width', '420 default', 'The widget never grows past this — long titles shrink inside it.'));
+        look.body.appendChild(musicField('Title size (px)', 'titlesize', '16 default', ''));
+        look.body.appendChild(musicField('Text color', 'fg', '#e8eaf0 default', 'Sets title + artist color (the widget’s &fg shorthand).'));
+        look.body.appendChild(musicField('Progress bar color', 'accent', 'green default', ''));
+        stage.appendChild(look.card);
+
+        // ---- the berthed Spotify groups ----
+        var sp = buildWidgetCard('Spotify connection (stock settings)');
+        widgetHint(sp.body, 'Stock’s Spotify groups berth here — setup (client id/secret), overlay behavior, announcements, commands. Same stock page, same keys. The Now Playing widget reads the token you paste as &token= on its URL — a credential, so the copy below leaves it for you to add, never stores it.');
+        stage.appendChild(sp.card);
+        buildDeckPopupEmbed(stage, 'music', null);
+
+        // ---- copy ----
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.title = 'Your look params ride along; add &token=… from your Spotify sign-in before loading in OBS';
+        copyBtn.addEventListener('click', function () {
+            var el = elementCardById('music');
+            buildElementOverlayUrl(el, musicUrlParams()).then(function (url) {
+                if (!url) throw new Error('no url');
+                return copyToClipboard(url).then(function () {
+                    flashButton(copyBtn, 'Copied ✓');
+                    widgetStatus('music', 'Copied — add &token=… from your Spotify sign-in (the setup group above) before OBS.');
+                });
+            }).catch(function (e) {
+                console.error('[arcade-shell] copy music url failed:', e);
+                flashButton(copyBtn, 'Copy failed', 2200);
+            });
+        });
+        actions.appendChild(copyBtn);
+        stage.appendChild(actions);
+
+        initMusicPreviewFrame();
+    }
+
+    // --------------------------------------------------------------------
+    // LANE 3 — HYPE TRAIN. Preview = stock hype.html in a throwaway room
+    // (honest zeros — an isolated room has no viewers). The toggles are
+    // stock's REAL hype URL params (verified against hype.html's own
+    // urlParams reads: viewersonly/chattersonly/combineall/combineyoutube/
+    // hidetitle/transparent/darkmode), stored in a house doc and composed
+    // into preview + copy.
+    // --------------------------------------------------------------------
+    var HYPE_OPTS_KEY = 'arcadeHypeOptions';
+    var hypeOpts = { viewersonly: false, chattersonly: false, combineall: false, combineyoutube: false, hidetitle: false, transparent: false };
+    var hypePanelLive = false;
+    var hypePreviewToken = 0;
+    var HYPE_TOGGLES = [
+        { key: 'viewersonly', label: 'Viewers only', hint: 'Count viewers, not chatters (stock &viewersonly).' },
+        { key: 'chattersonly', label: 'Chatters only', hint: 'Count chatters, not viewers (stock &chattersonly).' },
+        { key: 'combineall', label: 'Combine all platforms', hint: 'One total across every connected platform (stock &combineall).' },
+        { key: 'combineyoutube', label: 'Combine YouTube streams', hint: 'Merge multiple YouTube sources into one count (stock &combineyoutube).' },
+        { key: 'hidetitle', label: 'Hide the title', hint: 'Stock &hidetitle.' },
+        { key: 'transparent', label: 'Transparent background', hint: 'Stock &transparent — for OBS.' }
+    ];
+
+    function loadHypeOptions() {
+        return loadHouseDoc(HYPE_OPTS_KEY, { viewersonly: false, chattersonly: false, combineall: false, combineyoutube: false, hidetitle: false, transparent: false })
+            .then(function (doc) { hypeOpts = doc; });
+    }
+    function saveHypeOptions() { saveGameSetting(HYPE_OPTS_KEY, JSON.stringify(hypeOpts)); }
+
+    function hypeUrlParams() {
+        var params = [];
+        HYPE_TOGGLES.forEach(function (t) { if (hypeOpts[t.key]) params.push(t.key); });
+        return params;
+    }
+
+    function initHypePreviewFrame() {
+        var myToken = ++hypePreviewToken;
+        var params = ['session=' + encodeURIComponent(gamesPreviewRoom)].concat(hypeUrlParams());
+        widgetPreviewResolve('arcade-hype-preview-frame', 'hype.html', params, function () { return myToken === hypePreviewToken; });
+    }
+
+    function buildHypePanel() {
+        buildWidgetPanel('hype', 'HYPE TRAIN', 'Hype Train');
+    }
+
+    function ensureHypePanelLive() {
+        loadHypeOptions().then(function () {
+            hypePanelLive = true;
+            renderHypeStage();
+        });
+    }
+
+    function renderHypeStage() {
+        var stage = document.getElementById('arcade-hype-stage');
+        if (!stage) return;
+        stage.innerHTML = '';
+        stage.appendChild(buildWidgetPreviewCard('hype', 'Hype Train overlay',
+            'Isolated preview room — honestly reads zero (no live viewers in a throwaway room). The real session drives the real counts.',
+            initHypePreviewFrame));
+
+        var opts = buildWidgetCard('What it counts');
+        HYPE_TOGGLES.forEach(function (t) {
+            opts.body.appendChild(buildArcadeToggle({
+                label: t.label,
+                hint: t.hint,
+                checked: !!hypeOpts[t.key],
+                onChange: function (checked) {
+                    hypeOpts[t.key] = checked;
+                    saveHypeOptions();
+                    initHypePreviewFrame();
+                }
+            }));
+        });
+        widgetHint(opts.body, 'These are stock’s real hype URL params — they ride the preview above and the copy below.');
+        stage.appendChild(opts.card);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.addEventListener('click', function () {
+            var el = elementCardById('hype');
+            buildElementOverlayUrl(el, hypeUrlParams()).then(function (url) {
+                if (!url) throw new Error('no url');
+                return copyToClipboard(url).then(function () {
+                    flashButton(copyBtn, 'Copied ✓');
+                    widgetStatus('hype', 'Copied — real session + your options, never the preview room.');
+                });
+            }).catch(function (e) {
+                console.error('[arcade-shell] copy hype url failed:', e);
+                flashButton(copyBtn, 'Copy failed', 2200);
+            });
+        });
+        actions.appendChild(copyBtn);
+        stage.appendChild(actions);
+
+        initHypePreviewFrame();
+    }
+
+    // --------------------------------------------------------------------
+    // LANE 3 — FREN MAP (un-stubbed: stock's map.html). Viewers pin
+    // themselves by chat command; the overlay draws them on the world map.
+    // Options are stock's real map URL params (map.html:414-419's own
+    // aliases: mapautofit/mapspam/maphidenumbers/mapcolorintensity).
+    // --------------------------------------------------------------------
+    var MAP_OPTS_KEY = 'arcadeMapOptions';
+    var mapOpts = { mapautofit: false, mapspam: false, maphidenumbers: false, mapcolorintensity: false };
+    var mapPanelLive = false;
+    var mapPreviewToken = 0;
+    var MAP_TOGGLES = [
+        { key: 'mapautofit', label: 'Auto-fit the map to pins', hint: 'Zoom to frame every pinned fren (stock &mapautofit).' },
+        { key: 'mapspam', label: 'Let frens move their pin', hint: 'A fren can re-pin themselves (stock &mapspam — multi-vote).' },
+        { key: 'maphidenumbers', label: 'Hide the pin counts', hint: 'Stock &maphidenumbers.' },
+        { key: 'mapcolorintensity', label: 'Heat-colored pins', hint: 'Pins color by how many frens share a spot (stock &mapcolorintensity).' }
+    ];
+
+    function loadMapOptions() {
+        return loadHouseDoc(MAP_OPTS_KEY, { mapautofit: false, mapspam: false, maphidenumbers: false, mapcolorintensity: false })
+            .then(function (doc) { mapOpts = doc; });
+    }
+    function saveMapOptions() { saveGameSetting(MAP_OPTS_KEY, JSON.stringify(mapOpts)); }
+
+    function mapUrlParams() {
+        var params = [];
+        MAP_TOGGLES.forEach(function (t) { if (mapOpts[t.key]) params.push(t.key); });
+        return params;
+    }
+
+    function initMapPreviewFrame() {
+        var myToken = ++mapPreviewToken;
+        var params = ['session=' + encodeURIComponent(gamesPreviewRoom)].concat(mapUrlParams());
+        widgetPreviewResolve('arcade-map-preview-frame', 'map.html', params, function () { return myToken === mapPreviewToken; });
+    }
+
+    function buildMapPanel() {
+        buildWidgetPanel('map', 'FREN MAP', 'Fren Map');
+    }
+
+    function ensureMapPanelLive() {
+        loadMapOptions().then(function () {
+            mapPanelLive = true;
+            renderMapStage();
+        });
+    }
+
+    function renderMapStage() {
+        var stage = document.getElementById('arcade-map-stage');
+        if (!stage) return;
+        stage.innerHTML = '';
+        stage.appendChild(buildWidgetPreviewCard('map', 'Fren Map overlay',
+            'Isolated preview room — an empty map is honest here (no frens pinned in a throwaway room). On the real overlay, viewers pin themselves from chat.',
+            initMapPreviewFrame));
+
+        var opts = buildWidgetCard('Map behavior');
+        MAP_TOGGLES.forEach(function (t) {
+            opts.body.appendChild(buildArcadeToggle({
+                label: t.label,
+                hint: t.hint,
+                checked: !!mapOpts[t.key],
+                onChange: function (checked) {
+                    mapOpts[t.key] = checked;
+                    saveMapOptions();
+                    initMapPreviewFrame();
+                }
+            }));
+        });
+        stage.appendChild(opts.card);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.addEventListener('click', function () {
+            var el = elementCardById('map');
+            buildElementOverlayUrl(el, mapUrlParams()).then(function (url) {
+                if (!url) throw new Error('no url');
+                return copyToClipboard(url).then(function () {
+                    flashButton(copyBtn, 'Copied ✓');
+                    widgetStatus('map', 'Copied — real session + your options, never the preview room.');
+                });
+            }).catch(function (e) {
+                console.error('[arcade-shell] copy map url failed:', e);
+                flashButton(copyBtn, 'Copy failed', 2200);
+            });
+        });
+        actions.appendChild(copyBtn);
+        stage.appendChild(actions);
+
+        initMapPreviewFrame();
+    }
+
+    // --------------------------------------------------------------------
+    // LANE 4 — OVERLAY TEMPLATES gallery (RULED: surface-only — no builder).
+    // The list IS the source-verified THEME_PAGES census (the Style tab's
+    // own inventory: chat themes + featured-styles + the special full-screen
+    // pages — credits/danmaku/ticker-news included). LEFT: the templates as
+    // a selectable list. RIGHT: demo-isolated preview (throwaway preview
+    // room, never the live session) + Copy URL (real session). Lane-4 note
+    // for the retirement pathway: this gallery and the Style tab's Browse
+    // Looks modal read the SAME census — a future per-add-on Style world
+    // can point both at it.
+    // --------------------------------------------------------------------
+    var overlaysSelectedFile = null;
+    var overlaysPanelLive = false;
+    var overlaysPreviewToken = 0;
+
+    // Disk-verified 0018.06.05 (TASK-70 census): the 21 theme pages the
+    // bundle carries locally (the 3 Admiral-named specials — credits /
+    // danmaku / ticker-news — mirror-mastered verbatim into the bundle THIS
+    // task). Everything else in THEME_PAGES resolves to the hosted site —
+    // the gallery marks those HOSTED and says why a preview may stay blank
+    // offline.
+    var OVERLAY_LOCAL_FILES = {
+        'compact-classic.html': true, 'compact-clean.html': true, 'compact-glass.html': true,
+        'horizontal.html': true, 'notimeoutmessages.html': true, 'overlay-bubbles.html': true,
+        'overlay-cards.html': true, 'overlay-comic-classic.html': true, 'overlay-comic-pop.html': true,
+        'overlay-credits.html': true, 'overlay-danmaku.html': true, 'overlay-neon-cyberpunk.html': true,
+        'overlay-particles.html': true, 'overlay-ticker-news.html': true, 'overlay-typewriter.html': true,
+        'overlay-xacception.html': true, 'pretty.html': true, 'sampleoverlay_reverse.html': true,
+        'spiritoverlay.html': true, 'Neutron/chatOnly.html': true, 'Neutron/stream.html': true
+    };
+
+    function buildOverlaysPanel() {
+        var panel = document.createElement('section');
+        panel.className = 'arcade-overlays';
+        panel.setAttribute('aria-label', 'Overlay templates');
+        panel.innerHTML =
+            '<div class="arcade-panel-head">' +
+            '<span class="arcade-panel-title">OVERLAY TEMPLATES</span>' +
+            '<span class="arcade-spacer"></span>' +
+            '<span class="arcade-alerts-status" id="arcade-overlays-status"></span>' +
+            '</div>' +
+            '<div class="arcade-alerts-body">' +
+            '<div class="arcade-evt-list-col">' +
+            '<div class="arcade-evt-list" id="arcade-overlays-list" role="listbox" aria-label="Overlay templates"></div>' +
+            '</div>' +
+            '<div class="arcade-alerts-stage">' +
+            '<div class="arcade-evt-config" id="arcade-overlays-config"></div>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(panel);
+        attachArcadeListboxNav(panel.querySelector('#arcade-overlays-list'), '[data-arcade-overlay-file]',
+            function () { return overlaysSelectedFile; }, selectOverlayTemplate,
+            function (row) { return row.dataset.arcadeOverlayFile; });
+    }
+
+    function ensureOverlaysPanelLive() {
+        overlaysPanelLive = true;
+        if (!overlaysSelectedFile && THEME_PAGES.length) overlaysSelectedFile = THEME_PAGES[0].file;
+        renderOverlaysList();
+        renderOverlaysConfig();
+    }
+
+    var OVERLAYS_GROUP_LABEL = { chat: 'Chat themes', overlay: 'Featured message styles', special: 'Special full-screen' };
+
+    function renderOverlaysList() {
+        var list = document.getElementById('arcade-overlays-list');
+        if (!list) return;
+        list.innerHTML = '';
+        ['chat', 'overlay', 'special'].forEach(function (target) {
+            var entries = THEME_PAGES.filter(function (e) { return e.target === target; });
+            if (!entries.length) return;
+            var header = document.createElement('div');
+            header.className = 'arcade-evt-group__title';
+            header.textContent = OVERLAYS_GROUP_LABEL[target] || target;
+            list.appendChild(header);
+            entries.forEach(function (entry) {
+                var row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'arcade-evt-item';
+                row.dataset.arcadeOverlayFile = entry.file;
+                row.setAttribute('role', 'option');
+                var selected = overlaysSelectedFile === entry.file;
+                row.classList.toggle('is-on', selected);
+                row.setAttribute('aria-selected', String(selected));
+                var label = document.createElement('span');
+                label.className = 'arcade-evt-item__label';
+                label.textContent = entry.name;
+                row.appendChild(label);
+                var state = document.createElement('span');
+                state.className = 'arcade-evt-state ' + (entry.cssb64 ? 'arcade-evt-state--on' : 'arcade-evt-state--off');
+                state.textContent = entry.cssb64 ? 'stylable' : 'fixed look';
+                state.title = entry.cssb64 ? 'Reads &b64css — a future per-add-on style editor can dress it' : 'Its own fixed look — no css override support (source-verified)';
+                row.appendChild(state);
+                if (!OVERLAY_LOCAL_FILES[entry.file]) {
+                    var hosted = document.createElement('span');
+                    hosted.className = 'arcade-evt-state arcade-evt-state--off';
+                    hosted.textContent = 'hosted';
+                    hosted.title = 'Not in the local bundle — resolves to socialstream.ninja; needs network to preview';
+                    row.appendChild(hosted);
+                }
+                row.addEventListener('click', function () { selectOverlayTemplate(entry.file); });
+                list.appendChild(row);
+            });
+        });
+    }
+
+    function selectOverlayTemplate(file) {
+        overlaysSelectedFile = file;
+        renderOverlaysList();
+        renderOverlaysConfig();
+    }
+
+    function findThemePageEntry(file) {
+        var found = null;
+        THEME_PAGES.forEach(function (e) { if (e.file === file) found = e; });
+        return found;
+    }
+
+    function initOverlaysPreviewFrame() {
+        var entry = findThemePageEntry(overlaysSelectedFile);
+        if (!entry) return;
+        var myToken = ++overlaysPreviewToken;
+        // Demo-isolated: the throwaway preview room, never the live session.
+        // loadlast is inert on every one of these pages today (the THEME_PAGES
+        // support map) but harmless if a future theme reads it.
+        var params = ['session=' + encodeURIComponent(gamesPreviewRoom), 'loadlast=30'];
+        widgetPreviewResolve('arcade-overlays-preview-frame', 'themes/' + entry.file, params, function () { return myToken === overlaysPreviewToken; });
+    }
+
+    function renderOverlaysConfig() {
+        var host = document.getElementById('arcade-overlays-config');
+        if (!host) return;
+        host.innerHTML = '';
+        var entry = findThemePageEntry(overlaysSelectedFile);
+        if (!entry) {
+            widgetHint(host, 'Pick a template on the left.');
+            return;
+        }
+
+        var title = document.createElement('div');
+        title.className = 'arcade-evt-cond__title';
+        title.textContent = entry.name;
+        host.appendChild(title);
+        widgetHint(host,
+            (THEME_TARGET_LABEL[entry.target] === 'SPECIAL' ? 'A full-screen special (not a chat list). ' : '') +
+            (OVERLAY_LOCAL_FILES[entry.file] ? '' : 'Hosted page (not in the local bundle) — the preview needs network; offline it honestly stays blank. ') +
+            'The preview runs in an isolated throwaway room — never your live session. The copy below carries the REAL session.');
+
+        var preview = document.createElement('div');
+        preview.className = 'arcade-alerts-preview arcade-widget-preview';
+        var bar = document.createElement('div');
+        bar.className = 'arcade-alerts-preview-bar';
+        var reloadBtn = document.createElement('button');
+        reloadBtn.type = 'button';
+        reloadBtn.className = 'arcade-btn arcade-btn--sm';
+        reloadBtn.textContent = 'Reload preview';
+        reloadBtn.addEventListener('click', initOverlaysPreviewFrame);
+        bar.appendChild(reloadBtn);
+        preview.appendChild(bar);
+        var frame = document.createElement('iframe');
+        frame.id = 'arcade-overlays-preview-frame';
+        frame.title = entry.name + ' — demo-isolated preview';
+        preview.appendChild(frame);
+        host.appendChild(preview);
+
+        var actions = document.createElement('div');
+        actions.className = 'arcade-frames-actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        copyBtn.textContent = 'Copy overlay URL';
+        copyBtn.addEventListener('click', function () {
+            copyElementOverlayUrl({ overlayPage: 'themes/' + entry.file, params: [] }, copyBtn);
+            widgetStatus('overlays', 'Copying — ' + entry.name + ', real session, never the preview room.');
+        });
+        actions.appendChild(copyBtn);
+        host.appendChild(actions);
+
+        widgetHint(host, entry.cssb64
+            ? 'Stylable: this template reads &b64css — per-add-on style editing can dress it when that lane lands.'
+            : 'Fixed look: this template has no css override support (source-verified in the census).');
+        initOverlaysPreviewFrame();
     }
 
     // --------------------------------------------------------------------
@@ -8999,6 +10129,10 @@
             '<select id="arcade-style-steve-featured" aria-label="Steve’s featured overlay presets"></select>' +
             '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-steve-featured-copy">Copy featured URL</button>' +
             '</div>' +
+            // TASK-70 (Lane 1) — the cross-link where the featured settings
+            // used to be reachable from: their HOME is the Featured Chat
+            // add-on interior now; Style keeps the LOOK presets only.
+            '<span class="arcade-field__hint">Who gets featured and the message filters moved to their own home: Add-ons → <button type="button" class="arcade-linklike" id="arcade-style-featured-crosslink">Featured Chat</button>.</span>' +
             '</div>' +
             '</div>';
         document.body.appendChild(panel);
@@ -9083,6 +10217,10 @@
             var btn = this;
             var spec = splitStevePresetValue(featuredSel.value || 'featured.html');
             copyElementOverlayUrl({ overlayPage: spec.page, params: spec.params }, btn);
+        });
+        // TASK-70 (Lane 1) — the cross-link to Featured Chat's own home.
+        panel.querySelector('#arcade-style-featured-crosslink').addEventListener('click', function () {
+            navigateArcadeTab('featured');
         });
     }
 
@@ -11635,6 +12773,7 @@
             { panel: '.arcade-goals', col: '.arcade-evt-list-col', key: 'goals-list', label: 'goal bars list' },
             { panel: '.arcade-frames', col: '.arcade-evt-list-col', key: 'frames-list', label: 'frames & cameras list' },
             { panel: '.arcade-tipjar', col: '.arcade-evt-list-col', key: 'tipjar-list', label: 'tip jar list' },
+            { panel: '.arcade-overlays', col: '.arcade-evt-list-col', key: 'overlays-list', label: 'overlay templates list' },
             { panel: '.arcade-settings', col: '.arcade-evt-list-col', key: 'deck-list', label: 'settings sections list' },
             // Style's left column sits in a fixed-track grid — the track
             // itself must collapse too, hence wrapSel on the grid.
@@ -12224,6 +13363,39 @@
 
         var foot = document.createElement('div');
         foot.className = 'arcade-srcpop__foot';
+        // TASK-70 (Lane 5) — "reveal full page", restored: the door to
+        // stock's per-service FULL options page. Research census: that page
+        // is the stock 'streams' page ("🎭 Sources and Settings",
+        // index.html:175/203) — Steve's layout with EVERY control a source
+        // carries (the ⚙️ settings menu: cache, reply-only, roles, TikTok
+        // tools, user-agent + browser-session modals, connection modes,
+        // move/remove). The arcade WRAPS it — the Deck Settings stock-stage
+        // machinery shows the real page, dressed, beside the section rail;
+        // nothing is re-implemented. The door lands scrolled to THIS
+        // source's entry with a brief spotlight ring.
+        var fullPageBtn = document.createElement('button');
+        fullPageBtn.type = 'button';
+        fullPageBtn.className = 'arcade-btn arcade-btn--sm';
+        fullPageBtn.textContent = 'Reveal full page';
+        fullPageBtn.title = 'Steve’s full Sources & Settings page — every option for this source, wrapped by the arcade';
+        fullPageBtn.setAttribute('aria-label', 'Reveal the full stock options page for ' + sourceDisplayName(source));
+        fullPageBtn.addEventListener('click', function () {
+            var sourceId = source.id;
+            closeSourceDetailsPopout(false);
+            navigateArcadeTab('settings');
+            window.arcadeDeckSelect(DECK_STOCKLIB_KEY);
+            // Let the stock page's display flip settle, then land ON the
+            // source entry (same doctrine as deckFocusStockStage).
+            setTimeout(function () {
+                var entry = document.getElementById('source-' + sourceId);
+                if (entry) {
+                    entry.scrollIntoView({ block: 'center' });
+                    entry.classList.add('arcade-srcpop-spotlight');
+                    setTimeout(function () { entry.classList.remove('arcade-srcpop-spotlight'); }, 3600);
+                }
+            }, 400);
+        });
+        foot.appendChild(fullPageBtn);
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--danger';
@@ -13143,6 +14315,23 @@
             'wrapper-chat-message-styling-options',
             'wrapper-chat-message-shading-options',
             'wrapper-chat-message-effects-options'
+        ],
+        // TASK-70 (Lane 1) — the featured-chat groups berth in the Featured
+        // Chat add-on interior (featured-tts stays in Speech).
+        featured: [
+            'wrapper-featured-overlay-options',
+            'wrapper-featured-mechanics-options',
+            'wrapper-featured-visibility-options',
+            'wrapper-featured-styling-options',
+            'wrapper-featured-effects-options'
+        ],
+        // TASK-70 (Lane 3) — the Spotify groups berth in the Now Playing
+        // add-on interior.
+        music: [
+            'wrapper-spotify-setup',
+            'wrapper-spotify-overlay-options',
+            'wrapper-spotify-announcements',
+            'wrapper-spotify-commands'
         ]
     };
 
@@ -15396,6 +16585,11 @@
         buildGoalsPanel();    // S49 — goal bars; contents lazy (ensureGoalsPanelLive on first visit)
         buildFramesPanel();   // S50 — Frames & Cameras; contents lazy (ensureFramesPanelLive on first visit)
         buildTipjarPanel();   // S50 — the Tip Jar interior (payment rails); contents lazy (ensureTipjarPanelLive on first visit)
+        buildFeaturedPanel(); // TASK-70 (Lane 1) — Featured Chat; contents lazy
+        buildMusicPanel();    // TASK-70 (Lane 3) — Now Playing; contents lazy
+        buildHypePanel();     // TASK-70 (Lane 3) — Hype Train; contents lazy
+        buildMapPanel();      // TASK-70 (Lane 3) — Fren Map; contents lazy
+        buildOverlaysPanel(); // TASK-70 (Lane 4) — Overlay templates gallery; contents lazy
         buildDeckSettingsPanel(); // S51 — Deck Settings; contents lazy (ensureDeckSettingsLive on first visit)
         buildAiPanel();           // TASK-64 — the AI console; contents lazy (ensureAiPanelLive on first visit)
         installAddonsCrumbs();    // TASK-68 — the breadcrumb trail at the top of every door interior's left list
