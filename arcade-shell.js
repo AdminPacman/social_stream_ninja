@@ -1239,7 +1239,7 @@
             'aria-expanded="true" aria-label="Collapse sources to icon rail" title="Collapse to icon rail">«</button>' +
             '</div>' +
             '<div class="arcade-add-source">' +
-            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-add-source">+<span class="arcade-rail-hide">&nbsp;Add source</span></button>' +
+            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-add-source" aria-haspopup="dialog" aria-expanded="false" aria-controls="arcade-addsrc-picker">+<span class="arcade-rail-hide">&nbsp;Add source</span></button>' +
             '</div>' +
             '<ul class="arcade-src-list" id="arcade-src-list"></ul>' +
             '<div class="arcade-src-foot">' +
@@ -1249,10 +1249,9 @@
         document.body.appendChild(rail);
 
         rail.querySelector('#arcade-add-source').addEventListener('click', function () {
-            // S51 — sources admin is cross-linked from Deck Settings →
-            // Connections (the sources rail itself stays the one home).
-            navigateArcadeTab('settings');
-            if (typeof window.arcadeDeckSelect === 'function') window.arcadeDeckSelect('connections');
+            // TASK-67 — the full provider picker returns (was: a bare jump to
+            // Deck Settings → Connections, which lost the provider list).
+            openAddSourcePicker();
         });
         rail.querySelector('#arcade-start-all').addEventListener('click', function () {
             callBridge({ action: 'startAllSources' });
@@ -1269,6 +1268,7 @@
         side.innerHTML = buildAnalyticsPaneMarkup();
         document.body.appendChild(side);
         initAnalyticsPeriodSelector(side);
+        initSideCollapseToggle(side.querySelector('#arcade-side-toggle'));
     }
 
     // --------------------------------------------------------------------
@@ -8068,6 +8068,31 @@
         'textglow', 'largeavatar', 'bubble', 'twolines', 'fadein', 'emoji',
         'animatein=fadeInLeft', 'animateout=fadeOutUp', 'fadeout', 'smooth'
     ];
+    // TASK-67 (Lane 3): the Main-pane "Edit chat" quick panel's tuning
+    // (canonical: the arcadeDockTune setting; localStorage mirror — the
+    // interface flag's doctrine). The DOCK (APP) preview must render
+    // against the SAME truth the real dock boots with, so the mirror
+    // overlays the static house defaults here exactly the way
+    // ensureChatDockLoaded does it in index.html.
+    function readArcadeDockTune() {
+        try { return JSON.parse(localStorage.getItem('arcadeDockTune') || '{}') || {}; } catch (e) { return {}; }
+    }
+    function arcadeDockAppPreviewParams() {
+        var tune = readArcadeDockTune();
+        var out = [];
+        ARCADE_DOCK_APP_PREVIEW_PARAMS.forEach(function (p) {
+            if (p.indexOf('scale=') === 0) { out.push('scale=' + (tune.scale || '1.45')); return; }
+            if (p.indexOf('opacity=') === 0) { out.push('opacity=' + (tune.opacity || '0.65')); return; }
+            if (p === 'darkmode') { if (tune.dark !== false) out.push(p); return; }
+            if (p.indexOf('font=') === 0) {
+                var f = ('font' in tune) ? String(tune.font || '') : 'opendyslexic';
+                if (f) out.push('font=' + encodeURIComponent(f));
+                return;
+            }
+            out.push(p);
+        });
+        return out;
+    }
     // STREAM WIDGET preview keeps v1's original preview params.
     var ARCADE_WIDGET_PREVIEW_PARAMS = ['groupuser', 'darkmode', 'bubble', 'twolines', 'largeavatar', 'emoji'];
 
@@ -8106,6 +8131,24 @@
     var pendingLibraryDeleteBtn = null;
     var pendingLibraryDeleteTimer = null;
 
+    // TASK-67 (Lane 4) — the curated font dropdown choices. Honest scope:
+    // these ride --font-family, so they must be families the dock can
+    // actually resolve — its bundled Sora stack (the default), its bundled
+    // OpenDyslexic @font-face, and the generic system stacks. Custom… is
+    // the free-text door for any locally-installed family. (Stock's
+    // &googlefont param would FETCH a Google Font over the network — the
+    // CSS var alone doesn't load fonts, so no pretend entry for it here.)
+    var ARCADE_FONT_CHOICES = [
+        { v: '', label: 'Dock default (Sora stack)' },
+        { v: 'opendyslexic', label: 'OpenDyslexic (bundled)' },
+        { v: 'system-ui', label: 'System UI' },
+        { v: 'sans-serif', label: 'Sans-serif (system)' },
+        { v: 'serif', label: 'Serif (system)' },
+        { v: 'monospace', label: 'Monospace (system)' },
+        { v: 'cursive', label: 'Cursive (system)' },
+        { v: '__custom__', label: 'Custom…' }
+    ];
+
     var STYLE_CONTROLS = [
         { group: 'COLORS' },
         { id: 'transparent', label: 'Transparent background', kind: 'toggle' },
@@ -8120,7 +8163,12 @@
         { id: 'donoGlow', label: 'Donation amount glow', kind: 'color', vars: ['--donation-amount'] },
         { id: 'member', label: 'Member rows', kind: 'color', vars: ['--member-bgcolor', '--member-bgcolor-bubble'] },
         { group: 'TYPE' },
-        { id: 'fontFamily', label: 'Font family', kind: 'text', vars: ['--font-family'], placeholder: 'e.g. "Sora", sans-serif' },
+        // TASK-67 (Lane 4) — font family is a DROPDOWN now ("not a type
+        // in"): curated families the dock really supports (its bundled Sora
+        // stack + OpenDyslexic @font-face + system stacks) + Custom…, which
+        // reveals the free-text for any locally-installed family. Values
+        // ride --font-family exactly as the old text control's did.
+        { id: 'fontFamily', label: 'Font family', kind: 'font', vars: ['--font-family'] },
         { id: 'msgSize', label: 'Message size', kind: 'range', vars: ['--comment-font-size'], unit: 'px', min: 10, max: 40, step: 1 },
         { id: 'nameSize', label: 'Name size', kind: 'range', vars: ['--author-font-size'], unit: 'px', min: 10, max: 40, step: 1 },
         { id: 'msgWeight', label: 'Message weight', kind: 'range', vars: ['--message-font-weight'], min: 300, max: 800, step: 100 },
@@ -8403,6 +8451,30 @@
             '<div class="arcade-field" id="arcade-style-usercss-field"><label for="arcade-style-usercss">CUSTOM CSS (advanced)</label>' +
             '<span class="arcade-field__hint">appended verbatim after the generated style — yours is never overwritten</span></div>' +
             '<textarea id="arcade-style-usercss" spellcheck="false" rows="4"></textarea>' +
+            // TASK-67 (Lane 4) — the living CSS pane: what the current picks
+            // compose, live, read-only until unlocked ("this way the user
+            // can learn about it as they go, or edit it themselves").
+            '<div class="arcade-field" id="arcade-style-composed-field">' +
+            '<label for="arcade-style-composed">COMPOSED CSS — LIVE FROM YOUR PICKS</label>' +
+            '<span class="arcade-field__hint">tracks the pickers as you move them — Copy it, or unlock to fork it into hand-edited Custom CSS (one-way: manual edits stop tracking the pickers)</span></div>' +
+            '<pre id="arcade-style-composed" class="arcade-style-composed" tabindex="0" role="region" aria-label="Composed CSS, live from the current picks"></pre>' +
+            '<div class="arcade-evt-doors">' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-composed-copy">Copy CSS</button>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-composed-unlock">Unlock to edit…</button>' +
+            '</div>' +
+            // TASK-67 (Lane 4) — Steve's preset pickers, surfaced in Style.
+            '<div class="arcade-field arcade-style-steves">' +
+            '<label>STEVE’S PRESETS — THE OBS OVERLAYS</label>' +
+            '<span class="arcade-field__hint">stock’s ready-made preset lists (popup.html’s own overlay-preset-select + featured-preset-select), same canonical params. Honest scope: presets swap the whole OBS overlay page — the chat-overlay list dresses the OBS chat widget, the featured list the single-message overlay. The app dock can’t wear a whole page, so it takes its look from the pickers above instead.</span>' +
+            '<div class="arcade-style-steves__row">' +
+            '<select id="arcade-style-steve-overlay" aria-label="Steve’s chat overlay presets"></select>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-steve-overlay-copy">Copy overlay URL</button>' +
+            '</div>' +
+            '<div class="arcade-style-steves__row">' +
+            '<select id="arcade-style-steve-featured" aria-label="Steve’s featured overlay presets"></select>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-steve-featured-copy">Copy featured URL</button>' +
+            '</div>' +
+            '</div>' +
             '</div>';
         document.body.appendChild(panel);
         buildBrowseModal();
@@ -8422,6 +8494,153 @@
             styleUserCss = e.target.value;
             queueStylePreviewRefresh();
         });
+
+        // TASK-67 (Lane 4) — living CSS pane wiring.
+        panel.querySelector('#arcade-style-composed-copy').addEventListener('click', function () {
+            var btn = this;
+            copyToClipboard(composedCssForDisplay()).then(function () { flashButton(btn, 'Copied ✓'); })
+                .catch(function () { flashButton(btn, 'Copy failed', 2200); });
+        });
+        var composedUnlockBtn = panel.querySelector('#arcade-style-composed-unlock');
+        composedUnlockBtn.addEventListener('click', function () {
+            // One-way fork, confirm-on-second-click (house idiom): the
+            // current picks flatten into hand-edited Custom CSS and the
+            // pickers reset — manual edits stop tracking the pickers.
+            if (composedUnlockBtn.dataset.armed !== 'true') {
+                composedUnlockBtn.dataset.armed = 'true';
+                composedUnlockBtn.textContent = 'Unlock — pickers reset, CSS goes to Custom CSS. Confirm?';
+                setTimeout(function () {
+                    if (composedUnlockBtn.isConnected) {
+                        composedUnlockBtn.dataset.armed = 'false';
+                        composedUnlockBtn.textContent = 'Unlock to edit…';
+                    }
+                }, 5000);
+                return;
+            }
+            var css = composedCssForDisplay();
+            styleState = {};
+            syncStyleControlsFromState();
+            styleUserCss = css;
+            var ta = panel.querySelector('#arcade-style-usercss');
+            if (ta) ta.value = css;
+            composedUnlockBtn.dataset.armed = 'false';
+            composedUnlockBtn.textContent = 'Unlock to edit…';
+            queueStylePreviewRefresh();
+            renderComposedCss();
+            setStyleStatus('Unlocked — your picks are now flat Custom CSS (the pickers no longer track them). Clear Custom CSS to start over.');
+        });
+
+        // TASK-67 (Lane 4) — Steve's preset pickers. The option lists are
+        // stock's own selects, verbatim (popup.html:4765-4791 overlay,
+        // :4823-4852 featured); the Copy door composes the URL with the
+        // same canonical params via the shared element-URL builder (real
+        // session, language params, stock encode).
+        var overlaySel = panel.querySelector('#arcade-style-steve-overlay');
+        STEVE_OVERLAY_PRESETS.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p.v;
+            o.textContent = p.label;
+            overlaySel.appendChild(o);
+        });
+        var featuredSel = panel.querySelector('#arcade-style-steve-featured');
+        STEVE_FEATURED_PRESETS.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p.v;
+            o.textContent = p.label;
+            featuredSel.appendChild(o);
+        });
+        panel.querySelector('#arcade-style-steve-overlay-copy').addEventListener('click', function () {
+            var btn = this;
+            var spec = splitStevePresetValue(overlaySel.value || 'sampleoverlay.html');
+            copyElementOverlayUrl({ overlayPage: spec.page, params: spec.params }, btn);
+        });
+        panel.querySelector('#arcade-style-steve-featured-copy').addEventListener('click', function () {
+            var btn = this;
+            var spec = splitStevePresetValue(featuredSel.value || 'featured.html');
+            copyElementOverlayUrl({ overlayPage: spec.page, params: spec.params }, btn);
+        });
+    }
+
+    // TASK-67 (Lane 4) — stock's preset lists, verbatim from popup.html.
+    // Chat overlay presets (overlay-preset-select, popup.html:4765-4791):
+    var STEVE_OVERLAY_PRESETS = [
+        { v: 'sampleoverlay.html', label: '📄 Sample Overlay - Basic chat overlay' },
+        { v: 'themes/compact-classic.html', label: '💬 Compact Classic - Dense Twitch/IRC-style chat' },
+        { v: 'themes/compact-classic.html?ultra', label: '⚡ Compact Ultra - Super dense minimum-height chat' },
+        { v: 'themes/compact-clean.html', label: '🧼 Compact Clean - Tidy compact cards' },
+        { v: 'themes/compact-glass.html', label: '🪟 Compact Glass - Frosted compact rows' },
+        { v: 'themes/overlay-comic-pop.html', label: '💥 Comic Pop Dock - Stackable pop art chat' },
+        { v: 'themes/overlay-comic-classic.html', label: '🗯️ Comic Pop Classic - Featured style chat' },
+        { v: 'themes/horizontal.html', label: '➡️ Horizontal Scroll - Right-to-left ticker' },
+        { v: 'themes/overlay-ticker-news.html', label: '📰 News Ticker - Breaking-news crawl bar' },
+        { v: 'themes/overlay-credits.html', label: '🎬 Movie Credits - Continuous rolling credits' },
+        { v: 'themes/overlay-danmaku.html', label: '🎯 Danmaku Bullet Chat - Messages fly across screen' },
+        { v: 'themes/overlay-neon-cyberpunk.html', label: '⚡ Neon Cyberpunk - Futuristic glitch effects' },
+        { v: 'themes/overlay-particles.html', label: '✨ Particle System - Floating message effects' },
+        { v: 'themes/overlay-typewriter.html', label: '⌨️ Terminal Typewriter - Retro typing effects' },
+        { v: 'themes/overlay-bubbles.html', label: '🫧 Bubble Chat - Floating speech bubbles' },
+        { v: 'themes/overlay-cards.html', label: '🃏 Card Flip 3D - Interactive card animations' },
+        { v: 'themes/overlay-xacception.html', label: '❎ Simple Alternative - Basic bubble message' },
+        { v: 'themes/pretty.html', label: '✨ Pretty Theme - Holographic style' },
+        { v: 'themes/Neutron/chatOnly.html', label: '⚛️ Neutron Chat - Sci-fi gaming theme' },
+        { v: 'themes/Neutron/stream.html', label: '⚛️ Neutron Stream - Full stream layout' },
+        { v: 'themes/Windows3.1/index.html', label: '🖥️ Windows 3.1 - Retro computing' },
+        { v: 'themes/deuks_overlay/overlay1.html', label: '🎬 Deuks Overlay 1 - Custom streaming' },
+        { v: 'themes/deuks_overlay/overlay2.html', label: '🎬 Deuks Overlay 2 - Alternative layout' },
+        { v: 'themes/rainbowpuke/index.html', label: '🌈 Rainbow Puke - Colorful chaos' },
+        { v: 'themes/t3nk3y/index.html', label: '🎮 T3nk3y Theme - Gaming style' },
+        { v: 'themes/LuckyLootTube/luckyloottube.html', label: '🎁 LuckyLootTube - Liquid Glass' }
+    ];
+    // Featured overlay presets (featured-preset-select, popup.html:4823-4852):
+    var STEVE_FEATURED_PRESETS = [
+        { v: '', label: 'Classic (Full Customization)' },
+        { v: 'themes/featured-styles/featured-modern.html?style=glass', label: 'Modern Glass' },
+        { v: 'themes/featured-styles/featured-modern.html?style=neon', label: 'Neon Glow' },
+        { v: 'themes/featured-styles/featured-modern.html?style=minimal', label: 'Minimal Clean' },
+        { v: 'themes/featured-styles/featured-modern.html?style=gaming', label: 'Gaming RGB' },
+        { v: 'themes/featured-styles/featured-modern.html?style=twitch', label: 'Twitch Style' },
+        { v: 'themes/featured-styles/featured-animated.html?style=bounce', label: 'Animated Bounce' },
+        { v: 'themes/featured-styles/featured-animated.html?style=slide', label: 'Animated Slide' },
+        { v: 'themes/featured-styles/featured-animated.html?style=typewriter', label: 'Typewriter' },
+        { v: 'themes/featured-styles/featured-animated.html?style=comic', label: 'Comic Pop' },
+        { v: 'themes/featured-styles/featured-animated.html?style=holo', label: 'Holographic' },
+        { v: 'themes/featured-styles/featured-3d.html?style=cube', label: '3D Cube' },
+        { v: 'themes/featured-styles/featured-3d.html?style=flip', label: 'Card Flip' },
+        { v: 'themes/featured-styles/featured-3d.html?style=float', label: 'Floating Panels' },
+        { v: 'themes/featured-styles/featured-3d.html?style=helix', label: 'Helix Spiral' },
+        { v: 'themes/featured-styles/featured-3d.html?style=iso', label: 'Isometric' },
+        { v: 'themes/featured-styles/featured-particles.html?style=fireflies', label: 'Fireflies' },
+        { v: 'themes/featured-styles/featured-particles.html?style=snow', label: 'Snow Fall' },
+        { v: 'themes/featured-styles/featured-particles.html?style=matrix', label: 'Matrix Rain' },
+        { v: 'themes/featured-styles/featured-particles.html?style=bubbles', label: 'Bubbles' },
+        { v: 'themes/featured-styles/featured-particles.html?style=stars', label: 'Starfield' },
+        { v: 'themes/featured-styles/featured-slide.html', label: 'Sliding Effects' },
+        { v: 'themes/featured-styles/featured-gradient.html', label: 'Gradient Animations' },
+        { v: 'themes/featured-styles/featured-retro.html', label: 'Retro/Synthwave' },
+        { v: 'themes/featured-styles/featured-glass.html', label: 'Glassmorphism' },
+        { v: 'themes/featured-styles/featured-cyberpunk.html', label: 'Cyberpunk' },
+        { v: 'themes/featured-styles/featured-gaming.html', label: 'Gaming Themed' },
+        { v: 'themes/featured-styles/featured-elegant.html', label: 'Elegant & Sophisticated' },
+        { v: 'themes/featured-styles/featured-dynamic.html', label: 'Dynamic Physics' },
+        { v: 'themes/featured-styles/featured-neon.html', label: 'Neon Glow' }
+    ];
+    // 'themes/foo.html?style=glass' → { page, params:['style=glass'] } — the
+    // option value's query string IS the canonical param set stock composes.
+    function splitStevePresetValue(value) {
+        var parts = String(value || '').split('?');
+        return { page: parts[0] || 'featured.html', params: parts[1] ? parts[1].split('&').filter(Boolean) : [] };
+    }
+
+    // TASK-67 (Lane 4) — the living CSS pane: the composed blob minus the
+    // style-builder state marker (that's plumbing, not something to learn).
+    function composedCssForDisplay() {
+        var blob = buildStyleCss();
+        var stripped = blob.replace(/^\s*\/\*[\s\S]*?\*\/\n?/, '');
+        return stripped || '/* nothing picked yet — the dock’s default look applies */';
+    }
+    function renderComposedCss() {
+        var pre = document.getElementById('arcade-style-composed');
+        if (pre) pre.textContent = composedCssForDisplay();
     }
 
     function initBackToDockButton(panel) {
@@ -9220,6 +9439,38 @@
                 var out = row.querySelector('.arcade-style-val');
                 if (out) out.textContent = input.value + (ctl.unit || '');
             });
+        } else if (ctl.kind === 'font') {
+            // TASK-67 (Lane 4) — curated dropdown + Custom… free-text door.
+            input = document.createElement('select');
+            ARCADE_FONT_CHOICES.forEach(function (f) {
+                var o = document.createElement('option');
+                o.value = f.v;
+                o.textContent = f.label;
+                input.appendChild(o);
+            });
+            var customFont = document.createElement('input');
+            customFont.type = 'text';
+            customFont.className = 'arcade-style-fontcustom';
+            customFont.placeholder = 'e.g. "Inter", sans-serif';
+            customFont.setAttribute('aria-label', 'Custom font family');
+            customFont.hidden = true;
+            customFont.addEventListener('input', function () {
+                setStyleValue(ctl.id, customFont.value.trim());
+                row.classList.toggle('is-set', !!customFont.value.trim());
+            });
+            input.__fontCustom = customFont;
+            input.addEventListener('change', function () {
+                if (input.value === '__custom__') {
+                    customFont.hidden = false;
+                    customFont.focus();
+                    setStyleValue(ctl.id, customFont.value.trim());
+                    row.classList.toggle('is-set', !!customFont.value.trim());
+                } else {
+                    customFont.hidden = true;
+                    setStyleValue(ctl.id, input.value);
+                    row.classList.toggle('is-set', !!input.value);
+                }
+            });
         } else {
             input = document.createElement('input');
             input.type = 'text';
@@ -9228,6 +9479,7 @@
         }
         input.id = 'arcade-style-ctl-' + ctl.id;
         row.appendChild(input);
+        if (input.__fontCustom) row.appendChild(input.__fontCustom);
         if (ctl.kind === 'range') {
             var val = document.createElement('span');
             val.className = 'arcade-style-val';
@@ -9265,6 +9517,18 @@
                 var val = row && row.querySelector('.arcade-style-val');
                 if (val) val.textContent = has ? styleState[ctl.id] + (ctl.unit || '') : '—';
             } else if (ctl.kind === 'color') input.value = has ? styleState[ctl.id] : '#888888';
+            else if (ctl.kind === 'font') {
+                var fontVal = has ? String(styleState[ctl.id]) : '';
+                var fontCustom = input.__fontCustom;
+                var known = ARCADE_FONT_CHOICES.some(function (f) { return f.v === fontVal && f.v !== '__custom__'; });
+                if (has && !known) {
+                    input.value = '__custom__';
+                    if (fontCustom) { fontCustom.hidden = false; fontCustom.value = fontVal; }
+                } else {
+                    input.value = fontVal;
+                    if (fontCustom) { fontCustom.hidden = true; fontCustom.value = ''; }
+                }
+            }
             else input.value = has ? styleState[ctl.id] : '';
         });
     }
@@ -9282,7 +9546,7 @@
     function ensureStylePanelLive() {
         if (stylePanelLive) { queueStylePreviewRefresh(); return; }
         stylePanelLive = true;
-        loadStyleSettings().then(function () { initStylePreviewFrame(); });
+        loadStyleSettings().then(function () { renderComposedCss(); initStylePreviewFrame(); });
     }
 
     function loadStyleSettings() {
@@ -9428,6 +9692,7 @@
     // input listeners don't need their own per-mode guards; the reload
     // fallback also routes to the theme reloader while in theme mode.
     function queueStylePreviewRefresh() {
+        renderComposedCss(); // TASK-67 — the living CSS pane tracks every pick immediately
         if (!stylePanelLive) return;
         if (!isStyleEditorAvailable()) return;
         clearTimeout(stylePreviewTimer);
@@ -9439,7 +9704,7 @@
     }
 
     function buildStylePreviewParams(sessionId) {
-        var baseParams = activeStyleProfile === 'dock' ? ARCADE_DOCK_APP_PREVIEW_PARAMS : ARCADE_WIDGET_PREVIEW_PARAMS;
+        var baseParams = activeStyleProfile === 'dock' ? arcadeDockAppPreviewParams() : ARCADE_WIDGET_PREVIEW_PARAMS;
         return ['session=' + encodeURIComponent(sessionId), 'loadlast=30']
             .concat(baseParams)
             .concat(['cssb64=' + encodeCssB64(buildStyleCss())]);
@@ -10119,7 +10384,7 @@
         }
         try {
             var blob = buildStyleCss(); // current scratch state — unsaved edits included
-            var baseParams = (activeStyleProfile === 'dock' ? ARCADE_DOCK_APP_PREVIEW_PARAMS : ARCADE_WIDGET_PREVIEW_PARAMS).slice();
+            var baseParams = (activeStyleProfile === 'dock' ? arcadeDockAppPreviewParams() : ARCADE_WIDGET_PREVIEW_PARAMS).slice();
             var html = buildThemeFileHtml(blob, baseParams);
             var file = new Blob([html], { type: 'text/html' });
             var url = URL.createObjectURL(file);
@@ -10246,7 +10511,10 @@
     // --------------------------------------------------------------------
     function buildAnalyticsPaneMarkup() {
         return (
-            '<div class="arcade-panel-head"><span class="arcade-panel-title">ANALYTICS</span></div>' +
+            '<div class="arcade-panel-head"><span class="arcade-panel-title arcade-side-hide">ANALYTICS</span>' +
+            '<span class="arcade-spacer arcade-side-hide"></span>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-btn--icon" id="arcade-side-toggle" ' +
+            'aria-expanded="true" aria-label="Collapse analytics rail" title="Collapse analytics rail">«</button></div>' +
             '<div class="arcade-panel-body">' +
             // S41 — the ON-AIR strip. Three honest states driven by REAL OBS
             // stream events only (background.js records the last one the flow
@@ -10259,6 +10527,11 @@
             '<span class="arcade-onair__label" id="arcade-onair-label">—</span>' +
             '<span class="arcade-onair__sub" id="arcade-onair-sub">OBS link not seen — arm actions.html (&obsws=)</span>' +
             '</div>' +
+            // TASK-67 — the OBS link tile gains its config door: deep-link
+            // to Deck Settings → Connections, where the stock OBS WebSocket
+            // group (obsws/obspw fields, names only) rides the embed.
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-onair__config" id="arcade-onair-config" ' +
+            'title="Configure the OBS WebSocket link — Deck Settings → Connections">⚙ OBS link</button>' +
             '<div class="arcade-period-row">' +
             '<span class="arcade-k">PERIOD</span>' +
             '<div class="arcade-seg" role="group" aria-label="Analytics period" id="arcade-period-seg">' +
@@ -10296,6 +10569,29 @@
     }
 
     function initAnalyticsPeriodSelector(side) {
+        // TASK-67 — the OBS link tile's config door (Lane 1): deep-link to
+        // Deck Settings → Connections; the stock OBS WebSocket group is the
+        // FIRST berthed group there (already expanded by the embed driver),
+        // and focus lands IN that embed — H17-B destination rule.
+        var obsBtn = side.querySelector('#arcade-onair-config');
+        if (obsBtn) {
+            obsBtn.addEventListener('click', function () {
+                navigateArcadeTab('settings');
+                if (typeof window.arcadeDeckSelect === 'function') window.arcadeDeckSelect('connections');
+                var tries = 0;
+                var timer = setInterval(function () {
+                    tries++;
+                    var frame = document.querySelector('.arcade-settings .arcade-deck-embed__frame');
+                    if (frame || tries > 20) {
+                        clearInterval(timer);
+                        if (frame) {
+                            frame.scrollIntoView({ block: 'nearest' });
+                            try { frame.focus(); } catch (e) { /* noop */ }
+                        }
+                    }
+                }, 150);
+            });
+        }
         var seg = side.querySelector('#arcade-period-seg');
         if (!seg) return;
         seg.addEventListener('click', function (e) {
@@ -10750,24 +11046,105 @@
     // the rail itself and the #content-pane's padding-left that already
     // tracks that same variable — one class flip drives both.
     // --------------------------------------------------------------------
-    function initRailCollapseToggle(btn) {
-        if (!btn) return;
+    // --------------------------------------------------------------------
+    // TASK-67 (Lane 2) — ONE shared column-collapse mechanism for every
+    // rail/column in the shell ("right rail minimizable like the left",
+    // "all tabs' left/right columns like the main tab"). One helper drives
+    // button state + aria + persistence (per-column localStorage key); the
+    // caller supplies the apply() that flips whatever class/width its
+    // column's CSS keys on. The sources rail keeps its LEGACY storage key
+    // (arcadeRailCollapsed) so an operator's saved state survives.
+    // --------------------------------------------------------------------
+    function initArcadeColumnCollapse(opts) {
+        // opts: { btn, storeKey, collapseLabel, expandLabel, apply(collapsed) }
+        if (!opts || !opts.btn) return;
         var collapsed = false;
-        try { collapsed = localStorage.getItem('arcadeRailCollapsed') === 'true'; } catch (e) { /* noop */ }
-        applyRailCollapsed(collapsed, btn);
-        btn.addEventListener('click', function () {
-            var next = !document.body.classList.contains('arcade-rail-collapsed');
-            applyRailCollapsed(next, btn);
-            try { localStorage.setItem('arcadeRailCollapsed', next ? 'true' : 'false'); } catch (e) { /* noop */ }
+        try { collapsed = localStorage.getItem(opts.storeKey) === 'true'; } catch (e) { /* noop */ }
+        applyState(collapsed);
+        opts.btn.addEventListener('click', function () {
+            collapsed = !collapsed;
+            applyState(collapsed);
+            try { localStorage.setItem(opts.storeKey, collapsed ? 'true' : 'false'); } catch (e) { /* noop */ }
+        });
+        function applyState(c) {
+            opts.apply(c);
+            opts.btn.textContent = c ? '»' : '«';
+            opts.btn.setAttribute('aria-expanded', String(!c));
+            opts.btn.setAttribute('aria-label', c ? opts.expandLabel : opts.collapseLabel);
+            opts.btn.title = c ? opts.expandLabel : opts.collapseLabel;
+        }
+    }
+
+    function initRailCollapseToggle(btn) {
+        initArcadeColumnCollapse({
+            btn: btn,
+            storeKey: 'arcadeRailCollapsed', // legacy key — pre-TASK-67 shape, kept
+            collapseLabel: 'Collapse sources to icon rail',
+            expandLabel: 'Expand sources',
+            apply: function (collapsed) {
+                document.body.classList.toggle('arcade-rail-collapsed', collapsed);
+            }
         });
     }
 
-    function applyRailCollapsed(collapsed, btn) {
-        document.body.classList.toggle('arcade-rail-collapsed', collapsed);
-        btn.textContent = collapsed ? '»' : '«';
-        btn.setAttribute('aria-expanded', String(!collapsed));
-        btn.setAttribute('aria-label', collapsed ? 'Expand sources' : 'Collapse sources to icon rail');
-        btn.title = collapsed ? 'Expand sources' : 'Collapse to icon rail';
+    // Every interior with a left list column (the S47/S50
+    // .arcade-alerts-body idiom) + the Style tab's controls column. The
+    // toggle lives in the panel HEAD (always visible, so a fully-collapsed
+    // column is always re-openable); the class rides the column itself.
+    function installArcadeColumnToggles() {
+        var defs = [
+            { panel: '.arcade-ai', col: '.arcade-evt-list-col', key: 'ai-list', label: 'AI zones list' },
+            { panel: '.arcade-alerts', col: '.arcade-evt-list-col', key: 'alerts-list', label: 'alerts list' },
+            { panel: '.arcade-games', col: '.arcade-evt-list-col', key: 'games-list', label: 'games list' },
+            { panel: '.arcade-commands', col: '.arcade-evt-list-col', key: 'commands-list', label: 'commands list' },
+            { panel: '.arcade-goals', col: '.arcade-evt-list-col', key: 'goals-list', label: 'goal bars list' },
+            { panel: '.arcade-frames', col: '.arcade-evt-list-col', key: 'frames-list', label: 'frames & cameras list' },
+            { panel: '.arcade-tipjar', col: '.arcade-evt-list-col', key: 'tipjar-list', label: 'tip jar list' },
+            { panel: '.arcade-settings', col: '.arcade-evt-list-col', key: 'deck-list', label: 'settings sections list' },
+            // Style's left column sits in a fixed-track grid — the track
+            // itself must collapse too, hence wrapSel on the grid.
+            { panel: '.arcade-style', col: '.arcade-style-controls-col', key: 'style-controls', label: 'style controls', wrapSel: '.arcade-style-cols' }
+        ];
+        defs.forEach(function (def) {
+            var panel = document.querySelector(def.panel);
+            if (!panel) return;
+            var column = panel.querySelector(def.col);
+            var head = panel.querySelector('.arcade-panel-head');
+            var title = head && head.querySelector('.arcade-panel-title');
+            if (!column || !head || !title) return;
+            if (!column.id) column.id = 'arcade-col-' + def.key;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm arcade-btn--icon arcade-col-toggle';
+            btn.setAttribute('aria-controls', column.id);
+            title.insertAdjacentElement('afterend', btn);
+            var wrap = def.wrapSel ? panel.querySelector(def.wrapSel) : null;
+            initArcadeColumnCollapse({
+                btn: btn,
+                storeKey: 'arcadeColCollapsed:' + def.key,
+                collapseLabel: 'Collapse the ' + def.label,
+                expandLabel: 'Expand the ' + def.label,
+                apply: function (collapsed) {
+                    column.classList.toggle('arcade-col-collapsed', collapsed);
+                    if (wrap) wrap.classList.toggle('arcade-col-collapsed-wrap', collapsed);
+                }
+            });
+        });
+    }
+
+    // The RIGHT rail (Main's analytics side) gets the same affordance as
+    // the left — collapsing narrows --arc-side-w, which the content pane's
+    // padding-right already tracks (the left rail's own doctrine, mirrored).
+    function initSideCollapseToggle(btn) {
+        initArcadeColumnCollapse({
+            btn: btn,
+            storeKey: 'arcadeSideCollapsed',
+            collapseLabel: 'Collapse analytics rail',
+            expandLabel: 'Expand analytics rail',
+            apply: function (collapsed) {
+                document.body.classList.toggle('arcade-side-collapsed', collapsed);
+            }
+        });
     }
 
     function callBridge(request) {
@@ -10847,8 +11224,19 @@
         logo.appendChild(img);
         li.appendChild(logo);
 
-        var nameWrap = document.createElement('span');
-        nameWrap.className = 'arcade-src__name';
+        // TASK-67 — the NAME is a button: opens the source-details popout
+        // (connection state + real per-source details + stock's real
+        // per-source actions). The start/stop icon stays its own button.
+        var nameWrap = document.createElement('button');
+        nameWrap.type = 'button';
+        nameWrap.className = 'arcade-src__name arcade-src__namebtn';
+        nameWrap.title = 'Source details & actions';
+        nameWrap.setAttribute('aria-label', 'Details for ' + sourceDisplayName(source));
+        nameWrap.setAttribute('aria-haspopup', 'dialog');
+        nameWrap.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSourceDetailsPopout(source.id);
+        });
         var b = document.createElement('b');
         b.textContent = sourceDisplayName(source);
         var state = document.createElement('span');
@@ -10877,6 +11265,714 @@
         return li;
     }
 
+    // --------------------------------------------------------------------
+    // TASK-67 (Lane 1) — THE PROVIDER PICKER, RESTORED. The arcade's
+    // "+ Add source" used to just jump to Deck Settings → Connections;
+    // stock's big provider list (index.html's .addnew block, the streams
+    // page the arcade shell replaced) was unreachable. This registry
+    // mirrors that stock block 1:1 (visible entries only — stock keeps
+    // 'pilled' hidden, so do we) and each pick calls the SAME stock global
+    // the stock button's onclick called — stock's own validation, prompts,
+    // and source-creation path, never a re-implementation.
+    // --------------------------------------------------------------------
+    var ADD_SOURCE_PROVIDERS = [
+        { label: 'YouTube', target: 'youtube', kind: 'youtube' },
+        { label: 'Twitch', target: 'twitch', kind: 'prompt' },
+        { label: 'Kick', target: 'kick', kind: 'prompt' },
+        { label: 'VPZONE', target: 'vpzone', kind: 'prompt' },
+        { label: 'Velora', target: 'velora', kind: 'prompt' },
+        { label: 'Instagram Live', target: 'instagramlive', kind: 'prompt' },
+        { label: 'Facebook', target: 'facebook', kind: 'prompt' },
+        { label: 'TikTok', target: 'tiktok', kind: 'prompt' },
+        { label: 'Picarto', target: 'picarto', kind: 'prompt' },
+        { label: 'X.com', target: 'x', kind: 'prompt' },
+        { label: 'Mixcloud', target: 'mixcloud', kind: 'prompt' },
+        { label: 'TwitCasting', target: 'twitcasting', kind: 'prompt' },
+        { label: 'YouNow', target: 'younow', kind: 'prompt' },
+        { label: 'CHZZK', target: 'chzzk', kind: 'prompt' },
+        { label: 'Nimo', target: 'nimo', kind: 'prompt' },
+        { label: 'SOOP Live', target: 'sooplive', kind: 'prompt' },
+        { label: 'Rumble', target: 'rumble', kind: 'prompt' },
+        { label: 'Rumble Video', target: 'rumble', kind: 'videoid' },
+        { label: 'Rumble API Tracker', target: 'rumble', kind: 'rumbleapi' },
+        { label: 'Beamstream', target: 'beamstream', kind: 'prompt' },
+        { label: 'Parti', target: 'parti', kind: 'prompt' },
+        { label: 'Arena Social', target: 'arenasocial', kind: 'prompt' },
+        { label: 'BiliBili.com', target: 'bilibilicom', kind: 'prompt' },
+        { label: 'BiliBili.tv', target: 'bilibilitv', kind: 'prompt' },
+        { label: 'Peertube', target: 'peertube', kind: 'other' },
+        { label: 'Other (any chat URL)', target: 'other', kind: 'other' }
+    ];
+    // kind → the stock global the stock .addnew button wired to (cited from
+    // index.html:170-225).
+    var ADD_SOURCE_STOCK_FN = {
+        youtube: 'showYouTubeAddSourcePrompt',
+        prompt: 'newSourcePrompt',
+        videoid: 'newSourceVideoIDPrompt',
+        rumbleapi: 'newRumbleApiTrackerPrompt',
+        other: 'newOtherSourcePrompt'
+    };
+    var addSourcePickerKeydown = null;
+
+    function openAddSourcePicker() {
+        closeAddSourcePicker(false);
+        var trigger = document.getElementById('arcade-add-source');
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-addsrc-picker';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal arcade-addsrc-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', 'Add a chat source — pick a provider');
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
+        title.textContent = 'Add a chat source';
+        modal.appendChild(title);
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-modal__blurb';
+        blurb.textContent = 'Pick a provider — stock’s own add flow takes it from there. Type to filter the list.';
+        modal.appendChild(blurb);
+
+        var search = document.createElement('input');
+        search.type = 'search';
+        search.className = 'arcade-addsrc-search';
+        search.id = 'arcade-addsrc-search';
+        search.placeholder = 'Filter providers…';
+        search.autocomplete = 'off';
+        search.setAttribute('aria-label', 'Filter providers');
+        search.setAttribute('aria-controls', 'arcade-addsrc-list');
+        modal.appendChild(search);
+
+        var list = document.createElement('div');
+        list.className = 'arcade-addsrc-list';
+        list.id = 'arcade-addsrc-list';
+        list.setAttribute('role', 'listbox');
+        list.setAttribute('aria-label', 'Providers');
+        modal.appendChild(list);
+
+        var empty = document.createElement('p');
+        empty.className = 'arcade-evt-modal__blurb arcade-addsrc-empty';
+        empty.textContent = 'No provider matches — try “other” for any chat URL.';
+        empty.hidden = true;
+        modal.appendChild(empty);
+
+        ADD_SOURCE_PROVIDERS.forEach(function (p, idx) {
+            var opt = document.createElement('button');
+            opt.type = 'button';
+            opt.className = 'arcade-addsrc-opt';
+            opt.setAttribute('role', 'option');
+            opt.setAttribute('aria-selected', 'false');
+            opt.dataset.arcadeProviderIdx = String(idx);
+            opt.dataset.arcadeProviderHay = (p.label + ' ' + p.target).toLowerCase();
+            var img = document.createElement('img');
+            img.alt = '';
+            img.className = 'arcade-addsrc-opt__icon';
+            try { img.src = window.getSourceIconUrl ? window.getSourceIconUrl(p.target === 'other' ? 'unknown' : p.target) : ''; } catch (e) { /* noop */ }
+            opt.appendChild(img);
+            var lab = document.createElement('span');
+            lab.className = 'arcade-addsrc-opt__label';
+            lab.textContent = p.label;
+            opt.appendChild(lab);
+            opt.addEventListener('click', function () { pickAddSourceProvider(p); });
+            list.appendChild(opt);
+        });
+
+        function applyFilter() {
+            var q = search.value.trim().toLowerCase();
+            var visible = 0;
+            Array.prototype.forEach.call(list.children, function (opt) {
+                var show = !q || opt.dataset.arcadeProviderHay.indexOf(q) !== -1;
+                opt.hidden = !show;
+                if (show) visible++;
+            });
+            empty.hidden = visible !== 0;
+        }
+        search.addEventListener('input', applyFilter);
+        // Arrow keys walk the visible options from the search box itself;
+        // Enter picks the first visible one.
+        search.addEventListener('keydown', function (e) {
+            if (e.key !== 'ArrowDown' && e.key !== 'Enter') return;
+            var visibleOpts = Array.prototype.slice.call(list.querySelectorAll('.arcade-addsrc-opt:not([hidden])'));
+            if (!visibleOpts.length) return;
+            e.preventDefault();
+            if (e.key === 'Enter') visibleOpts[0].click();
+            else visibleOpts[0].focus();
+        });
+        list.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) === -1) return;
+            var opts = Array.prototype.slice.call(list.querySelectorAll('.arcade-addsrc-opt:not([hidden])'));
+            if (!opts.length) return;
+            e.preventDefault();
+            var idx = opts.indexOf(document.activeElement);
+            if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = opts.length - 1;
+            else idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+            opts[idx].focus();
+        });
+
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeAddSourcePicker(true); });
+        document.body.appendChild(back);
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        addSourcePickerKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-addsrc-picker')) {
+                e.stopPropagation();
+                closeAddSourcePicker(true);
+            }
+        };
+        document.addEventListener('keydown', addSourcePickerKeydown);
+        search.focus(); // H18-A — focus lands IN the dialog, on the filter
+    }
+
+    function pickAddSourceProvider(p) {
+        closeAddSourcePicker(false);
+        var fnName = ADD_SOURCE_STOCK_FN[p.kind];
+        var fn = fnName && window[fnName];
+        if (typeof fn !== 'function') {
+            console.error('[arcade-shell] stock add-source flow missing:', fnName);
+            return;
+        }
+        try {
+            if (p.kind === 'youtube') fn('youtube');
+            else if (p.kind === 'videoid') fn(p.target);
+            else if (p.kind === 'rumbleapi') fn();
+            else if (p.kind === 'other') fn(p.target === 'other' ? '' : p.target);
+            else fn(p.target);
+        } catch (e) {
+            console.error('[arcade-shell] add-source flow failed:', e);
+        }
+        // Focus lands on the destination: the rail's add button stays the
+        // anchor, and a successful add re-renders the rail via sourceAdded.
+        var trigger = document.getElementById('arcade-add-source');
+        if (trigger) trigger.focus();
+    }
+
+    function closeAddSourcePicker(returnFocus) {
+        var back = document.getElementById('arcade-addsrc-picker');
+        if (back) back.remove();
+        if (addSourcePickerKeydown) {
+            document.removeEventListener('keydown', addSourcePickerKeydown);
+            addSourcePickerKeydown = null;
+        }
+        var trigger = document.getElementById('arcade-add-source');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            if (returnFocus) trigger.focus();
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // TASK-67 (Lane 1) — the source DETAILS POPOUT. Clicking a source's
+    // name opens a panel with its REAL details (read live off the app's own
+    // stateManager) and a door to the full per-source actions stock really
+    // exposes — the SSAppStreamDeckBridge command census (index.html
+    // :7520-7548): start/stop/restart, mute, visibility, update (replyOnly,
+    // autoActivate, accountRole, connectionMode — the last three are
+    // stock-gated to a STOPPED source, and the panel says so honestly),
+    // remove. Nothing beyond that list is wired, because nothing beyond it
+    // exists.
+    // --------------------------------------------------------------------
+    var srcPopoutKeydown = null;
+    var srcPopoutId = null;
+
+    function openSourceDetailsPopout(sourceId) {
+        closeSourceDetailsPopout(false);
+        srcPopoutId = sourceId;
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-srcpop';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal arcade-srcpop-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', 'Source details');
+        modal.id = 'arcade-srcpop-modal';
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeSourceDetailsPopout(true); });
+        document.body.appendChild(back);
+        srcPopoutKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-srcpop')) {
+                e.stopPropagation();
+                closeSourceDetailsPopout(true);
+            }
+        };
+        document.addEventListener('keydown', srcPopoutKeydown);
+        renderSourceDetailsPopout();
+        // H18-A — focus lands IN the dialog.
+        var firstBtn = modal.querySelector('button');
+        if (firstBtn) firstBtn.focus();
+    }
+
+    function closeSourceDetailsPopout(returnFocus) {
+        var back = document.getElementById('arcade-srcpop');
+        if (back) back.remove();
+        if (srcPopoutKeydown) {
+            document.removeEventListener('keydown', srcPopoutKeydown);
+            srcPopoutKeydown = null;
+        }
+        var id = srcPopoutId;
+        srcPopoutId = null;
+        if (returnFocus && id) {
+            var row = document.querySelector('#arcade-src-list [data-arcade-source-id="' + id + '"] .arcade-src__namebtn');
+            if (row) row.focus();
+        }
+    }
+
+    function srcPopDetail(grid, k, v) {
+        var key = document.createElement('span');
+        key.className = 'arcade-srcpop__k';
+        key.textContent = k;
+        var val = document.createElement('span');
+        val.className = 'arcade-srcpop__v';
+        val.textContent = v;
+        grid.appendChild(key);
+        grid.appendChild(val);
+    }
+
+    function renderSourceDetailsPopout() {
+        var modal = document.getElementById('arcade-srcpop-modal');
+        if (!modal || !srcPopoutId) return;
+        var sm = window.stateManager;
+        var source = sm && typeof sm.getSource === 'function' ? sm.getSource(srcPopoutId) : null;
+        modal.innerHTML = '';
+        if (!source) {
+            var gone = document.createElement('p');
+            gone.className = 'arcade-evt-modal__blurb';
+            gone.textContent = 'That source is gone.';
+            modal.appendChild(gone);
+            return;
+        }
+        var meta = sourceStatusMeta(source);
+        var isRunning = source.status === 'active' || source.status === 'activating';
+
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
+        title.textContent = sourceDisplayName(source);
+        modal.appendChild(title);
+
+        // Connection state leads — the Admiral's ask: "see a popout of the
+        // details with the connection".
+        var stateRow = document.createElement('div');
+        stateRow.className = 'arcade-srcpop__state';
+        var dot = document.createElement('span');
+        dot.className = 'arcade-dot ' + meta.dotClass;
+        stateRow.appendChild(dot);
+        var stateText = document.createElement('span');
+        stateText.textContent = meta.label;
+        stateRow.appendChild(stateText);
+        modal.appendChild(stateRow);
+
+        var grid = document.createElement('div');
+        grid.className = 'arcade-srcpop__grid';
+        srcPopDetail(grid, 'Platform', source.target || '—');
+        if (source.username) srcPopDetail(grid, 'Channel / user', source.username);
+        if (source.videoId) srcPopDetail(grid, 'Video ID', source.videoId);
+        srcPopDetail(grid, 'Connection mode', (source.connectionMode || 'classic') + (source.activeConnectionMode ? ' (live: ' + source.activeConnectionMode + ')' : ''));
+        if (source.url) srcPopDetail(grid, 'Capture URL', source.url);
+        srcPopDetail(grid, 'Muted', source.isMuted ? 'yes' : 'no');
+        srcPopDetail(grid, 'Visible in dock', source.isVisible !== false ? 'yes' : 'no');
+        srcPopDetail(grid, 'Reply only', source.replyOnly ? 'yes' : 'no');
+        srcPopDetail(grid, 'Auto-start', source.autoActivate ? 'yes' : 'no');
+        srcPopDetail(grid, 'Account role', source.accountRole || 'normal');
+        modal.appendChild(grid);
+
+        // ---- Actions: ONLY what stock's bridge really exposes. ----
+        var actions = document.createElement('div');
+        actions.className = 'arcade-srcpop__actions';
+
+        function actionBtn(label, aria, danger, onClick) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm' + (danger ? ' arcade-btn--danger' : '');
+            btn.textContent = label;
+            btn.setAttribute('aria-label', aria);
+            btn.addEventListener('click', onClick);
+            actions.appendChild(btn);
+            return btn;
+        }
+        function bridgeThen(request) {
+            callBridge(request).then(function () {
+                // The stateManager events re-render the rail; the popout
+                // re-reads live truth the same way.
+                setTimeout(renderSourceDetailsPopout, 250);
+            });
+        }
+
+        actionBtn(isRunning ? '■ Stop' : '● Start', (isRunning ? 'Stop ' : 'Start ') + sourceDisplayName(source), isRunning, function () {
+            bridgeThen({ action: isRunning ? 'stopSource' : 'startSource', value: source.id });
+        });
+        if (isRunning) {
+            actionBtn('↻ Restart', 'Restart ' + sourceDisplayName(source), false, function () {
+                bridgeThen({ action: 'restartSource', value: source.id });
+            });
+        }
+        actionBtn(source.isMuted ? 'Unmute' : 'Mute', (source.isMuted ? 'Unmute ' : 'Mute ') + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'toggleSourceMute', value: source.id });
+        });
+        actionBtn(source.isVisible !== false ? 'Hide from dock' : 'Show in dock', 'Toggle dock visibility for ' + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'toggleSourceVisibility', value: source.id });
+        });
+        actionBtn(source.replyOnly ? 'Reply only: on' : 'Reply only: off', 'Toggle reply-only for ' + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { replyOnly: !source.replyOnly } } });
+        });
+        actionBtn(source.autoActivate ? 'Auto-start: on' : 'Auto-start: off', 'Toggle auto-start for ' + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { autoActivate: !source.autoActivate } } });
+        });
+        modal.appendChild(actions);
+
+        // Role + connection mode — stock gates these to a STOPPED source
+        // (inactiveOnlySourceSettings, index.html:7005); the controls say so.
+        var tune = document.createElement('div');
+        tune.className = 'arcade-srcpop__tune';
+
+        var roleRow = document.createElement('label');
+        roleRow.className = 'arcade-srcpop__field';
+        var roleLab = document.createElement('span');
+        roleLab.textContent = 'Account role';
+        var roleSel = document.createElement('select');
+        roleSel.setAttribute('aria-label', 'Account role for ' + sourceDisplayName(source));
+        ['normal', 'host', 'bot', 'relay'].forEach(function (r) {
+            var o = document.createElement('option');
+            o.value = r;
+            o.textContent = r;
+            if ((source.accountRole || 'normal') === r) o.selected = true;
+            roleSel.appendChild(o);
+        });
+        roleSel.disabled = isRunning;
+        roleSel.title = isRunning ? 'Stop the source to change its role (stock rule)' : '';
+        roleSel.addEventListener('change', function () {
+            bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { accountRole: roleSel.value } } });
+        });
+        roleRow.appendChild(roleLab);
+        roleRow.appendChild(roleSel);
+        tune.appendChild(roleRow);
+
+        var modes = ['classic'];
+        try {
+            if (typeof window.supportedConnectionModesForSource === 'function') {
+                modes = window.supportedConnectionModesForSource(source);
+            }
+        } catch (e) { /* noop */ }
+        if (modes.length > 1) {
+            var modeRow = document.createElement('label');
+            modeRow.className = 'arcade-srcpop__field';
+            var modeLab = document.createElement('span');
+            modeLab.textContent = 'Connection mode';
+            var modeSel = document.createElement('select');
+            modeSel.setAttribute('aria-label', 'Connection mode for ' + sourceDisplayName(source));
+            modes.forEach(function (m) {
+                var o = document.createElement('option');
+                o.value = m;
+                o.textContent = m;
+                if ((source.connectionMode || 'classic') === m) o.selected = true;
+                modeSel.appendChild(o);
+            });
+            modeSel.disabled = isRunning;
+            modeSel.title = isRunning ? 'Stop the source to change its connection mode (stock rule)' : '';
+            modeSel.addEventListener('change', function () {
+                bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { connectionMode: modeSel.value } } });
+            });
+            modeRow.appendChild(modeLab);
+            modeRow.appendChild(modeSel);
+            tune.appendChild(modeRow);
+        }
+        modal.appendChild(tune);
+        if (isRunning) {
+            var stopNote = document.createElement('div');
+            stopNote.className = 'arcade-evt-cond__hint';
+            stopNote.textContent = 'Role, connection mode and identity edits unlock when the source is stopped — stock’s rule, not ours.';
+            modal.appendChild(stopNote);
+        }
+
+        var foot = document.createElement('div');
+        foot.className = 'arcade-srcpop__foot';
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--danger';
+        removeBtn.textContent = 'Remove source';
+        removeBtn.setAttribute('aria-label', 'Remove ' + sourceDisplayName(source));
+        removeBtn.addEventListener('click', function () {
+            // confirm-on-second-click (house idiom — no window.confirm in
+            // the shell's modals).
+            if (removeBtn.dataset.armed === 'true') {
+                callBridge({ action: 'removeSource', value: source.id });
+                closeSourceDetailsPopout(false);
+                return;
+            }
+            removeBtn.dataset.armed = 'true';
+            removeBtn.textContent = 'Remove source — click again to confirm';
+            setTimeout(function () {
+                if (removeBtn.isConnected) {
+                    removeBtn.dataset.armed = 'false';
+                    removeBtn.textContent = 'Remove source';
+                }
+            }, 4000);
+        });
+        foot.appendChild(removeBtn);
+        var closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'arcade-btn arcade-btn--sm';
+        closeBtn.textContent = 'Close';
+        closeBtn.addEventListener('click', function () { closeSourceDetailsPopout(true); });
+        foot.appendChild(closeBtn);
+        modal.appendChild(foot);
+    }
+
+    // --------------------------------------------------------------------
+    // TASK-67 (Lane 3) — EDIT CHAT from the Main pane. The Admiral: "the
+    // chat area text should have the ability to be customized from this
+    // main menu… hit a button to edit certain features." A floating chip on
+    // the Main chat pane opens a quick panel with the most-used REAL dock
+    // params (size/scale, font, opacity, dark mode — the same params
+    // index.html's ensureChatDockLoaded composes the app dock URL from),
+    // the stock main-chat settings that never made the transition (berthed
+    // via the S51 embed driver, DECK_POPUP_SECTIONS['chat-dock']), and a
+    // door to the Style tab's full dock section.
+    //
+    // Persistence: canonical arcadeDockTune setting (S48 async idiom) +
+    // the localStorage mirror ensureChatDockLoaded reads synchronously —
+    // the interface flag's own doctrine. Apply = a real dock reload via the
+    // app's own ensureChatDockLoaded(true).
+    // --------------------------------------------------------------------
+    var editChatKeydown = null;
+
+    function buildEditChatChip() {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.id = 'arcade-editchat-chip';
+        chip.className = 'arcade-editchat-chip';
+        chip.textContent = '✎ Edit chat';
+        chip.setAttribute('aria-haspopup', 'dialog');
+        chip.setAttribute('aria-expanded', 'false');
+        chip.setAttribute('aria-controls', 'arcade-editchat-panel');
+        chip.title = 'Quick chat styling — size, font, opacity, dark mode, and stock’s full chat settings';
+        chip.addEventListener('click', openEditChatPanel);
+        document.body.appendChild(chip);
+    }
+
+    function openEditChatPanel() {
+        closeEditChatPanel(false);
+        var chip = document.getElementById('arcade-editchat-chip');
+        var tune = readArcadeDockTune();
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-editchat-panel';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal arcade-editchat-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', 'Edit chat — quick panel');
+        back.appendChild(modal);
+
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
+        title.textContent = 'Edit chat';
+        modal.appendChild(title);
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-modal__blurb';
+        blurb.textContent = 'The most-used knobs for this app’s own chat view. Apply reloads the dock with the new look.';
+        modal.appendChild(blurb);
+
+        var fields = document.createElement('div');
+        fields.className = 'arcade-editchat-fields';
+
+        // Size/scale — the dock's real &scale param (house default 1.45).
+        var scaleRow = document.createElement('label');
+        scaleRow.className = 'arcade-editchat-row';
+        var scaleLab = document.createElement('span');
+        scaleLab.textContent = 'Size / scale';
+        var scaleInput = document.createElement('input');
+        scaleInput.type = 'range';
+        scaleInput.min = '0.8';
+        scaleInput.max = '2';
+        scaleInput.step = '0.05';
+        scaleInput.value = String(parseFloat(tune.scale || '1.45'));
+        scaleInput.setAttribute('aria-label', 'Chat size / scale');
+        var scaleVal = document.createElement('span');
+        scaleVal.className = 'arcade-editchat-val';
+        scaleVal.textContent = Number(scaleInput.value).toFixed(2) + '×';
+        scaleInput.addEventListener('input', function () { scaleVal.textContent = Number(scaleInput.value).toFixed(2) + '×'; });
+        scaleRow.appendChild(scaleLab);
+        scaleRow.appendChild(scaleInput);
+        scaleRow.appendChild(scaleVal);
+        fields.appendChild(scaleRow);
+
+        // Font — the dock's real &font param. Curated list (what &font
+        // really supports: locally-installed families + the bundled Sora
+        // stack + the house OpenDyslexic @font-face); Custom… reveals the
+        // free-text for any installed family.
+        var fontRow = document.createElement('label');
+        fontRow.className = 'arcade-editchat-row';
+        var fontLab = document.createElement('span');
+        fontLab.textContent = 'Font';
+        var fontSel = document.createElement('select');
+        fontSel.setAttribute('aria-label', 'Chat font');
+        var EDIT_CHAT_FONTS = [
+            { v: '__house__', label: 'House default — OpenDyslexic' },
+            { v: '', label: 'Dock default — Sora stack' },
+            { v: 'system-ui', label: 'System UI' },
+            { v: 'sans-serif', label: 'Sans-serif (system)' },
+            { v: 'serif', label: 'Serif (system)' },
+            { v: 'monospace', label: 'Monospace (system)' },
+            { v: '__custom__', label: 'Custom…' }
+        ];
+        EDIT_CHAT_FONTS.forEach(function (f) {
+            var o = document.createElement('option');
+            o.value = f.v;
+            o.textContent = f.label;
+            fontSel.appendChild(o);
+        });
+        var fontCustom = document.createElement('input');
+        fontCustom.type = 'text';
+        fontCustom.className = 'arcade-editchat-customfont';
+        fontCustom.placeholder = 'Any installed font family, e.g. Inter';
+        fontCustom.setAttribute('aria-label', 'Custom chat font family');
+        fontCustom.hidden = true;
+        if (!('font' in tune)) fontSel.value = '__house__';
+        else if (EDIT_CHAT_FONTS.some(function (f) { return f.v === String(tune.font); })) fontSel.value = String(tune.font);
+        else { fontSel.value = '__custom__'; fontCustom.hidden = false; fontCustom.value = String(tune.font); }
+        fontSel.addEventListener('change', function () {
+            fontCustom.hidden = fontSel.value !== '__custom__';
+            if (!fontCustom.hidden) fontCustom.focus();
+        });
+        fontRow.appendChild(fontLab);
+        fontRow.appendChild(fontSel);
+        fontRow.appendChild(fontCustom);
+        fields.appendChild(fontRow);
+
+        // Opacity — the dock's real &opacity param (house default 0.65).
+        var opRow = document.createElement('label');
+        opRow.className = 'arcade-editchat-row';
+        var opLab = document.createElement('span');
+        opLab.textContent = 'Opacity';
+        var opInput = document.createElement('input');
+        opInput.type = 'range';
+        opInput.min = '0.2';
+        opInput.max = '1';
+        opInput.step = '0.05';
+        opInput.value = String(parseFloat(tune.opacity || '0.65'));
+        opInput.setAttribute('aria-label', 'Chat opacity');
+        var opVal = document.createElement('span');
+        opVal.className = 'arcade-editchat-val';
+        opVal.textContent = Number(opInput.value).toFixed(2);
+        opInput.addEventListener('input', function () { opVal.textContent = Number(opInput.value).toFixed(2); });
+        opRow.appendChild(opLab);
+        opRow.appendChild(opInput);
+        opRow.appendChild(opVal);
+        fields.appendChild(opRow);
+
+        // Dark mode — the dock's real &darkmode flag (house default ON).
+        var darkRow = document.createElement('label');
+        darkRow.className = 'arcade-editchat-row';
+        var darkLab = document.createElement('span');
+        darkLab.textContent = 'Dark mode';
+        var darkToggle = document.createElement('button');
+        darkToggle.type = 'button';
+        darkToggle.className = 'arcade-btn arcade-btn--sm';
+        var darkOn = tune.dark !== false;
+        darkToggle.setAttribute('aria-pressed', String(darkOn));
+        darkToggle.textContent = darkOn ? 'On' : 'Off';
+        darkToggle.addEventListener('click', function () {
+            darkOn = !darkOn;
+            darkToggle.setAttribute('aria-pressed', String(darkOn));
+            darkToggle.textContent = darkOn ? 'On' : 'Off';
+        });
+        darkRow.appendChild(darkLab);
+        darkRow.appendChild(darkToggle);
+        fields.appendChild(darkRow);
+        modal.appendChild(fields);
+
+        var status = document.createElement('div');
+        status.className = 'arcade-evt-cond__hint';
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        modal.appendChild(status);
+
+        var doors = document.createElement('div');
+        doors.className = 'arcade-evt-doors';
+        var applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
+        applyBtn.textContent = 'Apply — reload chat';
+        applyBtn.addEventListener('click', function () {
+            var next = {
+                scale: Number(scaleInput.value).toFixed(2),
+                opacity: Number(opInput.value).toFixed(2),
+                dark: darkOn
+            };
+            if (fontSel.value === '__custom__') next.font = fontCustom.value.trim();
+            else if (fontSel.value !== '__house__') next.font = fontSel.value;
+            // '__house__' = no font key at all — the house default stands.
+            var json = JSON.stringify(next);
+            saveDeckSetting('textparam1', 'arcadeDockTune', json);
+            try { localStorage.setItem('arcadeDockTune', json); } catch (e) { /* noop */ }
+            status.textContent = 'Reloading the chat dock…';
+            if (typeof window.ensureChatDockLoaded === 'function') {
+                window.ensureChatDockLoaded(true).then(function () {
+                    status.textContent = 'Applied — the chat dock reloaded with the new look.';
+                }).catch(function () {
+                    status.textContent = 'Saved, but the dock reload failed — it picks the new look up on next launch.';
+                });
+            } else {
+                status.textContent = 'Saved — the new look applies on next launch.';
+            }
+        });
+        doors.appendChild(applyBtn);
+        var styleBtn = document.createElement('button');
+        styleBtn.type = 'button';
+        styleBtn.className = 'arcade-btn arcade-btn--sm';
+        styleBtn.textContent = 'Full styling → Style tab';
+        styleBtn.title = 'The Style tab’s DOCK (APP) profile styles this same chat view — colors, type, layout, effects';
+        styleBtn.addEventListener('click', function () {
+            closeEditChatPanel(false);
+            navigateArcadeTab('style');
+            // Land on the DOCK (APP) profile — that's the profile that
+            // styles THIS chat view.
+            var dockBtn = document.querySelector('#arcade-style-profile-seg [data-arcade-style-profile="dock"]');
+            if (dockBtn) dockBtn.click();
+        });
+        doors.appendChild(styleBtn);
+        modal.appendChild(doors);
+
+        // The berthed stock chat settings (the groups that never made the
+        // arcade transition — same stock page, same handlers, same keys).
+        var stockNote = document.createElement('div');
+        stockNote.className = 'arcade-evt-cond__title';
+        stockNote.textContent = 'Stock’s full chat settings';
+        modal.appendChild(stockNote);
+        buildDeckPopupEmbed(modal, 'chat-dock', 'Stock’s own dock/chat groups — mechanics, visibility, styling, shading, effects. Same stock settings, same keys; they apply to this chat view per stock’s own wiring.');
+
+        back.addEventListener('click', function (e) { if (e.target === back) closeEditChatPanel(true); });
+        document.body.appendChild(back);
+        if (chip) chip.setAttribute('aria-expanded', 'true');
+        editChatKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-editchat-panel')) {
+                e.stopPropagation();
+                closeEditChatPanel(true);
+            }
+        };
+        document.addEventListener('keydown', editChatKeydown);
+        scaleInput.focus(); // H18-A — focus lands IN the panel
+    }
+
+    function closeEditChatPanel(returnFocus) {
+        var back = document.getElementById('arcade-editchat-panel');
+        if (back) back.remove(); // the stock embed frame dies with the panel
+        if (editChatKeydown) {
+            document.removeEventListener('keydown', editChatKeydown);
+            editChatKeydown = null;
+        }
+        var chip = document.getElementById('arcade-editchat-chip');
+        if (chip) {
+            chip.setAttribute('aria-expanded', 'false');
+            if (returnFocus) chip.focus();
+        }
+    }
+
     function bindStateManager() {
         var sm = window.stateManager;
         if (!sm || typeof sm.on !== 'function') return false;
@@ -10885,6 +11981,13 @@
         sm.on('sourceUpdated', renderSourcesRail);
         sm.on('sourceRemoved', renderSourcesRail);
         sm.on('allSourcesCleared', renderSourcesRail);
+        // TASK-67 — the open details popout tracks live source truth and
+        // closes itself if its source is removed.
+        sm.on('sourceUpdated', function () { if (srcPopoutId) renderSourceDetailsPopout(); });
+        sm.on('sourceRemoved', function (payload) {
+            var removedId = payload && (payload.sourceId || payload.id);
+            if (srcPopoutId && removedId === srcPopoutId) closeSourceDetailsPopout(false);
+        });
         installBootGuard(sm);
         return true;
     }
@@ -11365,7 +12468,22 @@
         'ai-cohost': ['wrapper-chatbot-cohost-options', 'wrapper-chatbot-ai-overlay-options'],
         'ai-bot': ['wrapper-chatbot-public-options', 'wrapper-chatbot-ai-prompt-options', 'wrapper-chatbot-private-options'],
         'ai-translate': ['wrapper-ai-auto-translate-options'],
-        'ai-models': ['wrapper-bots-options-ext']
+        'ai-models': ['wrapper-bots-options-ext'],
+        // TASK-67 (Lane 3) — stock's main-chat (dock) settings that never
+        // made the arcade transition, berthed into the Edit-chat quick
+        // panel: the dock menu bar + overlay link groups and the five
+        // message groups (~173 stock fields; the two already-berthed chat
+        // groups — chat-message-tts in Speech, chat-message-export in
+        // Backups — stay where they are).
+        'chat-dock': [
+            'wrapper-chat-menu-options',
+            'wrapper-chat-overlay-options',
+            'wrapper-chat-message-mechanics-options',
+            'wrapper-chat-message-visibility-options',
+            'wrapper-chat-message-styling-options',
+            'wrapper-chat-message-shading-options',
+            'wrapper-chat-message-effects-options'
+        ]
     };
 
     var ALERT_TIER_RULES_KEY = 'arcadeAlertTierRules'; // NEW (S51) — per-tier promotion-condition policy
@@ -11719,6 +12837,90 @@
 
         card.appendChild(body);
         stage.appendChild(card);
+
+        // TASK-67 (Lane 5) — UI size: the BOOT-DEFAULT zoom. Ctrl+wheel is
+        // the live per-session zoom (Chromium's own); this card picks what a
+        // fresh launch boots at — index.html's boot script forces exactly
+        // 100% unless this setting says otherwise, so a drifted live zoom
+        // never survives a relaunch. Canonical key arcadeUiZoom + the
+        // localStorage mirror the synchronous boot script reads (the
+        // interface flag's own doctrine). Applies immediately on pick, too.
+        var zoomCard = document.createElement('article');
+        zoomCard.className = 'arcade-alert-card';
+        var zoomHead = document.createElement('div');
+        zoomHead.className = 'arcade-alert-card__head';
+        var zoomName = document.createElement('h3');
+        zoomName.className = 'arcade-alert-card__name';
+        zoomName.textContent = 'UI size';
+        zoomHead.appendChild(zoomName);
+        zoomCard.appendChild(zoomHead);
+        var zoomBody = document.createElement('div');
+        zoomBody.className = 'arcade-alert-card__body';
+
+        function currentUiZoom() {
+            var saved = NaN;
+            try { saved = parseFloat(localStorage.getItem('arcadeUiZoom') || ''); } catch (e) { /* noop */ }
+            return (isFinite(saved) && saved >= 0.5 && saved <= 2) ? saved : 1;
+        }
+        function applyUiZoom(factor) {
+            try {
+                var wf = require('electron').webFrame;
+                if (wf && typeof wf.setZoomFactor === 'function') wf.setZoomFactor(factor);
+            } catch (e) { /* noop */ }
+        }
+
+        var zoomGroup = document.createElement('div');
+        zoomGroup.className = 'arcade-frames-presets';
+        zoomGroup.setAttribute('role', 'group');
+        zoomGroup.setAttribute('aria-label', 'UI size (boot default zoom)');
+        var zoomState = document.createElement('div');
+        zoomState.className = 'arcade-evt-cond__hint';
+        function syncUiZoomButtons() {
+            var cur = currentUiZoom();
+            Array.prototype.forEach.call(zoomGroup.children, function (b) {
+                b.setAttribute('aria-pressed', String(parseFloat(b.dataset.zoomPct) / 100 === cur));
+            });
+            zoomState.textContent = 'Boot default: ' + Math.round(cur * 100) + '%' + (cur === 1 ? ' (the house default — a fresh launch is always 100% unless you pick otherwise)' : '');
+        }
+        [90, 100, 110, 125].forEach(function (pct) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'arcade-btn arcade-btn--sm';
+            b.dataset.zoomPct = String(pct);
+            b.textContent = pct + '%';
+            b.addEventListener('click', function () {
+                var factor = pct / 100;
+                saveDeckSetting('textparam1', 'arcadeUiZoom', String(factor));
+                try { localStorage.setItem('arcadeUiZoom', String(factor)); } catch (e) { /* noop */ }
+                applyUiZoom(factor);
+                syncUiZoomButtons();
+                setDeckStatus('UI size: ' + pct + '% — applied now, and the boot default');
+            });
+            zoomGroup.appendChild(b);
+        });
+        zoomBody.appendChild(zoomGroup);
+
+        var resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'arcade-btn arcade-btn--sm';
+        resetBtn.textContent = 'Reset to 100%';
+        resetBtn.addEventListener('click', function () {
+            saveDeckSetting('textparam1', 'arcadeUiZoom', '');
+            try { localStorage.removeItem('arcadeUiZoom'); } catch (e) { /* noop */ }
+            applyUiZoom(1);
+            syncUiZoomButtons();
+            setDeckStatus('UI size reset — launches boot at 100%');
+        });
+        zoomBody.appendChild(resetBtn);
+
+        var zoomHint = document.createElement('div');
+        zoomHint.className = 'arcade-evt-cond__hint';
+        zoomHint.textContent = 'Ctrl + mouse wheel zooms live; this setting is the boot default.';
+        zoomBody.appendChild(zoomHint);
+        zoomBody.appendChild(zoomState);
+        zoomCard.appendChild(zoomBody);
+        stage.appendChild(zoomCard);
+        syncUiZoomButtons();
     }
 
     function deckSwitchInterface(mode, btn) {
@@ -13519,6 +14721,7 @@
 
         buildTopbar();
         buildRailAndSide();
+        buildEditChatChip(); // TASK-67 — the Main chat pane's "Edit chat" door
         buildAddonsPanel();
         buildStylePanel();
         buildAlertsPanel();
@@ -13529,6 +14732,7 @@
         buildTipjarPanel();   // S50 — the Tip Jar interior (payment rails); contents lazy (ensureTipjarPanelLive on first visit)
         buildDeckSettingsPanel(); // S51 — Deck Settings; contents lazy (ensureDeckSettingsLive on first visit)
         buildAiPanel();           // TASK-64 — the AI console; contents lazy (ensureAiPanelLive on first visit)
+        installArcadeColumnToggles(); // TASK-67 — one shared collapse mechanism on every interior's left column
         installStockFrameDressing(); // S32 — dress the stock pages the nav still hosts
         installFoldObservers();    // S46B — measured hamburger fold + add-ons types drawer
 

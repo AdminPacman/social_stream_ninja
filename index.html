@@ -133,6 +133,32 @@
             }
         })();
     </script>
+    <script>
+        // TASK-67 (Lane 5) — WINDOW DISCIPLINE: the app launches at 100%
+        // zoom ALWAYS, by default. Ctrl+wheel zoom is a live, per-session
+        // adjustment; a drifted zoom must not survive a relaunch. The one
+        // sanctioned non-100 boot default is the house arcadeUiZoom setting
+        // (Deck Settings -> Diagnostics -> Interface -> UI size), mirrored
+        // to localStorage by arcade-shell.js so this synchronous boot
+        // script reads it without an IPC round-trip (the same doctrine as
+        // the interface flag above). Applies in BOTH shells — this is the
+        // app window's discipline, not arcade chrome. With no saved choice
+        // the factor is forced to exactly 1, which also stomps any
+        // zoom the Chromium session persisted under the hood.
+        (function () {
+            try {
+                var wf = null;
+                try { wf = require('electron').webFrame; } catch (e) { wf = null; }
+                if (!wf || typeof wf.setZoomFactor !== 'function') return;
+                var boot = 1;
+                try {
+                    var saved = parseFloat(localStorage.getItem('arcadeUiZoom') || '');
+                    if (isFinite(saved) && saved >= 0.5 && saved <= 2) boot = saved;
+                } catch (e) { /* unreadable mirror — the 100% default stands */ }
+                wf.setZoomFactor(boot);
+            } catch (e) { /* noop — zoom discipline is best-effort, never boot-breaking */ }
+        })();
+    </script>
     <nav id="main-navigation">
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
         <ul>
@@ -13221,18 +13247,27 @@
                 return false;
             }
             try {
+                // TASK-67 (Lane 3): the Main-pane "Edit chat" quick panel's
+                // tuning rides this localStorage mirror (canonical home: the
+                // arcadeDockTune setting, written by arcade-shell.js via the
+                // S48 async save idiom; mirrored so the dock URL composes
+                // without an IPC round-trip — the interface flag's own
+                // doctrine). Unset/empty = the house defaults, unchanged.
+                var dockTune = {};
+                try { dockTune = JSON.parse(localStorage.getItem('arcadeDockTune') || '{}') || {}; } catch (e) { dockTune = {}; }
+                var tuneFont = ('font' in dockTune) ? String(dockTune.font || '') : 'opendyslexic';
                 // House dock defaults: mirrors the OBS Chat-Ninja source URL minus its TTS/audio
                 // params (the app already speaks), plus groupuser message grouping.
                 const dockParams = [
                     `session=${encodeURIComponent(sessionId)}`,
                     'loadlast=30', // seed with recent history on boot instead of starting empty (dock.html's own native history request)
                     'groupuser',
-                    'scale=1.45',
-                    'opacity=0.65',
-                    'darkmode',
+                    'scale=' + (dockTune.scale || '1.45'),
+                    'opacity=' + (dockTune.opacity || '0.65'),
+                    ...(dockTune.dark === false ? [] : ['darkmode']),
                     'showtime=300000',
                     'alignbottom',
-                    'font=opendyslexic',
+                    ...(tuneFont ? ['font=' + encodeURIComponent(tuneFont)] : []),
                     'color',
                     'notime',
                     'bfttime', // per-message BFT stamp (Arcade shell follow-up) — independent of notime above, see dock.html's arcadeMsgBftEnabled gate
