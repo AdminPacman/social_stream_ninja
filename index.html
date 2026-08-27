@@ -102,16 +102,21 @@
 <body>
     <script>
         // Arcade shell switch — TASK-66 (H22 ruled): ARCADE IS THE DEFAULT.
-        // Precedence, first match wins:
-        //   1. SSN_SHELL=stock   -> stock (the explicit opt-out; byte-for-byte
-        //      Steve's original). SSN_SHELL=arcade -> arcade (explicit opt-in).
-        //      process.env is readable here because this window runs with
-        //      nodeIntegration on for local/sourcemode loads (same mechanism
+        // TASK-68 (WALK 2A ruled semantics): the in-app switch to Stock is
+        // SESSION-ONLY — the flag is consumed here (read once, removed), so
+        // a close/reload always boots the arcade again; the flag also beats
+        // an exported SSN_SHELL=arcade so the in-app switch works even where
+        // a launcher exports the variable. Precedence, first match wins:
+        //   1. SSN_SHELL=stock   -> stock, ALWAYS (the persistent stock lane;
+        //      byte-for-byte Steve's original). process.env is readable here
+        //      because this window runs with nodeIntegration on for
+        //      local/sourcemode loads (same mechanism
         //      SSAPP_TIKTOK_SIGNING_GUIDE_URL already relies on elsewhere).
-        //   2. The persisted in-app choice (Deck Settings -> Diagnostics ->
-        //      Interface), mirrored to localStorage by arcade-shell.js so this
-        //      synchronous boot script can read it without an IPC round-trip.
-        //   3. Default: arcade.
+        //   2. The session stock flag (Deck Settings -> Diagnostics ->
+        //      Interface -> Stock), mirrored to localStorage by
+        //      arcade-shell.js so this synchronous boot script can read it
+        //      without an IPC round-trip — read once, then REMOVED.
+        //   3. Default (incl. SSN_SHELL=arcade): arcade.
         // With the class absent the app is stock, byte-for-byte unchanged.
         (function () {
             try {
@@ -120,10 +125,15 @@
                     envShell = String(process.env.SSN_SHELL).toLowerCase();
                 }
                 var picked = '';
-                if (envShell === 'stock' || envShell === 'arcade') {
-                    picked = envShell;
+                if (envShell === 'stock') {
+                    picked = 'stock';
                 } else {
-                    try { picked = String(localStorage.getItem('ssnShellInterface') || '').toLowerCase(); } catch (e) { picked = ''; }
+                    var flag = '';
+                    try { flag = String(localStorage.getItem('ssnShellInterface') || '').toLowerCase(); } catch (e) { flag = ''; }
+                    if (flag === 'stock') {
+                        picked = 'stock'; // this boot only —
+                        try { localStorage.removeItem('ssnShellInterface'); } catch (e2) { /* noop */ } // consumed: next boot is arcade
+                    }
                 }
                 if (picked !== 'stock') {
                     document.body.classList.add('arcade-shell');
