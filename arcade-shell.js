@@ -1239,7 +1239,7 @@
             'aria-expanded="true" aria-label="Collapse sources to icon rail" title="Collapse to icon rail">«</button>' +
             '</div>' +
             '<div class="arcade-add-source">' +
-            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-add-source">+<span class="arcade-rail-hide">&nbsp;Add source</span></button>' +
+            '<button type="button" class="arcade-btn arcade-btn--primary" id="arcade-add-source" aria-haspopup="dialog" aria-expanded="false" aria-controls="arcade-addsrc-picker">+<span class="arcade-rail-hide">&nbsp;Add source</span></button>' +
             '</div>' +
             '<ul class="arcade-src-list" id="arcade-src-list"></ul>' +
             '<div class="arcade-src-foot">' +
@@ -1249,10 +1249,9 @@
         document.body.appendChild(rail);
 
         rail.querySelector('#arcade-add-source').addEventListener('click', function () {
-            // S51 — sources admin is cross-linked from Deck Settings →
-            // Connections (the sources rail itself stays the one home).
-            navigateArcadeTab('settings');
-            if (typeof window.arcadeDeckSelect === 'function') window.arcadeDeckSelect('connections');
+            // TASK-67 — the full provider picker returns (was: a bare jump to
+            // Deck Settings → Connections, which lost the provider list).
+            openAddSourcePicker();
         });
         rail.querySelector('#arcade-start-all').addEventListener('click', function () {
             callBridge({ action: 'startAllSources' });
@@ -10259,6 +10258,11 @@
             '<span class="arcade-onair__label" id="arcade-onair-label">—</span>' +
             '<span class="arcade-onair__sub" id="arcade-onair-sub">OBS link not seen — arm actions.html (&obsws=)</span>' +
             '</div>' +
+            // TASK-67 — the OBS link tile gains its config door: deep-link
+            // to Deck Settings → Connections, where the stock OBS WebSocket
+            // group (obsws/obspw fields, names only) rides the embed.
+            '<button type="button" class="arcade-btn arcade-btn--sm arcade-onair__config" id="arcade-onair-config" ' +
+            'title="Configure the OBS WebSocket link — Deck Settings → Connections">⚙ OBS link</button>' +
             '<div class="arcade-period-row">' +
             '<span class="arcade-k">PERIOD</span>' +
             '<div class="arcade-seg" role="group" aria-label="Analytics period" id="arcade-period-seg">' +
@@ -10296,6 +10300,29 @@
     }
 
     function initAnalyticsPeriodSelector(side) {
+        // TASK-67 — the OBS link tile's config door (Lane 1): deep-link to
+        // Deck Settings → Connections; the stock OBS WebSocket group is the
+        // FIRST berthed group there (already expanded by the embed driver),
+        // and focus lands IN that embed — H17-B destination rule.
+        var obsBtn = side.querySelector('#arcade-onair-config');
+        if (obsBtn) {
+            obsBtn.addEventListener('click', function () {
+                navigateArcadeTab('settings');
+                if (typeof window.arcadeDeckSelect === 'function') window.arcadeDeckSelect('connections');
+                var tries = 0;
+                var timer = setInterval(function () {
+                    tries++;
+                    var frame = document.querySelector('.arcade-settings .arcade-deck-embed__frame');
+                    if (frame || tries > 20) {
+                        clearInterval(timer);
+                        if (frame) {
+                            frame.scrollIntoView({ block: 'nearest' });
+                            try { frame.focus(); } catch (e) { /* noop */ }
+                        }
+                    }
+                }, 150);
+            });
+        }
         var seg = side.querySelector('#arcade-period-seg');
         if (!seg) return;
         seg.addEventListener('click', function (e) {
@@ -10847,8 +10874,19 @@
         logo.appendChild(img);
         li.appendChild(logo);
 
-        var nameWrap = document.createElement('span');
-        nameWrap.className = 'arcade-src__name';
+        // TASK-67 — the NAME is a button: opens the source-details popout
+        // (connection state + real per-source details + stock's real
+        // per-source actions). The start/stop icon stays its own button.
+        var nameWrap = document.createElement('button');
+        nameWrap.type = 'button';
+        nameWrap.className = 'arcade-src__name arcade-src__namebtn';
+        nameWrap.title = 'Source details & actions';
+        nameWrap.setAttribute('aria-label', 'Details for ' + sourceDisplayName(source));
+        nameWrap.setAttribute('aria-haspopup', 'dialog');
+        nameWrap.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSourceDetailsPopout(source.id);
+        });
         var b = document.createElement('b');
         b.textContent = sourceDisplayName(source);
         var state = document.createElement('span');
@@ -10877,6 +10915,462 @@
         return li;
     }
 
+    // --------------------------------------------------------------------
+    // TASK-67 (Lane 1) — THE PROVIDER PICKER, RESTORED. The arcade's
+    // "+ Add source" used to just jump to Deck Settings → Connections;
+    // stock's big provider list (index.html's .addnew block, the streams
+    // page the arcade shell replaced) was unreachable. This registry
+    // mirrors that stock block 1:1 (visible entries only — stock keeps
+    // 'pilled' hidden, so do we) and each pick calls the SAME stock global
+    // the stock button's onclick called — stock's own validation, prompts,
+    // and source-creation path, never a re-implementation.
+    // --------------------------------------------------------------------
+    var ADD_SOURCE_PROVIDERS = [
+        { label: 'YouTube', target: 'youtube', kind: 'youtube' },
+        { label: 'Twitch', target: 'twitch', kind: 'prompt' },
+        { label: 'Kick', target: 'kick', kind: 'prompt' },
+        { label: 'VPZONE', target: 'vpzone', kind: 'prompt' },
+        { label: 'Velora', target: 'velora', kind: 'prompt' },
+        { label: 'Instagram Live', target: 'instagramlive', kind: 'prompt' },
+        { label: 'Facebook', target: 'facebook', kind: 'prompt' },
+        { label: 'TikTok', target: 'tiktok', kind: 'prompt' },
+        { label: 'Picarto', target: 'picarto', kind: 'prompt' },
+        { label: 'X.com', target: 'x', kind: 'prompt' },
+        { label: 'Mixcloud', target: 'mixcloud', kind: 'prompt' },
+        { label: 'TwitCasting', target: 'twitcasting', kind: 'prompt' },
+        { label: 'YouNow', target: 'younow', kind: 'prompt' },
+        { label: 'CHZZK', target: 'chzzk', kind: 'prompt' },
+        { label: 'Nimo', target: 'nimo', kind: 'prompt' },
+        { label: 'SOOP Live', target: 'sooplive', kind: 'prompt' },
+        { label: 'Rumble', target: 'rumble', kind: 'prompt' },
+        { label: 'Rumble Video', target: 'rumble', kind: 'videoid' },
+        { label: 'Rumble API Tracker', target: 'rumble', kind: 'rumbleapi' },
+        { label: 'Beamstream', target: 'beamstream', kind: 'prompt' },
+        { label: 'Parti', target: 'parti', kind: 'prompt' },
+        { label: 'Arena Social', target: 'arenasocial', kind: 'prompt' },
+        { label: 'BiliBili.com', target: 'bilibilicom', kind: 'prompt' },
+        { label: 'BiliBili.tv', target: 'bilibilitv', kind: 'prompt' },
+        { label: 'Peertube', target: 'peertube', kind: 'other' },
+        { label: 'Other (any chat URL)', target: 'other', kind: 'other' }
+    ];
+    // kind → the stock global the stock .addnew button wired to (cited from
+    // index.html:170-225).
+    var ADD_SOURCE_STOCK_FN = {
+        youtube: 'showYouTubeAddSourcePrompt',
+        prompt: 'newSourcePrompt',
+        videoid: 'newSourceVideoIDPrompt',
+        rumbleapi: 'newRumbleApiTrackerPrompt',
+        other: 'newOtherSourcePrompt'
+    };
+    var addSourcePickerKeydown = null;
+
+    function openAddSourcePicker() {
+        closeAddSourcePicker(false);
+        var trigger = document.getElementById('arcade-add-source');
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-addsrc-picker';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal arcade-addsrc-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', 'Add a chat source — pick a provider');
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
+        title.textContent = 'Add a chat source';
+        modal.appendChild(title);
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-modal__blurb';
+        blurb.textContent = 'Pick a provider — stock’s own add flow takes it from there. Type to filter the list.';
+        modal.appendChild(blurb);
+
+        var search = document.createElement('input');
+        search.type = 'search';
+        search.className = 'arcade-addsrc-search';
+        search.id = 'arcade-addsrc-search';
+        search.placeholder = 'Filter providers…';
+        search.autocomplete = 'off';
+        search.setAttribute('aria-label', 'Filter providers');
+        search.setAttribute('aria-controls', 'arcade-addsrc-list');
+        modal.appendChild(search);
+
+        var list = document.createElement('div');
+        list.className = 'arcade-addsrc-list';
+        list.id = 'arcade-addsrc-list';
+        list.setAttribute('role', 'listbox');
+        list.setAttribute('aria-label', 'Providers');
+        modal.appendChild(list);
+
+        var empty = document.createElement('p');
+        empty.className = 'arcade-evt-modal__blurb arcade-addsrc-empty';
+        empty.textContent = 'No provider matches — try “other” for any chat URL.';
+        empty.hidden = true;
+        modal.appendChild(empty);
+
+        ADD_SOURCE_PROVIDERS.forEach(function (p, idx) {
+            var opt = document.createElement('button');
+            opt.type = 'button';
+            opt.className = 'arcade-addsrc-opt';
+            opt.setAttribute('role', 'option');
+            opt.setAttribute('aria-selected', 'false');
+            opt.dataset.arcadeProviderIdx = String(idx);
+            opt.dataset.arcadeProviderHay = (p.label + ' ' + p.target).toLowerCase();
+            var img = document.createElement('img');
+            img.alt = '';
+            img.className = 'arcade-addsrc-opt__icon';
+            try { img.src = window.getSourceIconUrl ? window.getSourceIconUrl(p.target === 'other' ? 'unknown' : p.target) : ''; } catch (e) { /* noop */ }
+            opt.appendChild(img);
+            var lab = document.createElement('span');
+            lab.className = 'arcade-addsrc-opt__label';
+            lab.textContent = p.label;
+            opt.appendChild(lab);
+            opt.addEventListener('click', function () { pickAddSourceProvider(p); });
+            list.appendChild(opt);
+        });
+
+        function applyFilter() {
+            var q = search.value.trim().toLowerCase();
+            var visible = 0;
+            Array.prototype.forEach.call(list.children, function (opt) {
+                var show = !q || opt.dataset.arcadeProviderHay.indexOf(q) !== -1;
+                opt.hidden = !show;
+                if (show) visible++;
+            });
+            empty.hidden = visible !== 0;
+        }
+        search.addEventListener('input', applyFilter);
+        // Arrow keys walk the visible options from the search box itself;
+        // Enter picks the first visible one.
+        search.addEventListener('keydown', function (e) {
+            if (e.key !== 'ArrowDown' && e.key !== 'Enter') return;
+            var visibleOpts = Array.prototype.slice.call(list.querySelectorAll('.arcade-addsrc-opt:not([hidden])'));
+            if (!visibleOpts.length) return;
+            e.preventDefault();
+            if (e.key === 'Enter') visibleOpts[0].click();
+            else visibleOpts[0].focus();
+        });
+        list.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) === -1) return;
+            var opts = Array.prototype.slice.call(list.querySelectorAll('.arcade-addsrc-opt:not([hidden])'));
+            if (!opts.length) return;
+            e.preventDefault();
+            var idx = opts.indexOf(document.activeElement);
+            if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = opts.length - 1;
+            else idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+            opts[idx].focus();
+        });
+
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeAddSourcePicker(true); });
+        document.body.appendChild(back);
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        addSourcePickerKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-addsrc-picker')) {
+                e.stopPropagation();
+                closeAddSourcePicker(true);
+            }
+        };
+        document.addEventListener('keydown', addSourcePickerKeydown);
+        search.focus(); // H18-A — focus lands IN the dialog, on the filter
+    }
+
+    function pickAddSourceProvider(p) {
+        closeAddSourcePicker(false);
+        var fnName = ADD_SOURCE_STOCK_FN[p.kind];
+        var fn = fnName && window[fnName];
+        if (typeof fn !== 'function') {
+            console.error('[arcade-shell] stock add-source flow missing:', fnName);
+            return;
+        }
+        try {
+            if (p.kind === 'youtube') fn('youtube');
+            else if (p.kind === 'videoid') fn(p.target);
+            else if (p.kind === 'rumbleapi') fn();
+            else if (p.kind === 'other') fn(p.target === 'other' ? '' : p.target);
+            else fn(p.target);
+        } catch (e) {
+            console.error('[arcade-shell] add-source flow failed:', e);
+        }
+        // Focus lands on the destination: the rail's add button stays the
+        // anchor, and a successful add re-renders the rail via sourceAdded.
+        var trigger = document.getElementById('arcade-add-source');
+        if (trigger) trigger.focus();
+    }
+
+    function closeAddSourcePicker(returnFocus) {
+        var back = document.getElementById('arcade-addsrc-picker');
+        if (back) back.remove();
+        if (addSourcePickerKeydown) {
+            document.removeEventListener('keydown', addSourcePickerKeydown);
+            addSourcePickerKeydown = null;
+        }
+        var trigger = document.getElementById('arcade-add-source');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            if (returnFocus) trigger.focus();
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // TASK-67 (Lane 1) — the source DETAILS POPOUT. Clicking a source's
+    // name opens a panel with its REAL details (read live off the app's own
+    // stateManager) and a door to the full per-source actions stock really
+    // exposes — the SSAppStreamDeckBridge command census (index.html
+    // :7520-7548): start/stop/restart, mute, visibility, update (replyOnly,
+    // autoActivate, accountRole, connectionMode — the last three are
+    // stock-gated to a STOPPED source, and the panel says so honestly),
+    // remove. Nothing beyond that list is wired, because nothing beyond it
+    // exists.
+    // --------------------------------------------------------------------
+    var srcPopoutKeydown = null;
+    var srcPopoutId = null;
+
+    function openSourceDetailsPopout(sourceId) {
+        closeSourceDetailsPopout(false);
+        srcPopoutId = sourceId;
+        var back = document.createElement('div');
+        back.className = 'arcade-evt-modal-back';
+        back.id = 'arcade-srcpop';
+        var modal = document.createElement('div');
+        modal.className = 'arcade-evt-modal arcade-srcpop-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', 'Source details');
+        modal.id = 'arcade-srcpop-modal';
+        back.appendChild(modal);
+        back.addEventListener('click', function (e) { if (e.target === back) closeSourceDetailsPopout(true); });
+        document.body.appendChild(back);
+        srcPopoutKeydown = function (e) {
+            if (e.key === 'Escape' && document.getElementById('arcade-srcpop')) {
+                e.stopPropagation();
+                closeSourceDetailsPopout(true);
+            }
+        };
+        document.addEventListener('keydown', srcPopoutKeydown);
+        renderSourceDetailsPopout();
+        // H18-A — focus lands IN the dialog.
+        var firstBtn = modal.querySelector('button');
+        if (firstBtn) firstBtn.focus();
+    }
+
+    function closeSourceDetailsPopout(returnFocus) {
+        var back = document.getElementById('arcade-srcpop');
+        if (back) back.remove();
+        if (srcPopoutKeydown) {
+            document.removeEventListener('keydown', srcPopoutKeydown);
+            srcPopoutKeydown = null;
+        }
+        var id = srcPopoutId;
+        srcPopoutId = null;
+        if (returnFocus && id) {
+            var row = document.querySelector('#arcade-src-list [data-arcade-source-id="' + id + '"] .arcade-src__namebtn');
+            if (row) row.focus();
+        }
+    }
+
+    function srcPopDetail(grid, k, v) {
+        var key = document.createElement('span');
+        key.className = 'arcade-srcpop__k';
+        key.textContent = k;
+        var val = document.createElement('span');
+        val.className = 'arcade-srcpop__v';
+        val.textContent = v;
+        grid.appendChild(key);
+        grid.appendChild(val);
+    }
+
+    function renderSourceDetailsPopout() {
+        var modal = document.getElementById('arcade-srcpop-modal');
+        if (!modal || !srcPopoutId) return;
+        var sm = window.stateManager;
+        var source = sm && typeof sm.getSource === 'function' ? sm.getSource(srcPopoutId) : null;
+        modal.innerHTML = '';
+        if (!source) {
+            var gone = document.createElement('p');
+            gone.className = 'arcade-evt-modal__blurb';
+            gone.textContent = 'That source is gone.';
+            modal.appendChild(gone);
+            return;
+        }
+        var meta = sourceStatusMeta(source);
+        var isRunning = source.status === 'active' || source.status === 'activating';
+
+        var title = document.createElement('h3');
+        title.className = 'arcade-evt-modal__title';
+        title.tabIndex = -1;
+        title.textContent = sourceDisplayName(source);
+        modal.appendChild(title);
+
+        // Connection state leads — the Admiral's ask: "see a popout of the
+        // details with the connection".
+        var stateRow = document.createElement('div');
+        stateRow.className = 'arcade-srcpop__state';
+        var dot = document.createElement('span');
+        dot.className = 'arcade-dot ' + meta.dotClass;
+        stateRow.appendChild(dot);
+        var stateText = document.createElement('span');
+        stateText.textContent = meta.label;
+        stateRow.appendChild(stateText);
+        modal.appendChild(stateRow);
+
+        var grid = document.createElement('div');
+        grid.className = 'arcade-srcpop__grid';
+        srcPopDetail(grid, 'Platform', source.target || '—');
+        if (source.username) srcPopDetail(grid, 'Channel / user', source.username);
+        if (source.videoId) srcPopDetail(grid, 'Video ID', source.videoId);
+        srcPopDetail(grid, 'Connection mode', (source.connectionMode || 'classic') + (source.activeConnectionMode ? ' (live: ' + source.activeConnectionMode + ')' : ''));
+        if (source.url) srcPopDetail(grid, 'Capture URL', source.url);
+        srcPopDetail(grid, 'Muted', source.isMuted ? 'yes' : 'no');
+        srcPopDetail(grid, 'Visible in dock', source.isVisible !== false ? 'yes' : 'no');
+        srcPopDetail(grid, 'Reply only', source.replyOnly ? 'yes' : 'no');
+        srcPopDetail(grid, 'Auto-start', source.autoActivate ? 'yes' : 'no');
+        srcPopDetail(grid, 'Account role', source.accountRole || 'normal');
+        modal.appendChild(grid);
+
+        // ---- Actions: ONLY what stock's bridge really exposes. ----
+        var actions = document.createElement('div');
+        actions.className = 'arcade-srcpop__actions';
+
+        function actionBtn(label, aria, danger, onClick) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'arcade-btn arcade-btn--sm' + (danger ? ' arcade-btn--danger' : '');
+            btn.textContent = label;
+            btn.setAttribute('aria-label', aria);
+            btn.addEventListener('click', onClick);
+            actions.appendChild(btn);
+            return btn;
+        }
+        function bridgeThen(request) {
+            callBridge(request).then(function () {
+                // The stateManager events re-render the rail; the popout
+                // re-reads live truth the same way.
+                setTimeout(renderSourceDetailsPopout, 250);
+            });
+        }
+
+        actionBtn(isRunning ? '■ Stop' : '● Start', (isRunning ? 'Stop ' : 'Start ') + sourceDisplayName(source), isRunning, function () {
+            bridgeThen({ action: isRunning ? 'stopSource' : 'startSource', value: source.id });
+        });
+        if (isRunning) {
+            actionBtn('↻ Restart', 'Restart ' + sourceDisplayName(source), false, function () {
+                bridgeThen({ action: 'restartSource', value: source.id });
+            });
+        }
+        actionBtn(source.isMuted ? 'Unmute' : 'Mute', (source.isMuted ? 'Unmute ' : 'Mute ') + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'toggleSourceMute', value: source.id });
+        });
+        actionBtn(source.isVisible !== false ? 'Hide from dock' : 'Show in dock', 'Toggle dock visibility for ' + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'toggleSourceVisibility', value: source.id });
+        });
+        actionBtn(source.replyOnly ? 'Reply only: on' : 'Reply only: off', 'Toggle reply-only for ' + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { replyOnly: !source.replyOnly } } });
+        });
+        actionBtn(source.autoActivate ? 'Auto-start: on' : 'Auto-start: off', 'Toggle auto-start for ' + sourceDisplayName(source), false, function () {
+            bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { autoActivate: !source.autoActivate } } });
+        });
+        modal.appendChild(actions);
+
+        // Role + connection mode — stock gates these to a STOPPED source
+        // (inactiveOnlySourceSettings, index.html:7005); the controls say so.
+        var tune = document.createElement('div');
+        tune.className = 'arcade-srcpop__tune';
+
+        var roleRow = document.createElement('label');
+        roleRow.className = 'arcade-srcpop__field';
+        var roleLab = document.createElement('span');
+        roleLab.textContent = 'Account role';
+        var roleSel = document.createElement('select');
+        roleSel.setAttribute('aria-label', 'Account role for ' + sourceDisplayName(source));
+        ['normal', 'host', 'bot', 'relay'].forEach(function (r) {
+            var o = document.createElement('option');
+            o.value = r;
+            o.textContent = r;
+            if ((source.accountRole || 'normal') === r) o.selected = true;
+            roleSel.appendChild(o);
+        });
+        roleSel.disabled = isRunning;
+        roleSel.title = isRunning ? 'Stop the source to change its role (stock rule)' : '';
+        roleSel.addEventListener('change', function () {
+            bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { accountRole: roleSel.value } } });
+        });
+        roleRow.appendChild(roleLab);
+        roleRow.appendChild(roleSel);
+        tune.appendChild(roleRow);
+
+        var modes = ['classic'];
+        try {
+            if (typeof window.supportedConnectionModesForSource === 'function') {
+                modes = window.supportedConnectionModesForSource(source);
+            }
+        } catch (e) { /* noop */ }
+        if (modes.length > 1) {
+            var modeRow = document.createElement('label');
+            modeRow.className = 'arcade-srcpop__field';
+            var modeLab = document.createElement('span');
+            modeLab.textContent = 'Connection mode';
+            var modeSel = document.createElement('select');
+            modeSel.setAttribute('aria-label', 'Connection mode for ' + sourceDisplayName(source));
+            modes.forEach(function (m) {
+                var o = document.createElement('option');
+                o.value = m;
+                o.textContent = m;
+                if ((source.connectionMode || 'classic') === m) o.selected = true;
+                modeSel.appendChild(o);
+            });
+            modeSel.disabled = isRunning;
+            modeSel.title = isRunning ? 'Stop the source to change its connection mode (stock rule)' : '';
+            modeSel.addEventListener('change', function () {
+                bridgeThen({ action: 'updateSource', value: { sourceId: source.id, updates: { connectionMode: modeSel.value } } });
+            });
+            modeRow.appendChild(modeLab);
+            modeRow.appendChild(modeSel);
+            tune.appendChild(modeRow);
+        }
+        modal.appendChild(tune);
+        if (isRunning) {
+            var stopNote = document.createElement('div');
+            stopNote.className = 'arcade-evt-cond__hint';
+            stopNote.textContent = 'Role, connection mode and identity edits unlock when the source is stopped — stock’s rule, not ours.';
+            modal.appendChild(stopNote);
+        }
+
+        var foot = document.createElement('div');
+        foot.className = 'arcade-srcpop__foot';
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--danger';
+        removeBtn.textContent = 'Remove source';
+        removeBtn.setAttribute('aria-label', 'Remove ' + sourceDisplayName(source));
+        removeBtn.addEventListener('click', function () {
+            // confirm-on-second-click (house idiom — no window.confirm in
+            // the shell's modals).
+            if (removeBtn.dataset.armed === 'true') {
+                callBridge({ action: 'removeSource', value: source.id });
+                closeSourceDetailsPopout(false);
+                return;
+            }
+            removeBtn.dataset.armed = 'true';
+            removeBtn.textContent = 'Remove source — click again to confirm';
+            setTimeout(function () {
+                if (removeBtn.isConnected) {
+                    removeBtn.dataset.armed = 'false';
+                    removeBtn.textContent = 'Remove source';
+                }
+            }, 4000);
+        });
+        foot.appendChild(removeBtn);
+        var closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'arcade-btn arcade-btn--sm';
+        closeBtn.textContent = 'Close';
+        closeBtn.addEventListener('click', function () { closeSourceDetailsPopout(true); });
+        foot.appendChild(closeBtn);
+        modal.appendChild(foot);
+    }
+
     function bindStateManager() {
         var sm = window.stateManager;
         if (!sm || typeof sm.on !== 'function') return false;
@@ -10885,6 +11379,13 @@
         sm.on('sourceUpdated', renderSourcesRail);
         sm.on('sourceRemoved', renderSourcesRail);
         sm.on('allSourcesCleared', renderSourcesRail);
+        // TASK-67 — the open details popout tracks live source truth and
+        // closes itself if its source is removed.
+        sm.on('sourceUpdated', function () { if (srcPopoutId) renderSourceDetailsPopout(); });
+        sm.on('sourceRemoved', function (payload) {
+            var removedId = payload && (payload.sourceId || payload.id);
+            if (srcPopoutId && removedId === srcPopoutId) closeSourceDetailsPopout(false);
+        });
         installBootGuard(sm);
         return true;
     }

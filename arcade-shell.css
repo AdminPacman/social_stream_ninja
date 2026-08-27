@@ -2123,3 +2123,87 @@ body.arcade-shell .arcade-deck-cond select,
 body.arcade-shell .arcade-deck-cond input {
   max-width: 220px;
 }
+
+/* --------------------------------------------------------------------------
+   TASK-67 (WALK BATCH 1) — Main-page criticals. All rules stay
+   body.arcade-shell-scoped, as always.
+
+   Lane 1: the restored provider picker, the source-details popout, the
+   ON-AIR strip's OBS-link config door.
+   -------------------------------------------------------------------------- */
+
+/* The source NAME is now a button (details popout) — reset button chrome,
+   keep the v1 flex layout, add the affordance. */
+body.arcade-shell .arcade-src__namebtn {
+  appearance: none; -webkit-appearance: none;
+  background: none; border: 1px solid transparent; border-radius: var(--arc-r);
+  padding: 2px 4px; margin: -2px -4px;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  flex: 1;
+}
+body.arcade-shell .arcade-src__namebtn:hover { background: var(--arc-panel-3); border-color: var(--arc-edge-soft); }
+body.arcade-shell .arcade-src__namebtn:focus-visible {
+  outline: 2px solid var(--arc-info); outline-offset: 1px;
+}
+
+/* Provider picker (the restored "+ Add source" list). */
+body.arcade-shell .arcade-addsrc-modal { width: min(460px, calc(100vw - 48px)); max-height: min(560px, calc(100vh - 64px)); }
+body.arcade-shell .arcade-addsrc-search {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px;
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  font: 400 12px var(--arc-font-ui);
+}
+body.arcade-shell .arcade-addsrc-search:focus-visible { outline: 2px solid var(--arc-info); outline-offset: 1px; }
+body.arcade-shell .arcade-addsrc-list {
+  display: flex; flex-direction: column; gap: 2px;
+  overflow-y: auto; min-height: 0; max-height: 380px;
+  padding: 2px;
+}
+body.arcade-shell .arcade-addsrc-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; text-align: left; cursor: pointer;
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  font: 600 12px var(--arc-font-ui);
+}
+body.arcade-shell .arcade-addsrc-opt:hover,
+body.arcade-shell .arcade-addsrc-opt:focus-visible { border-color: var(--arc-info); outline: none; }
+body.arcade-shell .arcade-addsrc-opt__icon { width: 16px; height: 16px; object-fit: contain; }
+body.arcade-shell .arcade-addsrc-opt__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.arcade-shell .arcade-addsrc-empty { margin: 0; }
+
+/* Source-details popout. */
+body.arcade-shell .arcade-srcpop-modal { width: min(440px, calc(100vw - 48px)); max-height: min(600px, calc(100vh - 64px)); overflow-y: auto; }
+body.arcade-shell .arcade-srcpop__state {
+  display: flex; align-items: center; gap: 8px;
+  font: 700 12px var(--arc-font-ui); color: var(--arc-ink);
+  padding: 6px 8px; background: var(--arc-panel-2);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+}
+body.arcade-shell .arcade-srcpop__grid {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px;
+  font: 400 11px var(--arc-font-ui);
+  padding: 4px 2px;
+}
+body.arcade-shell .arcade-srcpop__k { color: var(--arc-faint); white-space: nowrap; }
+body.arcade-shell .arcade-srcpop__v { color: var(--arc-ink); min-width: 0; overflow-wrap: anywhere; }
+body.arcade-shell .arcade-srcpop__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+body.arcade-shell .arcade-srcpop__tune { display: flex; flex-wrap: wrap; gap: 10px; }
+body.arcade-shell .arcade-srcpop__field {
+  display: flex; align-items: center; gap: 8px;
+  font: 400 11px var(--arc-font-ui); color: var(--arc-muted);
+}
+body.arcade-shell .arcade-srcpop__field select {
+  background: var(--arc-panel-2); color: var(--arc-ink);
+  border: 1px solid var(--arc-edge); border-radius: var(--arc-r);
+  font: 400 11px var(--arc-font-ui); padding: 4px 6px;
+}
+body.arcade-shell .arcade-srcpop__foot {
+  display: flex; justify-content: space-between; gap: 8px;
+  margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--arc-edge-soft);
+}
+
+/* ON-AIR strip: the OBS-link config door sits under the strip, full width. */
+body.arcade-shell .arcade-onair__config { width: 100%; justify-content: center; margin-top: 6px; }
