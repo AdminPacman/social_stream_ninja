@@ -8131,6 +8131,24 @@
     var pendingLibraryDeleteBtn = null;
     var pendingLibraryDeleteTimer = null;
 
+    // TASK-67 (Lane 4) — the curated font dropdown choices. Honest scope:
+    // these ride --font-family, so they must be families the dock can
+    // actually resolve — its bundled Sora stack (the default), its bundled
+    // OpenDyslexic @font-face, and the generic system stacks. Custom… is
+    // the free-text door for any locally-installed family. (Stock's
+    // &googlefont param would FETCH a Google Font over the network — the
+    // CSS var alone doesn't load fonts, so no pretend entry for it here.)
+    var ARCADE_FONT_CHOICES = [
+        { v: '', label: 'Dock default (Sora stack)' },
+        { v: 'opendyslexic', label: 'OpenDyslexic (bundled)' },
+        { v: 'system-ui', label: 'System UI' },
+        { v: 'sans-serif', label: 'Sans-serif (system)' },
+        { v: 'serif', label: 'Serif (system)' },
+        { v: 'monospace', label: 'Monospace (system)' },
+        { v: 'cursive', label: 'Cursive (system)' },
+        { v: '__custom__', label: 'Custom…' }
+    ];
+
     var STYLE_CONTROLS = [
         { group: 'COLORS' },
         { id: 'transparent', label: 'Transparent background', kind: 'toggle' },
@@ -8145,7 +8163,12 @@
         { id: 'donoGlow', label: 'Donation amount glow', kind: 'color', vars: ['--donation-amount'] },
         { id: 'member', label: 'Member rows', kind: 'color', vars: ['--member-bgcolor', '--member-bgcolor-bubble'] },
         { group: 'TYPE' },
-        { id: 'fontFamily', label: 'Font family', kind: 'text', vars: ['--font-family'], placeholder: 'e.g. "Sora", sans-serif' },
+        // TASK-67 (Lane 4) — font family is a DROPDOWN now ("not a type
+        // in"): curated families the dock really supports (its bundled Sora
+        // stack + OpenDyslexic @font-face + system stacks) + Custom…, which
+        // reveals the free-text for any locally-installed family. Values
+        // ride --font-family exactly as the old text control's did.
+        { id: 'fontFamily', label: 'Font family', kind: 'font', vars: ['--font-family'] },
         { id: 'msgSize', label: 'Message size', kind: 'range', vars: ['--comment-font-size'], unit: 'px', min: 10, max: 40, step: 1 },
         { id: 'nameSize', label: 'Name size', kind: 'range', vars: ['--author-font-size'], unit: 'px', min: 10, max: 40, step: 1 },
         { id: 'msgWeight', label: 'Message weight', kind: 'range', vars: ['--message-font-weight'], min: 300, max: 800, step: 100 },
@@ -8428,6 +8451,30 @@
             '<div class="arcade-field" id="arcade-style-usercss-field"><label for="arcade-style-usercss">CUSTOM CSS (advanced)</label>' +
             '<span class="arcade-field__hint">appended verbatim after the generated style — yours is never overwritten</span></div>' +
             '<textarea id="arcade-style-usercss" spellcheck="false" rows="4"></textarea>' +
+            // TASK-67 (Lane 4) — the living CSS pane: what the current picks
+            // compose, live, read-only until unlocked ("this way the user
+            // can learn about it as they go, or edit it themselves").
+            '<div class="arcade-field" id="arcade-style-composed-field">' +
+            '<label for="arcade-style-composed">COMPOSED CSS — LIVE FROM YOUR PICKS</label>' +
+            '<span class="arcade-field__hint">tracks the pickers as you move them — Copy it, or unlock to fork it into hand-edited Custom CSS (one-way: manual edits stop tracking the pickers)</span></div>' +
+            '<pre id="arcade-style-composed" class="arcade-style-composed" tabindex="0" role="region" aria-label="Composed CSS, live from the current picks"></pre>' +
+            '<div class="arcade-evt-doors">' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-composed-copy">Copy CSS</button>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-composed-unlock">Unlock to edit…</button>' +
+            '</div>' +
+            // TASK-67 (Lane 4) — Steve's preset pickers, surfaced in Style.
+            '<div class="arcade-field arcade-style-steves">' +
+            '<label>STEVE’S PRESETS — THE OBS OVERLAYS</label>' +
+            '<span class="arcade-field__hint">stock’s ready-made preset lists (popup.html’s own overlay-preset-select + featured-preset-select), same canonical params. Honest scope: presets swap the whole OBS overlay page — the chat-overlay list dresses the OBS chat widget, the featured list the single-message overlay. The app dock can’t wear a whole page, so it takes its look from the pickers above instead.</span>' +
+            '<div class="arcade-style-steves__row">' +
+            '<select id="arcade-style-steve-overlay" aria-label="Steve’s chat overlay presets"></select>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-steve-overlay-copy">Copy overlay URL</button>' +
+            '</div>' +
+            '<div class="arcade-style-steves__row">' +
+            '<select id="arcade-style-steve-featured" aria-label="Steve’s featured overlay presets"></select>' +
+            '<button type="button" class="arcade-btn arcade-btn--sm" id="arcade-style-steve-featured-copy">Copy featured URL</button>' +
+            '</div>' +
+            '</div>' +
             '</div>';
         document.body.appendChild(panel);
         buildBrowseModal();
@@ -8447,6 +8494,153 @@
             styleUserCss = e.target.value;
             queueStylePreviewRefresh();
         });
+
+        // TASK-67 (Lane 4) — living CSS pane wiring.
+        panel.querySelector('#arcade-style-composed-copy').addEventListener('click', function () {
+            var btn = this;
+            copyToClipboard(composedCssForDisplay()).then(function () { flashButton(btn, 'Copied ✓'); })
+                .catch(function () { flashButton(btn, 'Copy failed', 2200); });
+        });
+        var composedUnlockBtn = panel.querySelector('#arcade-style-composed-unlock');
+        composedUnlockBtn.addEventListener('click', function () {
+            // One-way fork, confirm-on-second-click (house idiom): the
+            // current picks flatten into hand-edited Custom CSS and the
+            // pickers reset — manual edits stop tracking the pickers.
+            if (composedUnlockBtn.dataset.armed !== 'true') {
+                composedUnlockBtn.dataset.armed = 'true';
+                composedUnlockBtn.textContent = 'Unlock — pickers reset, CSS goes to Custom CSS. Confirm?';
+                setTimeout(function () {
+                    if (composedUnlockBtn.isConnected) {
+                        composedUnlockBtn.dataset.armed = 'false';
+                        composedUnlockBtn.textContent = 'Unlock to edit…';
+                    }
+                }, 5000);
+                return;
+            }
+            var css = composedCssForDisplay();
+            styleState = {};
+            syncStyleControlsFromState();
+            styleUserCss = css;
+            var ta = panel.querySelector('#arcade-style-usercss');
+            if (ta) ta.value = css;
+            composedUnlockBtn.dataset.armed = 'false';
+            composedUnlockBtn.textContent = 'Unlock to edit…';
+            queueStylePreviewRefresh();
+            renderComposedCss();
+            setStyleStatus('Unlocked — your picks are now flat Custom CSS (the pickers no longer track them). Clear Custom CSS to start over.');
+        });
+
+        // TASK-67 (Lane 4) — Steve's preset pickers. The option lists are
+        // stock's own selects, verbatim (popup.html:4765-4791 overlay,
+        // :4823-4852 featured); the Copy door composes the URL with the
+        // same canonical params via the shared element-URL builder (real
+        // session, language params, stock encode).
+        var overlaySel = panel.querySelector('#arcade-style-steve-overlay');
+        STEVE_OVERLAY_PRESETS.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p.v;
+            o.textContent = p.label;
+            overlaySel.appendChild(o);
+        });
+        var featuredSel = panel.querySelector('#arcade-style-steve-featured');
+        STEVE_FEATURED_PRESETS.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p.v;
+            o.textContent = p.label;
+            featuredSel.appendChild(o);
+        });
+        panel.querySelector('#arcade-style-steve-overlay-copy').addEventListener('click', function () {
+            var btn = this;
+            var spec = splitStevePresetValue(overlaySel.value || 'sampleoverlay.html');
+            copyElementOverlayUrl({ overlayPage: spec.page, params: spec.params }, btn);
+        });
+        panel.querySelector('#arcade-style-steve-featured-copy').addEventListener('click', function () {
+            var btn = this;
+            var spec = splitStevePresetValue(featuredSel.value || 'featured.html');
+            copyElementOverlayUrl({ overlayPage: spec.page, params: spec.params }, btn);
+        });
+    }
+
+    // TASK-67 (Lane 4) — stock's preset lists, verbatim from popup.html.
+    // Chat overlay presets (overlay-preset-select, popup.html:4765-4791):
+    var STEVE_OVERLAY_PRESETS = [
+        { v: 'sampleoverlay.html', label: '📄 Sample Overlay - Basic chat overlay' },
+        { v: 'themes/compact-classic.html', label: '💬 Compact Classic - Dense Twitch/IRC-style chat' },
+        { v: 'themes/compact-classic.html?ultra', label: '⚡ Compact Ultra - Super dense minimum-height chat' },
+        { v: 'themes/compact-clean.html', label: '🧼 Compact Clean - Tidy compact cards' },
+        { v: 'themes/compact-glass.html', label: '🪟 Compact Glass - Frosted compact rows' },
+        { v: 'themes/overlay-comic-pop.html', label: '💥 Comic Pop Dock - Stackable pop art chat' },
+        { v: 'themes/overlay-comic-classic.html', label: '🗯️ Comic Pop Classic - Featured style chat' },
+        { v: 'themes/horizontal.html', label: '➡️ Horizontal Scroll - Right-to-left ticker' },
+        { v: 'themes/overlay-ticker-news.html', label: '📰 News Ticker - Breaking-news crawl bar' },
+        { v: 'themes/overlay-credits.html', label: '🎬 Movie Credits - Continuous rolling credits' },
+        { v: 'themes/overlay-danmaku.html', label: '🎯 Danmaku Bullet Chat - Messages fly across screen' },
+        { v: 'themes/overlay-neon-cyberpunk.html', label: '⚡ Neon Cyberpunk - Futuristic glitch effects' },
+        { v: 'themes/overlay-particles.html', label: '✨ Particle System - Floating message effects' },
+        { v: 'themes/overlay-typewriter.html', label: '⌨️ Terminal Typewriter - Retro typing effects' },
+        { v: 'themes/overlay-bubbles.html', label: '🫧 Bubble Chat - Floating speech bubbles' },
+        { v: 'themes/overlay-cards.html', label: '🃏 Card Flip 3D - Interactive card animations' },
+        { v: 'themes/overlay-xacception.html', label: '❎ Simple Alternative - Basic bubble message' },
+        { v: 'themes/pretty.html', label: '✨ Pretty Theme - Holographic style' },
+        { v: 'themes/Neutron/chatOnly.html', label: '⚛️ Neutron Chat - Sci-fi gaming theme' },
+        { v: 'themes/Neutron/stream.html', label: '⚛️ Neutron Stream - Full stream layout' },
+        { v: 'themes/Windows3.1/index.html', label: '🖥️ Windows 3.1 - Retro computing' },
+        { v: 'themes/deuks_overlay/overlay1.html', label: '🎬 Deuks Overlay 1 - Custom streaming' },
+        { v: 'themes/deuks_overlay/overlay2.html', label: '🎬 Deuks Overlay 2 - Alternative layout' },
+        { v: 'themes/rainbowpuke/index.html', label: '🌈 Rainbow Puke - Colorful chaos' },
+        { v: 'themes/t3nk3y/index.html', label: '🎮 T3nk3y Theme - Gaming style' },
+        { v: 'themes/LuckyLootTube/luckyloottube.html', label: '🎁 LuckyLootTube - Liquid Glass' }
+    ];
+    // Featured overlay presets (featured-preset-select, popup.html:4823-4852):
+    var STEVE_FEATURED_PRESETS = [
+        { v: '', label: 'Classic (Full Customization)' },
+        { v: 'themes/featured-styles/featured-modern.html?style=glass', label: 'Modern Glass' },
+        { v: 'themes/featured-styles/featured-modern.html?style=neon', label: 'Neon Glow' },
+        { v: 'themes/featured-styles/featured-modern.html?style=minimal', label: 'Minimal Clean' },
+        { v: 'themes/featured-styles/featured-modern.html?style=gaming', label: 'Gaming RGB' },
+        { v: 'themes/featured-styles/featured-modern.html?style=twitch', label: 'Twitch Style' },
+        { v: 'themes/featured-styles/featured-animated.html?style=bounce', label: 'Animated Bounce' },
+        { v: 'themes/featured-styles/featured-animated.html?style=slide', label: 'Animated Slide' },
+        { v: 'themes/featured-styles/featured-animated.html?style=typewriter', label: 'Typewriter' },
+        { v: 'themes/featured-styles/featured-animated.html?style=comic', label: 'Comic Pop' },
+        { v: 'themes/featured-styles/featured-animated.html?style=holo', label: 'Holographic' },
+        { v: 'themes/featured-styles/featured-3d.html?style=cube', label: '3D Cube' },
+        { v: 'themes/featured-styles/featured-3d.html?style=flip', label: 'Card Flip' },
+        { v: 'themes/featured-styles/featured-3d.html?style=float', label: 'Floating Panels' },
+        { v: 'themes/featured-styles/featured-3d.html?style=helix', label: 'Helix Spiral' },
+        { v: 'themes/featured-styles/featured-3d.html?style=iso', label: 'Isometric' },
+        { v: 'themes/featured-styles/featured-particles.html?style=fireflies', label: 'Fireflies' },
+        { v: 'themes/featured-styles/featured-particles.html?style=snow', label: 'Snow Fall' },
+        { v: 'themes/featured-styles/featured-particles.html?style=matrix', label: 'Matrix Rain' },
+        { v: 'themes/featured-styles/featured-particles.html?style=bubbles', label: 'Bubbles' },
+        { v: 'themes/featured-styles/featured-particles.html?style=stars', label: 'Starfield' },
+        { v: 'themes/featured-styles/featured-slide.html', label: 'Sliding Effects' },
+        { v: 'themes/featured-styles/featured-gradient.html', label: 'Gradient Animations' },
+        { v: 'themes/featured-styles/featured-retro.html', label: 'Retro/Synthwave' },
+        { v: 'themes/featured-styles/featured-glass.html', label: 'Glassmorphism' },
+        { v: 'themes/featured-styles/featured-cyberpunk.html', label: 'Cyberpunk' },
+        { v: 'themes/featured-styles/featured-gaming.html', label: 'Gaming Themed' },
+        { v: 'themes/featured-styles/featured-elegant.html', label: 'Elegant & Sophisticated' },
+        { v: 'themes/featured-styles/featured-dynamic.html', label: 'Dynamic Physics' },
+        { v: 'themes/featured-styles/featured-neon.html', label: 'Neon Glow' }
+    ];
+    // 'themes/foo.html?style=glass' → { page, params:['style=glass'] } — the
+    // option value's query string IS the canonical param set stock composes.
+    function splitStevePresetValue(value) {
+        var parts = String(value || '').split('?');
+        return { page: parts[0] || 'featured.html', params: parts[1] ? parts[1].split('&').filter(Boolean) : [] };
+    }
+
+    // TASK-67 (Lane 4) — the living CSS pane: the composed blob minus the
+    // style-builder state marker (that's plumbing, not something to learn).
+    function composedCssForDisplay() {
+        var blob = buildStyleCss();
+        var stripped = blob.replace(/^\s*\/\*[\s\S]*?\*\/\n?/, '');
+        return stripped || '/* nothing picked yet — the dock’s default look applies */';
+    }
+    function renderComposedCss() {
+        var pre = document.getElementById('arcade-style-composed');
+        if (pre) pre.textContent = composedCssForDisplay();
     }
 
     function initBackToDockButton(panel) {
@@ -9245,6 +9439,38 @@
                 var out = row.querySelector('.arcade-style-val');
                 if (out) out.textContent = input.value + (ctl.unit || '');
             });
+        } else if (ctl.kind === 'font') {
+            // TASK-67 (Lane 4) — curated dropdown + Custom… free-text door.
+            input = document.createElement('select');
+            ARCADE_FONT_CHOICES.forEach(function (f) {
+                var o = document.createElement('option');
+                o.value = f.v;
+                o.textContent = f.label;
+                input.appendChild(o);
+            });
+            var customFont = document.createElement('input');
+            customFont.type = 'text';
+            customFont.className = 'arcade-style-fontcustom';
+            customFont.placeholder = 'e.g. "Inter", sans-serif';
+            customFont.setAttribute('aria-label', 'Custom font family');
+            customFont.hidden = true;
+            customFont.addEventListener('input', function () {
+                setStyleValue(ctl.id, customFont.value.trim());
+                row.classList.toggle('is-set', !!customFont.value.trim());
+            });
+            input.__fontCustom = customFont;
+            input.addEventListener('change', function () {
+                if (input.value === '__custom__') {
+                    customFont.hidden = false;
+                    customFont.focus();
+                    setStyleValue(ctl.id, customFont.value.trim());
+                    row.classList.toggle('is-set', !!customFont.value.trim());
+                } else {
+                    customFont.hidden = true;
+                    setStyleValue(ctl.id, input.value);
+                    row.classList.toggle('is-set', !!input.value);
+                }
+            });
         } else {
             input = document.createElement('input');
             input.type = 'text';
@@ -9253,6 +9479,7 @@
         }
         input.id = 'arcade-style-ctl-' + ctl.id;
         row.appendChild(input);
+        if (input.__fontCustom) row.appendChild(input.__fontCustom);
         if (ctl.kind === 'range') {
             var val = document.createElement('span');
             val.className = 'arcade-style-val';
@@ -9290,6 +9517,18 @@
                 var val = row && row.querySelector('.arcade-style-val');
                 if (val) val.textContent = has ? styleState[ctl.id] + (ctl.unit || '') : '—';
             } else if (ctl.kind === 'color') input.value = has ? styleState[ctl.id] : '#888888';
+            else if (ctl.kind === 'font') {
+                var fontVal = has ? String(styleState[ctl.id]) : '';
+                var fontCustom = input.__fontCustom;
+                var known = ARCADE_FONT_CHOICES.some(function (f) { return f.v === fontVal && f.v !== '__custom__'; });
+                if (has && !known) {
+                    input.value = '__custom__';
+                    if (fontCustom) { fontCustom.hidden = false; fontCustom.value = fontVal; }
+                } else {
+                    input.value = fontVal;
+                    if (fontCustom) { fontCustom.hidden = true; fontCustom.value = ''; }
+                }
+            }
             else input.value = has ? styleState[ctl.id] : '';
         });
     }
@@ -9307,7 +9546,7 @@
     function ensureStylePanelLive() {
         if (stylePanelLive) { queueStylePreviewRefresh(); return; }
         stylePanelLive = true;
-        loadStyleSettings().then(function () { initStylePreviewFrame(); });
+        loadStyleSettings().then(function () { renderComposedCss(); initStylePreviewFrame(); });
     }
 
     function loadStyleSettings() {
@@ -9453,6 +9692,7 @@
     // input listeners don't need their own per-mode guards; the reload
     // fallback also routes to the theme reloader while in theme mode.
     function queueStylePreviewRefresh() {
+        renderComposedCss(); // TASK-67 — the living CSS pane tracks every pick immediately
         if (!stylePanelLive) return;
         if (!isStyleEditorAvailable()) return;
         clearTimeout(stylePreviewTimer);
