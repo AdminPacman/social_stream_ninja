@@ -2527,11 +2527,16 @@ body.arcade-shell .arcade-topbar.is-clock-not .arcade-bft .ab { display: none; }
 /* item 10 — the RULED 390px floor: below it the arcade layout CLAMPS at
    390px and the app window scrolls horizontally (body min-width) instead
    of crushing the chrome. The fixed surfaces get the same floor so their
-   internal grids never compress past usable. */
+   internal grids never compress past usable.
+   TASK-71 (item 5) — the two RAILS leave the floor list: their width is
+   their own var (--arc-rail-w / --arc-side-w, fixed-position columns that
+   never compress), and the floor was silently OUTVOTING the collapse —
+   min-width:390px held the rail at 390px while the var said 56px, so
+   collapsing shrank the tiles to icons but yielded zero width (the
+   Admiral's screenshot). The content-pane padding already tracks the var,
+   so the reflow was always wired; the rail just couldn't shrink. */
 body.arcade-shell { min-width: 390px; overflow-x: auto; }
 body.arcade-shell .arcade-topbar,
-body.arcade-shell .arcade-rail,
-body.arcade-shell .arcade-side,
 body.arcade-shell .arcade-addons,
 body.arcade-shell .arcade-style,
 body.arcade-shell .arcade-alerts,
