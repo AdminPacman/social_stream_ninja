@@ -8990,9 +8990,11 @@
     // :1689-1700 + :1542-1545 + :2760-2776): &onlyfrom/&hidefrom (platforms),
     // &filterevents, and &filterfeaturedusers (a name whitelist — only those
     // chatters may be featured at all). The whitelist is surfaced natively
-    // here (rides the preview + copy URL). "Skip emoji-only" is DOCK-ONLY
-    // stock (&noemojisonly, dock.html:5704) — featured.html does NOT read
-    // it; flagged to the Admiral, honestly stated, not wired.
+    // here (rides the preview + copy URL).
+    // TASK-71 (H25 ruled) — "skip emoji-only" is WIRED now: featured.html
+    // reads the SAME stock key the dock does (&noemojisonly, dock.html:5704;
+    // the popup's "Ignore emoji-only messages" toggle writes it as param1 —
+    // popup.html:3941). One stock key, both surfaces, no new key minted.
     // --------------------------------------------------------------------
     var FEATURED_OPTS_KEY = 'arcadeFeaturedOptions';
     var featuredOpts = { whitelist: '' };
@@ -9007,16 +9009,32 @@
     }
     function saveFeaturedOptions() { saveGameSetting(FEATURED_OPTS_KEY, JSON.stringify(featuredOpts)); }
 
-    function featuredUrlParams() {
-        var wl = featuredOpts.whitelist.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-        return wl.length ? ['filterfeaturedusers=' + encodeURIComponent(wl.join(','))] : [];
+    // The stock skip-emoji flag, read live off the background page's own
+    // settings object (the same source getSettingFlag reads).
+    function featuredNoEmojiOnlyOn() {
+        try {
+            var bg = getBackgroundWindow();
+            var entry = bg && bg.settings && bg.settings['noemojisonly'];
+            return !!(entry && typeof entry === 'object' && entry.param1 === true);
+        } catch (e) { return false; }
     }
 
-    function initFeaturedPreviewFrame() {
+    function featuredUrlParams(emojiOverride) {
+        var wl = featuredOpts.whitelist.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var params = wl.length ? ['filterfeaturedusers=' + encodeURIComponent(wl.join(','))] : [];
+        // emojiOverride: the toggle passes its INTENDED state — the canonical
+        // saveSetting write lands async, so a same-tick read-back would
+        // compose the preview URL from the pre-toggle setting (the T71 race).
+        var emojiOn = typeof emojiOverride === 'boolean' ? emojiOverride : featuredNoEmojiOnlyOn();
+        if (emojiOn) params.push('noemojisonly'); // the stock key, valueless like the dock's
+        return params;
+    }
+
+    function initFeaturedPreviewFrame(emojiOverride) {
         var myToken = ++featuredPreviewToken;
         // &demo: zero-network; the page's own seeds ride processData — with a
         // whitelist set, only "DemoFren" renders (the filter REALLY filters).
-        var params = ['demo=1', 'session=' + encodeURIComponent(gamesPreviewRoom)].concat(featuredUrlParams());
+        var params = ['demo=1', 'session=' + encodeURIComponent(gamesPreviewRoom)].concat(featuredUrlParams(emojiOverride));
         widgetPreviewResolve('arcade-featured-preview-frame', 'featured.html', params, function () { return myToken === featuredPreviewToken; });
     }
 
@@ -9044,7 +9062,7 @@
         if (!stage) return;
         clearWidgetStage(stage);
         stage.appendChild(buildWidgetPreviewCard('featured', 'Featured overlay',
-            'Zero-network demo — two scripted fake messages ride the real filter chain. Set the whitelist below and only “DemoFren” shows; the filter really filters.',
+            'Zero-network demo — three scripted fake messages ride the real filter chain. Set the whitelist below and only “DemoFren” shows; turn skip-emoji on and EmojiFan’s “😂😂😂” drops. The filters really filter.',
             initFeaturedPreviewFrame));
 
         // ---- Who gets featured ----
@@ -9093,7 +9111,22 @@
         wlLabel.appendChild(wlInput);
         wlRow.appendChild(wlLabel);
         filters.body.appendChild(wlRow);
-        widgetHint(filters.body, 'Skip emoji-only messages: exists for the DOCK only (stock &noemojisonly) — the featured overlay doesn’t read it. Flagged to the Admiral, not wired. Platform and event filters live in the stock groups below (Visibility).');
+        // TASK-71 (H25 ruled) — skip-emoji rides the STOCK key: one switch
+        // for dock AND featured (popup.html:3941's "Ignore emoji-only
+        // messages" → param1 noemojisonly → dock.html:5704 + the TASK-71
+        // featured.html patch). Canonical saveSetting, the popup's own write
+        // shape (popup.js:5607-5616); the demo preview proves the drop.
+        filters.body.appendChild(buildArcadeToggle({
+            label: 'Skip emoji-only messages',
+            hint: 'Stock key noemojisonly — the dock’s own “Ignore emoji-only messages” setting. One switch, both surfaces; the featured preview drops EmojiFan’s emoji-only seed when on.',
+            checked: featuredNoEmojiOnlyOn(),
+            onChange: function (checked) {
+                saveDeckSetting('param1', 'noemojisonly', checked);
+                initFeaturedPreviewFrame(checked); // the demo re-runs under the INTENDED filter state (the write lands async)
+                widgetStatus('featured', 'skip emoji-only: ' + (checked ? 'on — the preview drops the emoji-only seed' : 'off — emoji-only messages can feature again'));
+            }
+        }));
+        widgetHint(filters.body, 'Platform and event filters live in the stock groups below (Visibility).');
         stage.appendChild(filters.card);
 
         // ---- the berthed stock groups (S51 embed driver, same keys) ----

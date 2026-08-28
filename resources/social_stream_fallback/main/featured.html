@@ -1561,6 +1561,33 @@
 					return { username: parts[0], type: parts[1] || "*" };
 				});
 			}
+
+			// [PAC'S ARCADE house patch — TASK-71, H25 ruled] skip-emoji rides
+			// the STOCK key: the same param name the dock reads
+			// (dock.html:5704, &noemojisonly → filterEmojiOnly) and the popup
+			// writes (popup.html:3941, data-param1="noemojisonly" — "Ignore
+			// emoji-only messages"). No new key minted. The emoji-only test
+			// below is dock.html's own (dock.html:10329-10344), verbatim.
+			var filterEmojiOnly = false;
+			if (urlParams.has("noemojisonly")) {
+				filterEmojiOnly = true;
+			}
+			function stripEmojisFromText(text) {
+				return text
+					.replace(/\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu, "")
+					.replace(/[\u200D\uFE0F]/g, "")
+					.replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/gi, "");
+			}
+
+			function isEmojiOnly(str) {
+				let strippedStr = stripEmojisFromText(str);
+				strippedStr = strippedStr.replace(/\s+/g, '');
+				if (strippedStr.length === 0) {
+					return true; // Contains only emojis and/or spaces
+				}
+				const textContent = strippedStr.replace(/<[^>]*>/g, '');
+				return textContent.length === 0;
+			}
 			
 
 			if (urlParams.has("css")) {
@@ -2783,6 +2810,15 @@
 							return false;
 						}
 					}
+
+					// [PAC'S ARCADE house patch — TASK-71, H25 ruled] the stock
+					// dock rule, same key, same test (dock.html:11312-11316):
+					// emoji-only chat rows never feature when &noemojisonly rides.
+					if (filterEmojiOnly && data.contents.chatmessage && !data.contents.hasDonation && !data.contents.contentimg) {
+						if (isEmojiOnly(data.contents.chatmessage)) {
+							return false; // emoji-only — dropped, like the dock
+						}
+					}
 					
 					if (lastMessageId && ("id" in data.contents) && data.contents.id === lastMessageId) {
 						return "a message with this ID is already featured. Change or remove the ID."
@@ -3659,7 +3695,10 @@
 				document.body.appendChild(demoBadge);
 				var demoSeeds = [
 					{ chatname: "DemoFren", chatmessage: "Featured chat preview — this message is on the whitelist.", type: "twitch" },
-					{ chatname: "RandomJoe", chatmessage: "This message is NOT whitelisted — a whitelist filter drops it.", type: "twitch" }
+					{ chatname: "RandomJoe", chatmessage: "This message is NOT whitelisted — a whitelist filter drops it.", type: "twitch" },
+					// TASK-71 (H25) — the emoji-only seed PROVES the stock
+					// &noemojisonly filter: dropped when the key rides, shown when not.
+					{ chatname: "EmojiFan", chatmessage: "😂😂😂", type: "twitch" }
 				];
 				demoSeeds.forEach(function (contents, i) {
 					setTimeout(function () {
