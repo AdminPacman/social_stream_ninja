@@ -194,7 +194,9 @@
   #widget.art-right { flex-direction: row-reverse; }
   #widget.align-center #meta { text-align: center; }
   #widget.align-right #meta { text-align: right; }
-  #widget.vertical #title, #widget.vertical #artist { white-space: normal; }
+  /* TASK-70 (Lane 3) — vertical wraps long titles, but a single unbroken
+     word still needs overflow-wrap or it escapes the 240px column. */
+  #widget.vertical #title, #widget.vertical #artist { white-space: normal; overflow-wrap: anywhere; }
 
   /* idle state — honest, info-colored, never a fake track */
   #widget.idle #art { display: none; }
@@ -406,8 +408,11 @@ function demoArt() {
 }
 
 if (cfg.demo) {
+  /* TASK-70 (Lane 3) — the demo title is deliberately LONG: every preview
+     of this widget proves song-title containment (ellipsis in horizontal/
+     compact, wrapped + overflow-wrap in vertical) instead of hiding it. */
   showTrack({
-    title: "Insert Coin (Demo Mode)",
+    title: "Insert Coin (Demo Mode) — The Extended Twelve-Inch Arcade Megamix Featuring The Whole House Band Orchestra & Friends",
     artist: "The House Band",
     artUrl: demoArt(),
     url: "https://open.spotify.com/",

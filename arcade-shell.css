@@ -1241,6 +1241,78 @@ body.arcade-shell .arcade-tipjar {
 body.arcade-shell[data-arcade-tab="frames"] .arcade-frames { display: flex; }
 body.arcade-shell[data-arcade-tab="tipjar"] .arcade-tipjar { display: flex; }
 
+/* --------------------------------------------------------------------------
+   TASK-70 (WALK 2C) — the widget interiors (Lanes 1/3: Featured Chat, Now
+   Playing, Hype Train, Fren Map) + the Overlay templates gallery (Lane 4).
+   Same fixed-panel doctrine as the sibling interiors; the widget stage is a
+   single scrolling column (no left list — one widget per interior), the
+   overlays gallery reuses the .arcade-alerts-body list+stage split.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-widget,
+body.arcade-shell .arcade-overlays {
+  display: none;
+  position: fixed;
+  top: var(--arc-topbar-h);
+  left: 0; right: 0; bottom: 0;
+  z-index: 1500;
+  background: var(--arc-void);
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+body.arcade-shell[data-arcade-tab="featured"] .arcade-featured { display: flex; }
+body.arcade-shell[data-arcade-tab="music"] .arcade-music { display: flex; }
+body.arcade-shell[data-arcade-tab="hype"] .arcade-hype { display: flex; }
+body.arcade-shell[data-arcade-tab="map"] .arcade-map { display: flex; }
+body.arcade-shell[data-arcade-tab="overlays"] .arcade-overlays { display: flex; }
+
+body.arcade-shell .arcade-widget-stage {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 18px 28px;
+  overflow-y: auto;
+  max-width: 980px;
+}
+body.arcade-shell .arcade-widget-preview { height: 320px; }
+body.arcade-shell .arcade-widget-preview iframe { background: var(--arc-panel); }
+body.arcade-shell .arcade-widget-preview__label {
+  font: 600 12px/1.2 var(--arc-font-ui);
+  color: var(--arc-ink);
+  flex: 1 1 auto; min-width: 0;
+}
+body.arcade-shell .arcade-map .arcade-widget-preview { height: 420px; } /* a map needs the height */
+
+/* The cross-link button inside a hint line (Style → Featured Chat). */
+body.arcade-shell .arcade-linklike {
+  background: none; border: 0; padding: 0;
+  font: inherit; color: var(--arc-info);
+  text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer;
+}
+body.arcade-shell .arcade-linklike:focus-visible { outline: 2px solid var(--arc-info); outline-offset: 2px; }
+
+/* TASK-70 (Lane 3) — the armed second state of every confirm-on-second-
+   click control gets the WARNING color (2A shipped the arming without the
+   color; the census confirmed no [data-armed] rule existed). */
+body.arcade-shell button[data-armed="1"],
+body.arcade-shell button[data-armed="true"] {
+  color: var(--arc-warning);
+  border-color: var(--arc-warning);
+}
+
+/* The upload door on an alert style row sits right of its text field. */
+body.arcade-shell .arcade-alert-upload { margin-left: 6px; align-self: center; }
+
+/* TASK-70 (Lane 5) — the spotlight ring landing on a source entry after
+   "Reveal full page" scrolls the stock streams page to it. */
+body.arcade-shell .entry.arcade-srcpop-spotlight {
+  outline: 2px solid var(--arc-info);
+  outline-offset: 2px;
+  border-radius: 8px;
+  transition: outline-color 0.4s ease;
+}
+
+
 body.arcade-shell .arcade-frames-empty {
   padding: 6px 10px;
   font-size: 12px;
@@ -1988,6 +2060,15 @@ body.arcade-shell .arcade-settings.is-stock-stage .arcade-deck-stage { display: 
 body.arcade-shell[data-arcade-tab="settings"].arcade-deck-stock-stage #content-pane {
   padding-left: 280px !important;
   box-sizing: border-box;
+}
+/* TASK-70 (Lane 5) — the streams page lays its sources column out
+   ABSOLUTELY (main.css #sources { position:absolute; left:106px }), so the
+   pane's padding-left never reaches it and the column hid under the deck
+   rail. In stock-stage mode the page gets its own shifted, relative box —
+   the abspos children position against it. Dress-only, arcade-mode only. */
+body.arcade-shell[data-arcade-tab="settings"].arcade-deck-stock-stage #streams-page {
+  position: relative; /* becomes the containing block — its abspos children now start 280px in */
+  overflow: hidden;
 }
 body.arcade-shell .arcade-deck-diag-sub {
   display: flex;
