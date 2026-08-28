@@ -14640,6 +14640,9 @@
             if (deckDiagnosticsView === 'interface') {
                 deckSetStockStage(null);
                 renderDeckInterface(stage);
+            } else if (deckDiagnosticsView === 'build') {
+                deckSetStockStage(null);
+                renderDeckBuild(stage);
             } else {
                 deckSetStockStage(deckDiagnosticsView);
             }
@@ -14667,7 +14670,8 @@
         [
             { id: 'dashboard', label: 'Status and Logs' },
             { id: 'sessions', label: 'Sessions' },
-            { id: 'interface', label: 'Interface' }
+            { id: 'interface', label: 'Interface' },
+            { id: 'build', label: 'Build' }
         ].forEach(function (view) {
             var btn = document.createElement('button');
             btn.type = 'button';
@@ -14677,12 +14681,13 @@
             btn.addEventListener('click', function () {
                 deckDiagnosticsView = view.id;
                 renderDeckDiagnosticsSubNav();
-                if (view.id === 'interface') {
+                if (view.id === 'interface' || view.id === 'build') {
                     deckSetStockStage(null);
                     var stage = document.getElementById('arcade-deck-stage');
                     if (stage) {
                         stage.innerHTML = '';
-                        renderDeckInterface(stage);
+                        if (view.id === 'interface') renderDeckInterface(stage);
+                        else renderDeckBuild(stage);
                         focusFirstInteractiveIn(stage, stage); // H17-B — focus lands IN the destination
                     }
                 } else {
@@ -14864,6 +14869,174 @@
         zoomCard.appendChild(zoomBody);
         stage.appendChild(zoomCard);
         syncUiZoomButtons();
+    }
+
+    // --------------------------------------------------------------------
+    // TASK-71 (item 1, H24-A ruled) — Diagnostics → Build: the version
+    // stamp. scripts/updateSocialStreamFallback.js writes build-info.json
+    // into the bundle at refresh/stamp time (fork short commit + BFT build
+    // date + every TRACKED bundle file's git blob id); this view reads it
+    // back through the ssappFallback bridge and RE-PROVES the live bundle
+    // against the tracked one — drift names the files, clean reads "bundle
+    // matches build". The Admiral matches the fork hash against the GitHub
+    // commit list at a glance.
+    // --------------------------------------------------------------------
+    // Git blob ids are sha1("blob <byteLen>\0" + bytes) — a compact SHA-1
+    // over the file's UTF-8 bytes reproduces them exactly, no IPC needed.
+    function arcadeGitBlobSha1(text) {
+        var bytes = new TextEncoder().encode(text);
+        var header = new TextEncoder().encode('blob ' + bytes.length + '\0');
+        var contentLen = header.length + bytes.length;
+        // pad: 0x80, zeros to 56 mod 64, then the 64-bit big-endian bit length
+        var msg = new Uint8Array(contentLen + 1 + ((56 - ((contentLen + 1) % 64) + 64) % 64) + 8);
+        msg.set(header); msg.set(bytes, header.length);
+        var bitLen = contentLen * 8;
+        var i = contentLen;
+        msg[i] = 0x80;
+        // tail: 64-bit big-endian bit length (sha1 over < 2^32 bits here)
+        var dv = new DataView(msg.buffer);
+        dv.setUint32(msg.length - 4, bitLen >>> 0);
+        dv.setUint32(msg.length - 8, Math.floor(bitLen / 4294967296));
+        var h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+        var w = new Int32Array(80);
+        var rotl = function (x, n) { return (x << n) | (x >>> (32 - n)); };
+        for (var block = 0; block < msg.length; block += 64) {
+            for (i = 0; i < 16; i++) w[i] = dv.getInt32(block + i * 4);
+            for (i = 16; i < 80; i++) w[i] = rotl(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+            var a = h0, b = h1, c = h2, d = h3, e = h4, f, k, tmp;
+            for (i = 0; i < 80; i++) {
+                if (i < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+                else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+                else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+                else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+                tmp = (rotl(a, 5) + f + e + k + w[i]) | 0;
+                e = d; d = c; c = rotl(b, 30); b = a; a = tmp;
+            }
+            h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+        }
+        var hex = function (n) { return ('00000000' + (n >>> 0).toString(16)).slice(-8); };
+        return hex(h0) + hex(h1) + hex(h2) + hex(h3) + hex(h4);
+    }
+
+    function renderDeckBuild(stage) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Build';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-blurb';
+        blurb.textContent = 'What this app is running: the fork commit the bundle was stamped against, the Bitcoin Federated Time date of that stamp, and a live proof that the bundle on disk still matches the tracked bundle. Match the fork hash against the fork’s commit list on GitHub.';
+        body.appendChild(blurb);
+
+        function addRow(label, valueText, mono, titleText) {
+            var row = document.createElement('div');
+            row.className = 'arcade-build-row';
+            var k = document.createElement('span');
+            k.className = 'arcade-k';
+            k.textContent = label;
+            row.appendChild(k);
+            var v = document.createElement('span');
+            v.className = 'arcade-build-row__value' + (mono ? ' arcade-build-row__value--mono' : '');
+            v.textContent = valueText;
+            if (titleText) v.title = titleText;
+            row.appendChild(v);
+            body.appendChild(row);
+            return v;
+        }
+
+        var freshness = addRow('Bundle freshness', 'checking…', false);
+        freshness.id = 'arcade-build-freshness';
+        freshness.setAttribute('role', 'status');
+        freshness.setAttribute('aria-live', 'polite');
+
+        var recheckBtn = document.createElement('button');
+        recheckBtn.type = 'button';
+        recheckBtn.className = 'arcade-btn arcade-btn--sm';
+        recheckBtn.textContent = 'Re-check bundle';
+        recheckBtn.title = 'Re-run the live-vs-tracked comparison now';
+        recheckBtn.addEventListener('click', function () { fillBuildRows(); });
+        body.appendChild(recheckBtn);
+
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        function fillBuildRows() {
+            freshness.textContent = 'checking…';
+            freshness.classList.remove('arcade-build-ok', 'arcade-build-drift');
+            var fb = window.ssappFallback;
+            if (!fb || typeof fb.readJson !== 'function' || typeof fb.readFile !== 'function') {
+                addRow('Fork build', 'unavailable', true);
+                freshness.textContent = 'the bundle bridge is unavailable in this context';
+                freshness.classList.add('arcade-build-drift');
+                return;
+            }
+            // Rebuild the static rows on re-check (drop prior ones, keep the
+            // freshness row + button).
+            Array.prototype.slice.call(body.querySelectorAll('.arcade-build-row')).forEach(function (r) {
+                if (r.contains(freshness)) return;
+                r.parentNode.removeChild(r);
+            });
+            fb.readJson('build-info.json').then(function (info) {
+                if (!info || !info.forkCommit) {
+                    addRow('Fork build', 'no build stamp', true);
+                    freshness.textContent = 'no build-info.json in the bundle — run npm run update:fallback (or --stamp-only) to stamp this build';
+                    freshness.classList.add('arcade-build-drift');
+                    return;
+                }
+                addRow('Fork build', info.forkCommit, true,
+                    (info.forkCommitFull || info.forkCommit) + ' — branch ' + (info.forkBranch || '?') + '. Match me: github.com/AdminPacman/social_stream_ninja commits');
+                addRow('Built (BFT)', (info.bftDate || 'BFT —') + (info.bftHeight ? ' · block ' + info.bftHeight : ''), false,
+                    'Stamped ' + (info.refreshedAt || 'unknown') + (info.stampMode === 'refresh' ? ' by a full bundle refresh' : ' by a stamp-only run'));
+                if (info.upstreamCommit) {
+                    addRow('Upstream social_stream', info.upstreamCommit + '@' + (info.upstreamBranch || 'main'), true, info.upstreamCommitFull || info.upstreamCommit);
+                }
+                // The freshness proof: re-hash every tracked bundle file as
+                // a git blob and compare against the stamp's fingerprints.
+                var tracked = info.trackedFiles || {};
+                var names = Object.keys(tracked);
+                if (!names.length) {
+                    freshness.textContent = 'the stamp carries no file fingerprints — re-stamp to enable this check';
+                    freshness.classList.add('arcade-build-drift');
+                    return;
+                }
+                var drifted = [];
+                var step = function (idx) {
+                    if (idx >= names.length) {
+                        if (!drifted.length) {
+                            freshness.textContent = 'bundle matches build — ' + names.length + ' tracked file' + (names.length === 1 ? '' : 's') + ' verified';
+                            freshness.classList.add('arcade-build-ok');
+                        } else {
+                            freshness.textContent = 'DRIFTED — live bundle differs from the tracked build: ' + drifted.slice(0, 6).join(', ') + (drifted.length > 6 ? ' (+' + (drifted.length - 6) + ' more)' : '');
+                            freshness.classList.add('arcade-build-drift');
+                        }
+                        return;
+                    }
+                    var rel = names[idx];
+                    fb.readFile(rel).then(function (text) {
+                        if (text === null || text === undefined) {
+                            drifted.push(rel + ' (missing)');
+                        } else if (arcadeGitBlobSha1(text) !== tracked[rel]) {
+                            drifted.push(rel);
+                        }
+                    }).catch(function () { drifted.push(rel + ' (unreadable)'); })
+                        .finally(function () { step(idx + 1); });
+                };
+                step(0);
+            }).catch(function (e) {
+                console.error('[arcade-shell] build-info read failed:', e);
+                freshness.textContent = 'build stamp unreadable — see console';
+                freshness.classList.add('arcade-build-drift');
+            });
+        }
+        fillBuildRows();
     }
 
     function deckSwitchInterface(mode, btn) {

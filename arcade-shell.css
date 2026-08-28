@@ -2547,3 +2547,14 @@ body.arcade-shell .arcade-frames,
 body.arcade-shell .arcade-tipjar,
 body.arcade-shell .arcade-settings,
 body.arcade-shell .arcade-ai { min-width: 390px; }
+
+/* --------------------------------------------------------------------------
+   TASK-71 (item 1, H24-A) — Diagnostics → Build rows. Token-only colors:
+   green = the live bundle matches the tracked build, red = drift.
+   -------------------------------------------------------------------------- */
+body.arcade-shell .arcade-build-row { display: flex; align-items: baseline; gap: 10px; padding: 4px 0; }
+body.arcade-shell .arcade-build-row .arcade-k { flex: 0 0 auto; }
+body.arcade-shell .arcade-build-row__value { color: var(--arc-ink); word-break: break-all; }
+body.arcade-shell .arcade-build-row__value--mono { font-family: var(--arc-font-mono); }
+body.arcade-shell .arcade-build-ok { color: var(--arc-live); }
+body.arcade-shell .arcade-build-drift { color: var(--arc-danger); }
