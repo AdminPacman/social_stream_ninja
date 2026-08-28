@@ -101,9 +101,10 @@
         {
             id: 'music', name: 'Now Playing', category: 'music', status: 'ready', addonType: 'widgets',
             overlayPage: 'music-widget.html',
-            params: ['layout=horizontal'],
+            // TASK-71 — no default params here: the interior's musicUrlParams()
+            // owns the look params (a card default doubled &layout on the copy).
             setup: true, tab: 'music', // TASK-70 (Lane 3) — Set up opens the Now Playing interior (Spotify groups berth there)
-            blurb: 'Spotify now-playing overlay — transparent, Tuna-grade.'
+            blurb: 'Spotify now-playing overlay — transparent, Tuna-grade. Token-free: reads your Spotify connection over the session feed.'
         },
         {
             id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'ready', addonType: 'money',
@@ -9244,7 +9245,7 @@
 
         // ---- the berthed Spotify groups ----
         var sp = buildWidgetCard('Spotify connection (stock settings)');
-        widgetHint(sp.body, 'Stock’s Spotify groups berth here — setup (client id/secret), overlay behavior, announcements, commands. Same stock page, same keys. The Now Playing widget reads the token you paste as &token= on its URL — a credential, so the copy below leaves it for you to add, never stores it.');
+        widgetHint(sp.body, 'Stock’s Spotify groups berth here — setup (client id/secret + Connect), overlay behavior, announcements, commands. Same stock page, same keys. The token lives in stock’s own store and NEVER leaves the background page: the widget reads track data over the session feed (stock spotify-overlay.html’s exact mechanism), so the copy URL below carries no token — nothing to paste, nothing to leak.');
         stage.appendChild(sp.card);
         buildDeckPopupEmbed(stage, 'music', null);
 
@@ -9255,14 +9256,14 @@
         copyBtn.type = 'button';
         copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
         copyBtn.textContent = 'Copy overlay URL';
-        copyBtn.title = 'Your look params ride along; add &token=… from your Spotify sign-in before loading in OBS';
+        copyBtn.title = 'Real session, your look params — token-free by design: the widget is fed by your Spotify connection (the setup group above) over the session, stock’s own way';
         copyBtn.addEventListener('click', function () {
             var el = elementCardById('music');
             buildElementOverlayUrl(el, musicUrlParams()).then(function (url) {
                 if (!url) throw new Error('no url');
                 return copyToClipboard(url).then(function () {
                     flashButton(copyBtn, 'Copied ✓');
-                    widgetStatus('music', 'Copied — add &token=… from your Spotify sign-in (the setup group above) before OBS.');
+                    widgetStatus('music', 'Copied — real session, token-free (the Spotify connection feeds it).');
                 });
             }).catch(function (e) {
                 console.error('[arcade-shell] copy music url failed:', e);
@@ -14101,8 +14102,91 @@
         cb('');
     }
 
+    // --------------------------------------------------------------------
+    // TASK-71 (item 7, H28 ruled) — the Spotify token JOINS THE SCRUB LIST.
+    // Stock's own flow keeps the token in the background page alone
+    // (spotify.js persists to the spotifyTokens store; overlays get
+    // track-only payloads — spotify-overlay.html:365-367,553-585), so a
+    // token literal should never appear on ANY shell surface. If one ever
+    // does (a hand-built &token= URL, a settings dump), it masks like the
+    // session id — EXCEPT it is never click-to-copyable (never echoed),
+    // and attribute carriers (href/src/title/value) get the literal
+    // REWRITTEN to the mask string, because CSS blur can't stop a link's
+    // hover status-bar leak. Needles are read LIVE each pass (tokens
+    // rotate on refresh — a cached needle list would go stale).
+    // --------------------------------------------------------------------
+    function shellSpotifyTokenNeedles() {
+        var tokens = [];
+        try {
+            var bg = getBackgroundWindow();
+            var sp = bg && bg.spotify;
+            var bgSettings = (bg && bg.settings) || {};
+            [sp && sp.accessToken, sp && sp.refreshToken,
+             bgSettings.spotifyAccessToken, bgSettings.spotifyRefreshToken].forEach(function (v) {
+                if (typeof v === 'string' && v.length >= 8 && tokens.indexOf(v) === -1) tokens.push(v);
+            });
+        } catch (e) { /* cross-origin — no needles */ }
+        return tokens;
+    }
+
+    function maskSpotifyTokenSurfaces(doc, root) {
+        var tokens = shellSpotifyTokenNeedles();
+        if (!tokens.length) return;
+        var scope = root || doc.body;
+        if (!scope) return;
+        var hasToken = function (s) {
+            return typeof s === 'string' && s.length > 0 && tokens.some(function (t) { return s.indexOf(t) !== -1; });
+        };
+        var markToken = function (el) {
+            if (!el || el.nodeType !== 1) return;
+            if (el.dataset && el.dataset.arcadeTokenMasked === '1') return;
+            el.classList.add('arcade-deck-masked');
+            if (el.dataset) el.dataset.arcadeTokenMasked = '1';
+            if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+                if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+                el.setAttribute('aria-label', 'Hidden Spotify token — focus or hover to reveal. Never copied, never echoed.');
+            }
+            // deliberately NO click-to-copy (the session mask copies the real
+            // id on click; a token is never placed on the clipboard by us)
+        };
+        try {
+            var walker = doc.createTreeWalker(scope, 4 /* SHOW_TEXT */, null);
+            var node;
+            var touched = [];
+            while ((node = walker.nextNode())) {
+                if (!node.nodeValue) continue;
+                if (hasToken(node.nodeValue) && touched.indexOf(node.parentElement) === -1) {
+                    touched.push(node.parentElement);
+                }
+            }
+            touched.forEach(markToken);
+            Array.prototype.slice.call(scope.querySelectorAll('input, textarea')).forEach(function (input) {
+                try {
+                    if (hasToken(String(input.value || ''))) markToken(input);
+                } catch (e) { /* noop */ }
+            });
+            // Attribute carriers: rewrite the literal OUT of the attribute
+            // (display-layer only — the in-memory value is stock's own).
+            Array.prototype.slice.call(scope.querySelectorAll('[href], [src], [title], [value], [data-url]')).forEach(function (el) {
+                ['href', 'src', 'title', 'value', 'data-url'].forEach(function (attr) {
+                    try {
+                        var v = el.getAttribute(attr);
+                        if (hasToken(v)) {
+                            var nv = v;
+                            tokens.forEach(function (t) { nv = nv.split(t).join('XXXXXXXXXX'); });
+                            el.setAttribute(attr, nv);
+                            el.setAttribute('data-arcade-token-scrubbed', '1');
+                            markToken(el);
+                        }
+                    } catch (e) { /* noop */ }
+                });
+            });
+        } catch (e) { /* token masking is best-effort dressing, never fatal */ }
+    }
+
     function maskSessionIdSurfaces(doc, root) {
         if (!doc) return;
+        maskSpotifyTokenSurfaces(doc, root); // TASK-71 — the token rides the same schedule as the session id
         withShellSessionId(function (id) {
             if (!id) return;
             // S50 sweep list: the id, its lowercase form, and the derived
