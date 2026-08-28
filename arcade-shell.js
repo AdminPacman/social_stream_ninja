@@ -8622,6 +8622,7 @@
     function initTipjarPreviewFrame() {
         var frame = document.getElementById('arcade-tipjar-preview-frame');
         if (!frame) return;
+        groundWidgetPreviewFrame(frame); // TASK-70 — the dark demo ground
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') return;
         // No session param at all — &demo never joins anything (the ruled
@@ -8643,6 +8644,7 @@
     function initTipjarStockPreviewFrame() {
         var frame = document.getElementById('arcade-tipjar-stock-preview-frame');
         if (!frame) return;
+        groundWidgetPreviewFrame(frame);
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') return;
         var myToken = ++tipjarStockPreviewToken;
@@ -8886,9 +8888,29 @@
         return host;
     }
 
+    // TASK-70 — overlay pages are transparent-by-design (OBS composites
+    // them). In a PREVIEW that honesty reads as invisible text on the
+    // walker's white base, so every widget/gallery preview frame gets an
+    // honest dark demo ground injected at load (same-origin only, marked
+    // arcade-preview-ground, never carried into a copy URL).
+    function groundWidgetPreviewFrame(frame) {
+        if (!frame) return;
+        frame.addEventListener('load', function () {
+            try {
+                var doc = frame.contentDocument;
+                if (!doc || !doc.head || doc.getElementById('arcade-preview-ground')) return;
+                var style = doc.createElement('style');
+                style.id = 'arcade-preview-ground';
+                style.textContent = 'html, body { background: #10131a !important; }';
+                doc.head.appendChild(style);
+            } catch (e) { /* cross-origin/hosted preview — no ground, honest blank */ }
+        });
+    }
+
     function widgetPreviewResolve(frameId, page, params, tokenCheck) {
         var frame = document.getElementById(frameId);
         if (!frame) return;
+        groundWidgetPreviewFrame(frame);
         var resolver = window.resolveSocialStreamPage;
         if (typeof resolver !== 'function') return;
         resolver(page, { extraParams: params }).then(function (resolved) {
@@ -8987,10 +9009,18 @@
         });
     }
 
+    // The stage crumb (installAddonsCrumbs, stage-top variant) must survive
+    // every re-render — clear AROUND it, never through it.
+    function clearWidgetStage(stage) {
+        var crumb = stage.querySelector('.arcade-crumb');
+        stage.innerHTML = '';
+        if (crumb) stage.appendChild(crumb);
+    }
+
     function renderFeaturedStage() {
         var stage = document.getElementById('arcade-featured-stage');
         if (!stage) return;
-        stage.innerHTML = '';
+        clearWidgetStage(stage);
         stage.appendChild(buildWidgetPreviewCard('featured', 'Featured overlay',
             'Zero-network demo — two scripted fake messages ride the real filter chain. Set the whitelist below and only “DemoFren” shows; the filter really filters.',
             initFeaturedPreviewFrame));
@@ -9129,7 +9159,7 @@
     function renderMusicStage() {
         var stage = document.getElementById('arcade-music-stage');
         if (!stage) return;
-        stage.innerHTML = '';
+        clearWidgetStage(stage);
         stage.appendChild(buildWidgetPreviewCard('music', 'Now Playing overlay',
             'Zero-network demo — the demo track’s title is deliberately long on purpose: it must stay INSIDE the widget (ellipsis / wrapped), never overflow.',
             initMusicPreviewFrame));
@@ -9259,6 +9289,33 @@
 
     function initHypePreviewFrame() {
         var myToken = ++hypePreviewToken;
+        var frame = document.getElementById('arcade-hype-preview-frame');
+        if (frame && !frame.dataset.hypeNoteWired) {
+            frame.dataset.hypeNoteWired = '1';
+            frame.addEventListener('load', function () {
+                // Stock hides the whole widget at zero counts (parentHolder
+                // gets .hidden) — correct for OBS, a black box in a preview.
+                // Say so IN the frame (shell-side note, preview-only, never
+                // part of the copied URL). Checked at load and once late
+                // (the page settles its zero state async).
+                var apply = function () {
+                    try {
+                        var doc = frame.contentDocument;
+                        if (!doc || !doc.body) return;
+                        var holder = doc.getElementById('parentHolder');
+                        if (!holder || !holder.classList.contains('hidden')) return;
+                        if (doc.getElementById('arcade-hype-empty-note')) return;
+                        var note = doc.createElement('div');
+                        note.id = 'arcade-hype-empty-note';
+                        note.textContent = 'Stock hides this widget at zero counts — on your live session it appears the moment chatters or viewers are around.';
+                        note.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font:400 13px/1.5 sans-serif;color:#9ba1ad;pointer-events:none;';
+                        doc.body.appendChild(note);
+                    } catch (e) { /* hosted/cross-origin — the hint below the frame carries it */ }
+                };
+                apply();
+                setTimeout(apply, 2500);
+            });
+        }
         var params = ['session=' + encodeURIComponent(gamesPreviewRoom)].concat(hypeUrlParams());
         widgetPreviewResolve('arcade-hype-preview-frame', 'hype.html', params, function () { return myToken === hypePreviewToken; });
     }
@@ -9277,7 +9334,7 @@
     function renderHypeStage() {
         var stage = document.getElementById('arcade-hype-stage');
         if (!stage) return;
-        stage.innerHTML = '';
+        clearWidgetStage(stage);
         stage.appendChild(buildWidgetPreviewCard('hype', 'Hype Train overlay',
             'Isolated preview room — honestly reads zero (no live viewers in a throwaway room). The real session drives the real counts.',
             initHypePreviewFrame));
@@ -9372,7 +9429,7 @@
     function renderMapStage() {
         var stage = document.getElementById('arcade-map-stage');
         if (!stage) return;
-        stage.innerHTML = '';
+        clearWidgetStage(stage);
         stage.appendChild(buildWidgetPreviewCard('map', 'Fren Map overlay',
             'Isolated preview room — an empty map is honest here (no frens pinned in a throwaway room). On the real overlay, viewers pin themselves from chat.',
             initMapPreviewFrame));
@@ -13783,6 +13840,11 @@
            label ON the input until focus; in the embed that read as the
            password box / session box / description text overlapping). */
         '#arcade-deck-popup-root .textInputContainer { display: block; width: 100% !important; margin: 10px 0 2px; }',
+        /* TASK-70 (WALK 2C) — stock's #667eea "Upload" buttons (beep /
+           fallback-image slots in the berthed featured/spotify groups) sit
+           white-on-#667eea = 3.66:1; the house button dress (same as T69's
+           TTS Test buttons) brings them to token contrast. */
+        '#arcade-deck-popup-root .textInputContainer button { background: #191c22 !important; color: #f2f0ea !important; border: 1px solid #2a2e37 !important; }',
         '#arcade-deck-popup-root .textInput + label { position: static; display: block; padding: 2px 0 0; font-size: 1em; color: #9ba1ad; cursor: default; pointer-events: none; }',
         '#arcade-deck-popup-root .textInput + label::before { display: none; }',
         /* TASK-66 — the session id goes quiet: the mask class (JS pass adds it
@@ -14103,6 +14165,28 @@
         run();
         setTimeout(run, 1200);
         setTimeout(run, 3000);
+        // TASK-70 (WALK 2C) — popup.js fills/re-fills its generated overlay
+        // links (dock.html?session=… etc.) ASYNC on settings load and on
+        // every settings sync — past the 3s last pass, so a late fill
+        // painted the session id unmasked (caught on the Lane 5 wrap). A
+        // debounced mutation pass catches every late fill for the life of
+        // the frame document.
+        try {
+            var doc = frame.contentDocument;
+            if (doc && doc.body && !frame.dataset.arcadeMaskObserver) {
+                frame.dataset.arcadeMaskObserver = '1';
+                var t = null;
+                var obs = new doc.defaultView.MutationObserver(function () {
+                    clearTimeout(t);
+                    t = setTimeout(run, 500);
+                });
+                obs.observe(doc.body, { childList: true, subtree: true, characterData: true });
+                frame.addEventListener('load', function () {
+                    try { obs.disconnect(); } catch (e) { /* noop */ }
+                    delete frame.dataset.arcadeMaskObserver; // the fresh document gets its own observer via the load pass
+                });
+            }
+        } catch (e) { /* cross-origin/hosted — the timed passes above stand */ }
     }
 
     // TASK-68 (WALK 2A item 3) — NO UNMASKED FIRST PAINT. The stock frames

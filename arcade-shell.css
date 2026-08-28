@@ -2061,6 +2061,15 @@ body.arcade-shell[data-arcade-tab="settings"].arcade-deck-stock-stage #content-p
   padding-left: 280px !important;
   box-sizing: border-box;
 }
+/* TASK-70 (Lane 5) — the streams page lays its sources column out
+   ABSOLUTELY (main.css #sources { position:absolute; left:106px }), so the
+   pane's padding-left never reaches it and the column hid under the deck
+   rail. In stock-stage mode the page gets its own shifted, relative box —
+   the abspos children position against it. Dress-only, arcade-mode only. */
+body.arcade-shell[data-arcade-tab="settings"].arcade-deck-stock-stage #streams-page {
+  position: relative; /* becomes the containing block — its abspos children now start 280px in */
+  overflow: hidden;
+}
 body.arcade-shell .arcade-deck-diag-sub {
   display: flex;
   flex-direction: column;
