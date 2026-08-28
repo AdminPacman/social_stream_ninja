@@ -1857,15 +1857,23 @@
         if (ready) {
             var actions = document.createElement('div');
             actions.className = 'arcade-el-card__actions';
-            var copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            // TASK-68 — the auto-open doctrine demotes Copy to the small
-            // secondary door on cards that open; overlay-only cards keep it
-            // primary (copying IS their interior-less workflow).
-            copyBtn.className = opensInterior ? 'arcade-btn arcade-btn--sm' : 'arcade-btn arcade-btn--primary';
-            copyBtn.textContent = 'Copy overlay URL';
-            copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
-            actions.appendChild(copyBtn);
+            if (el.id === 'tipjar') {
+                // TASK-71 (item 6, H27 ruled) — the Tip Jar card carries BOTH
+                // labeled doors: Goal jar AND Visual jar, each naming its
+                // target, each echoing what rode. No either/or picker.
+                actions.appendChild(buildTipjarCopyDoor('goal', !opensInterior));
+                actions.appendChild(buildTipjarCopyDoor('visual', false));
+            } else {
+                var copyBtn = document.createElement('button');
+                copyBtn.type = 'button';
+                // TASK-68 — the auto-open doctrine demotes Copy to the small
+                // secondary door on cards that open; overlay-only cards keep it
+                // primary (copying IS their interior-less workflow).
+                copyBtn.className = opensInterior ? 'arcade-btn arcade-btn--sm' : 'arcade-btn arcade-btn--primary';
+                copyBtn.textContent = 'Copy overlay URL';
+                copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
+                actions.appendChild(copyBtn);
+            }
             // S50 — MONEY placement law: the Tip Jar's Set up opens from the
             // Money card, NEVER inside Frames & Cameras or any other surface.
             // TASK-68 — on an auto-open card the whole card IS the Set up
@@ -7730,6 +7738,43 @@
         return params;
     }
 
+    // TASK-71 (item 6, H27 ruled) — BOTH jar doors, first-class, no
+    // either/or picker: the card and the interior each carry two labeled
+    // copy doors that NAME their target and echo what rode (the T68 copy
+    // idiom). Both are real-session URLs, never the demo.
+    function buildTipjarGoalOverlayUrl() {
+        var el = elementCardById('tipjar');
+        return loadTipjarStyleSettings().then(function () { return buildElementOverlayUrl(el, tipjarStyleUrlParams()); });
+    }
+    function buildTipjarVisualOverlayUrl() {
+        // the Visual jar's own defaults live inline since the T70 merge —
+        // the receive rails compose in.
+        var el = { id: 'tipjar-mini', overlayPage: 'tipjar-mini.html', params: ['goal=100', 'label=Tip Jar', 'layout=full'] };
+        return buildElementOverlayUrl(el, tipRailsUrlParams());
+    }
+    function copyTipjarUrl(which, btn) {
+        var label = which === 'goal' ? 'Goal jar' : 'Visual jar';
+        var p = which === 'goal' ? buildTipjarGoalOverlayUrl() : buildTipjarVisualOverlayUrl();
+        p.then(function (url) {
+            if (!url) throw new Error('no url');
+            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ' + label + ' URL ✓'); });
+        }).catch(function (e) {
+            console.error('[arcade-shell] copy ' + which + ' jar url failed:', e);
+            flashButton(btn, 'Copy failed', 2200);
+        });
+    }
+    function buildTipjarCopyDoor(which, primary) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm' + (primary ? ' arcade-btn--primary' : '');
+        btn.textContent = which === 'goal' ? 'Copy Goal jar URL' : 'Copy Visual jar URL';
+        btn.title = (which === 'goal'
+            ? 'The stock tipjar.html overlay, real session, wearing the chosen jar look'
+            : 'The lean house tipjar-mini overlay, real session, with your receive rails') + ' — never the demo';
+        btn.addEventListener('click', function () { copyTipjarUrl(which, btn); });
+        return btn;
+    }
+
     function loadTipjarStyleSettings() {
         return new Promise(function (resolve) {
             try {
@@ -8592,25 +8637,11 @@
 
         var actions = document.createElement('div');
         actions.className = 'arcade-frames-actions';
-        var copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
-        copyBtn.id = 'arcade-tipjar-copy';
-        copyBtn.textContent = 'Copy overlay URL';
-        copyBtn.addEventListener('click', function () {
-            // TASK-70 (Lane 2) — the Visual jar's own defaults live inline
-            // now (the gallery's second jar card merged into the one Tip
-            // Jar card); the rails still compose in.
-            var el = { id: 'tipjar-mini', overlayPage: 'tipjar-mini.html', params: ['goal=100', 'label=Tip Jar', 'layout=full'] };
-            buildElementOverlayUrl(el, tipRailsUrlParams()).then(function (url) {
-                if (!url) throw new Error('no url');
-                return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
-            }).catch(function (e) {
-                console.error('[arcade-shell] copy tipjar-mini url failed:', e);
-                flashButton(copyBtn, 'Copy failed', 2200);
-            });
-        });
-        actions.appendChild(copyBtn);
+        // TASK-71 (item 6) — the Visual jar's door names its target and
+        // echoes what rode; the Goal jar door rides beside it (both
+        // first-class, no picker).
+        actions.appendChild(buildTipjarCopyDoor('visual', true));
+        actions.appendChild(buildTipjarCopyDoor('goal', false));
         host.appendChild(actions);
         var defaults = document.createElement('p');
         defaults.className = 'arcade-style-hint';
@@ -8766,21 +8797,11 @@
 
         var actions = document.createElement('div');
         actions.className = 'arcade-frames-actions';
-        var copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
-        copyBtn.textContent = 'Copy overlay URL';
-        copyBtn.addEventListener('click', function () {
-            var el = elementCardById('tipjar');
-            buildElementOverlayUrl(el, tipjarStyleUrlParams()).then(function (url) {
-                if (!url) throw new Error('no url');
-                return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
-            }).catch(function (e) {
-                console.error('[arcade-shell] copy tipjar url failed:', e);
-                flashButton(copyBtn, 'Copy failed', 2200);
-            });
-        });
-        actions.appendChild(copyBtn);
+        // TASK-71 (item 6) — the Goal jar's door names its target and
+        // echoes what rode; the Visual jar door rides beside it (both
+        // first-class, no picker).
+        actions.appendChild(buildTipjarCopyDoor('goal', true));
+        actions.appendChild(buildTipjarCopyDoor('visual', false));
         host.appendChild(actions);
         initTipjarStockPreviewFrame();
     }
