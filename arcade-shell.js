@@ -101,9 +101,10 @@
         {
             id: 'music', name: 'Now Playing', category: 'music', status: 'ready', addonType: 'widgets',
             overlayPage: 'music-widget.html',
-            params: ['layout=horizontal'],
+            // TASK-71 — no default params here: the interior's musicUrlParams()
+            // owns the look params (a card default doubled &layout on the copy).
             setup: true, tab: 'music', // TASK-70 (Lane 3) — Set up opens the Now Playing interior (Spotify groups berth there)
-            blurb: 'Spotify now-playing overlay — transparent, Tuna-grade.'
+            blurb: 'Spotify now-playing overlay — transparent, Tuna-grade. Token-free: reads your Spotify connection over the session feed.'
         },
         {
             id: 'tipjar', name: 'Tip Jar', category: 'tips', status: 'ready', addonType: 'money',
@@ -1857,15 +1858,23 @@
         if (ready) {
             var actions = document.createElement('div');
             actions.className = 'arcade-el-card__actions';
-            var copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            // TASK-68 — the auto-open doctrine demotes Copy to the small
-            // secondary door on cards that open; overlay-only cards keep it
-            // primary (copying IS their interior-less workflow).
-            copyBtn.className = opensInterior ? 'arcade-btn arcade-btn--sm' : 'arcade-btn arcade-btn--primary';
-            copyBtn.textContent = 'Copy overlay URL';
-            copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
-            actions.appendChild(copyBtn);
+            if (el.id === 'tipjar') {
+                // TASK-71 (item 6, H27 ruled) — the Tip Jar card carries BOTH
+                // labeled doors: Goal jar AND Visual jar, each naming its
+                // target, each echoing what rode. No either/or picker.
+                actions.appendChild(buildTipjarCopyDoor('goal', !opensInterior));
+                actions.appendChild(buildTipjarCopyDoor('visual', false));
+            } else {
+                var copyBtn = document.createElement('button');
+                copyBtn.type = 'button';
+                // TASK-68 — the auto-open doctrine demotes Copy to the small
+                // secondary door on cards that open; overlay-only cards keep it
+                // primary (copying IS their interior-less workflow).
+                copyBtn.className = opensInterior ? 'arcade-btn arcade-btn--sm' : 'arcade-btn arcade-btn--primary';
+                copyBtn.textContent = 'Copy overlay URL';
+                copyBtn.addEventListener('click', function () { copyElementOverlayUrl(el, copyBtn); });
+                actions.appendChild(copyBtn);
+            }
             // S50 — MONEY placement law: the Tip Jar's Set up opens from the
             // Money card, NEVER inside Frames & Cameras or any other surface.
             // TASK-68 — on an auto-open card the whole card IS the Set up
@@ -7730,6 +7739,43 @@
         return params;
     }
 
+    // TASK-71 (item 6, H27 ruled) — BOTH jar doors, first-class, no
+    // either/or picker: the card and the interior each carry two labeled
+    // copy doors that NAME their target and echo what rode (the T68 copy
+    // idiom). Both are real-session URLs, never the demo.
+    function buildTipjarGoalOverlayUrl() {
+        var el = elementCardById('tipjar');
+        return loadTipjarStyleSettings().then(function () { return buildElementOverlayUrl(el, tipjarStyleUrlParams()); });
+    }
+    function buildTipjarVisualOverlayUrl() {
+        // the Visual jar's own defaults live inline since the T70 merge —
+        // the receive rails compose in.
+        var el = { id: 'tipjar-mini', overlayPage: 'tipjar-mini.html', params: ['goal=100', 'label=Tip Jar', 'layout=full'] };
+        return buildElementOverlayUrl(el, tipRailsUrlParams());
+    }
+    function copyTipjarUrl(which, btn) {
+        var label = which === 'goal' ? 'Goal jar' : 'Visual jar';
+        var p = which === 'goal' ? buildTipjarGoalOverlayUrl() : buildTipjarVisualOverlayUrl();
+        p.then(function (url) {
+            if (!url) throw new Error('no url');
+            return copyToClipboard(url).then(function () { flashButton(btn, 'Copied ' + label + ' URL ✓'); });
+        }).catch(function (e) {
+            console.error('[arcade-shell] copy ' + which + ' jar url failed:', e);
+            flashButton(btn, 'Copy failed', 2200);
+        });
+    }
+    function buildTipjarCopyDoor(which, primary) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'arcade-btn arcade-btn--sm' + (primary ? ' arcade-btn--primary' : '');
+        btn.textContent = which === 'goal' ? 'Copy Goal jar URL' : 'Copy Visual jar URL';
+        btn.title = (which === 'goal'
+            ? 'The stock tipjar.html overlay, real session, wearing the chosen jar look'
+            : 'The lean house tipjar-mini overlay, real session, with your receive rails') + ' — never the demo';
+        btn.addEventListener('click', function () { copyTipjarUrl(which, btn); });
+        return btn;
+    }
+
     function loadTipjarStyleSettings() {
         return new Promise(function (resolve) {
             try {
@@ -8592,25 +8638,11 @@
 
         var actions = document.createElement('div');
         actions.className = 'arcade-frames-actions';
-        var copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
-        copyBtn.id = 'arcade-tipjar-copy';
-        copyBtn.textContent = 'Copy overlay URL';
-        copyBtn.addEventListener('click', function () {
-            // TASK-70 (Lane 2) — the Visual jar's own defaults live inline
-            // now (the gallery's second jar card merged into the one Tip
-            // Jar card); the rails still compose in.
-            var el = { id: 'tipjar-mini', overlayPage: 'tipjar-mini.html', params: ['goal=100', 'label=Tip Jar', 'layout=full'] };
-            buildElementOverlayUrl(el, tipRailsUrlParams()).then(function (url) {
-                if (!url) throw new Error('no url');
-                return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
-            }).catch(function (e) {
-                console.error('[arcade-shell] copy tipjar-mini url failed:', e);
-                flashButton(copyBtn, 'Copy failed', 2200);
-            });
-        });
-        actions.appendChild(copyBtn);
+        // TASK-71 (item 6) — the Visual jar's door names its target and
+        // echoes what rode; the Goal jar door rides beside it (both
+        // first-class, no picker).
+        actions.appendChild(buildTipjarCopyDoor('visual', true));
+        actions.appendChild(buildTipjarCopyDoor('goal', false));
         host.appendChild(actions);
         var defaults = document.createElement('p');
         defaults.className = 'arcade-style-hint';
@@ -8766,21 +8798,11 @@
 
         var actions = document.createElement('div');
         actions.className = 'arcade-frames-actions';
-        var copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
-        copyBtn.textContent = 'Copy overlay URL';
-        copyBtn.addEventListener('click', function () {
-            var el = elementCardById('tipjar');
-            buildElementOverlayUrl(el, tipjarStyleUrlParams()).then(function (url) {
-                if (!url) throw new Error('no url');
-                return copyToClipboard(url).then(function () { flashButton(copyBtn, 'Copied ✓'); });
-            }).catch(function (e) {
-                console.error('[arcade-shell] copy tipjar url failed:', e);
-                flashButton(copyBtn, 'Copy failed', 2200);
-            });
-        });
-        actions.appendChild(copyBtn);
+        // TASK-71 (item 6) — the Goal jar's door names its target and
+        // echoes what rode; the Visual jar door rides beside it (both
+        // first-class, no picker).
+        actions.appendChild(buildTipjarCopyDoor('goal', true));
+        actions.appendChild(buildTipjarCopyDoor('visual', false));
         host.appendChild(actions);
         initTipjarStockPreviewFrame();
     }
@@ -8968,9 +8990,11 @@
     // :1689-1700 + :1542-1545 + :2760-2776): &onlyfrom/&hidefrom (platforms),
     // &filterevents, and &filterfeaturedusers (a name whitelist — only those
     // chatters may be featured at all). The whitelist is surfaced natively
-    // here (rides the preview + copy URL). "Skip emoji-only" is DOCK-ONLY
-    // stock (&noemojisonly, dock.html:5704) — featured.html does NOT read
-    // it; flagged to the Admiral, honestly stated, not wired.
+    // here (rides the preview + copy URL).
+    // TASK-71 (H25 ruled) — "skip emoji-only" is WIRED now: featured.html
+    // reads the SAME stock key the dock does (&noemojisonly, dock.html:5704;
+    // the popup's "Ignore emoji-only messages" toggle writes it as param1 —
+    // popup.html:3941). One stock key, both surfaces, no new key minted.
     // --------------------------------------------------------------------
     var FEATURED_OPTS_KEY = 'arcadeFeaturedOptions';
     var featuredOpts = { whitelist: '' };
@@ -8985,16 +9009,32 @@
     }
     function saveFeaturedOptions() { saveGameSetting(FEATURED_OPTS_KEY, JSON.stringify(featuredOpts)); }
 
-    function featuredUrlParams() {
-        var wl = featuredOpts.whitelist.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-        return wl.length ? ['filterfeaturedusers=' + encodeURIComponent(wl.join(','))] : [];
+    // The stock skip-emoji flag, read live off the background page's own
+    // settings object (the same source getSettingFlag reads).
+    function featuredNoEmojiOnlyOn() {
+        try {
+            var bg = getBackgroundWindow();
+            var entry = bg && bg.settings && bg.settings['noemojisonly'];
+            return !!(entry && typeof entry === 'object' && entry.param1 === true);
+        } catch (e) { return false; }
     }
 
-    function initFeaturedPreviewFrame() {
+    function featuredUrlParams(emojiOverride) {
+        var wl = featuredOpts.whitelist.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var params = wl.length ? ['filterfeaturedusers=' + encodeURIComponent(wl.join(','))] : [];
+        // emojiOverride: the toggle passes its INTENDED state — the canonical
+        // saveSetting write lands async, so a same-tick read-back would
+        // compose the preview URL from the pre-toggle setting (the T71 race).
+        var emojiOn = typeof emojiOverride === 'boolean' ? emojiOverride : featuredNoEmojiOnlyOn();
+        if (emojiOn) params.push('noemojisonly'); // the stock key, valueless like the dock's
+        return params;
+    }
+
+    function initFeaturedPreviewFrame(emojiOverride) {
         var myToken = ++featuredPreviewToken;
         // &demo: zero-network; the page's own seeds ride processData — with a
         // whitelist set, only "DemoFren" renders (the filter REALLY filters).
-        var params = ['demo=1', 'session=' + encodeURIComponent(gamesPreviewRoom)].concat(featuredUrlParams());
+        var params = ['demo=1', 'session=' + encodeURIComponent(gamesPreviewRoom)].concat(featuredUrlParams(emojiOverride));
         widgetPreviewResolve('arcade-featured-preview-frame', 'featured.html', params, function () { return myToken === featuredPreviewToken; });
     }
 
@@ -9022,7 +9062,7 @@
         if (!stage) return;
         clearWidgetStage(stage);
         stage.appendChild(buildWidgetPreviewCard('featured', 'Featured overlay',
-            'Zero-network demo — two scripted fake messages ride the real filter chain. Set the whitelist below and only “DemoFren” shows; the filter really filters.',
+            'Zero-network demo — three scripted fake messages ride the real filter chain. Set the whitelist below and only “DemoFren” shows; turn skip-emoji on and EmojiFan’s “😂😂😂” drops. The filters really filter.',
             initFeaturedPreviewFrame));
 
         // ---- Who gets featured ----
@@ -9071,7 +9111,22 @@
         wlLabel.appendChild(wlInput);
         wlRow.appendChild(wlLabel);
         filters.body.appendChild(wlRow);
-        widgetHint(filters.body, 'Skip emoji-only messages: exists for the DOCK only (stock &noemojisonly) — the featured overlay doesn’t read it. Flagged to the Admiral, not wired. Platform and event filters live in the stock groups below (Visibility).');
+        // TASK-71 (H25 ruled) — skip-emoji rides the STOCK key: one switch
+        // for dock AND featured (popup.html:3941's "Ignore emoji-only
+        // messages" → param1 noemojisonly → dock.html:5704 + the TASK-71
+        // featured.html patch). Canonical saveSetting, the popup's own write
+        // shape (popup.js:5607-5616); the demo preview proves the drop.
+        filters.body.appendChild(buildArcadeToggle({
+            label: 'Skip emoji-only messages',
+            hint: 'Stock key noemojisonly — the dock’s own “Ignore emoji-only messages” setting. One switch, both surfaces; the featured preview drops EmojiFan’s emoji-only seed when on.',
+            checked: featuredNoEmojiOnlyOn(),
+            onChange: function (checked) {
+                saveDeckSetting('param1', 'noemojisonly', checked);
+                initFeaturedPreviewFrame(checked); // the demo re-runs under the INTENDED filter state (the write lands async)
+                widgetStatus('featured', 'skip emoji-only: ' + (checked ? 'on — the preview drops the emoji-only seed' : 'off — emoji-only messages can feature again'));
+            }
+        }));
+        widgetHint(filters.body, 'Platform and event filters live in the stock groups below (Visibility).');
         stage.appendChild(filters.card);
 
         // ---- the berthed stock groups (S51 embed driver, same keys) ----
@@ -9223,7 +9278,7 @@
 
         // ---- the berthed Spotify groups ----
         var sp = buildWidgetCard('Spotify connection (stock settings)');
-        widgetHint(sp.body, 'Stock’s Spotify groups berth here — setup (client id/secret), overlay behavior, announcements, commands. Same stock page, same keys. The Now Playing widget reads the token you paste as &token= on its URL — a credential, so the copy below leaves it for you to add, never stores it.');
+        widgetHint(sp.body, 'Stock’s Spotify groups berth here — setup (client id/secret + Connect), overlay behavior, announcements, commands. Same stock page, same keys. The token lives in stock’s own store and NEVER leaves the background page: the widget reads track data over the session feed (stock spotify-overlay.html’s exact mechanism), so the copy URL below carries no token — nothing to paste, nothing to leak.');
         stage.appendChild(sp.card);
         buildDeckPopupEmbed(stage, 'music', null);
 
@@ -9234,14 +9289,14 @@
         copyBtn.type = 'button';
         copyBtn.className = 'arcade-btn arcade-btn--sm arcade-btn--primary';
         copyBtn.textContent = 'Copy overlay URL';
-        copyBtn.title = 'Your look params ride along; add &token=… from your Spotify sign-in before loading in OBS';
+        copyBtn.title = 'Real session, your look params — token-free by design: the widget is fed by your Spotify connection (the setup group above) over the session, stock’s own way';
         copyBtn.addEventListener('click', function () {
             var el = elementCardById('music');
             buildElementOverlayUrl(el, musicUrlParams()).then(function (url) {
                 if (!url) throw new Error('no url');
                 return copyToClipboard(url).then(function () {
                     flashButton(copyBtn, 'Copied ✓');
-                    widgetStatus('music', 'Copied — add &token=… from your Spotify sign-in (the setup group above) before OBS.');
+                    widgetStatus('music', 'Copied — real session, token-free (the Spotify connection feeds it).');
                 });
             }).catch(function (e) {
                 console.error('[arcade-shell] copy music url failed:', e);
@@ -12219,8 +12274,11 @@
     // step, left-Riemann — the previous sample's viewer total is credited for
     // the interval up to the next sample). Genuinely derived, never fabricated,
     // and — like peak viewers — SINCE BOOT only (no viewer history predates
-    // this shell), so its sub says "since boot · est" and it does NOT honor the
-    // period selector. Confirmed by a points.js trace (0018.05.25): SSN has NO
+    // this shell), so its sub says "since boot" (renderWatchTime) and it does
+    // NOT honor the period selector. The sub once carried a "· est" suffix —
+    // TASK-69 cut it: the value is a real integral, and branding real data as
+    // estimated lies the other way (the honest-time law cuts both). Confirmed
+    // by a points.js trace (0018.05.25): SSN has NO
     // native per-user watch-time — the points system (enablePointsSystem) is
     // message-engagement-based (points per ~15min engagement window on chat
     // activity; no presence timer, no watchtime field, no importer). Documented
@@ -14077,8 +14135,91 @@
         cb('');
     }
 
+    // --------------------------------------------------------------------
+    // TASK-71 (item 7, H28 ruled) — the Spotify token JOINS THE SCRUB LIST.
+    // Stock's own flow keeps the token in the background page alone
+    // (spotify.js persists to the spotifyTokens store; overlays get
+    // track-only payloads — spotify-overlay.html:365-367,553-585), so a
+    // token literal should never appear on ANY shell surface. If one ever
+    // does (a hand-built &token= URL, a settings dump), it masks like the
+    // session id — EXCEPT it is never click-to-copyable (never echoed),
+    // and attribute carriers (href/src/title/value) get the literal
+    // REWRITTEN to the mask string, because CSS blur can't stop a link's
+    // hover status-bar leak. Needles are read LIVE each pass (tokens
+    // rotate on refresh — a cached needle list would go stale).
+    // --------------------------------------------------------------------
+    function shellSpotifyTokenNeedles() {
+        var tokens = [];
+        try {
+            var bg = getBackgroundWindow();
+            var sp = bg && bg.spotify;
+            var bgSettings = (bg && bg.settings) || {};
+            [sp && sp.accessToken, sp && sp.refreshToken,
+             bgSettings.spotifyAccessToken, bgSettings.spotifyRefreshToken].forEach(function (v) {
+                if (typeof v === 'string' && v.length >= 8 && tokens.indexOf(v) === -1) tokens.push(v);
+            });
+        } catch (e) { /* cross-origin — no needles */ }
+        return tokens;
+    }
+
+    function maskSpotifyTokenSurfaces(doc, root) {
+        var tokens = shellSpotifyTokenNeedles();
+        if (!tokens.length) return;
+        var scope = root || doc.body;
+        if (!scope) return;
+        var hasToken = function (s) {
+            return typeof s === 'string' && s.length > 0 && tokens.some(function (t) { return s.indexOf(t) !== -1; });
+        };
+        var markToken = function (el) {
+            if (!el || el.nodeType !== 1) return;
+            if (el.dataset && el.dataset.arcadeTokenMasked === '1') return;
+            el.classList.add('arcade-deck-masked');
+            if (el.dataset) el.dataset.arcadeTokenMasked = '1';
+            if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+                if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+                el.setAttribute('aria-label', 'Hidden Spotify token — focus or hover to reveal. Never copied, never echoed.');
+            }
+            // deliberately NO click-to-copy (the session mask copies the real
+            // id on click; a token is never placed on the clipboard by us)
+        };
+        try {
+            var walker = doc.createTreeWalker(scope, 4 /* SHOW_TEXT */, null);
+            var node;
+            var touched = [];
+            while ((node = walker.nextNode())) {
+                if (!node.nodeValue) continue;
+                if (hasToken(node.nodeValue) && touched.indexOf(node.parentElement) === -1) {
+                    touched.push(node.parentElement);
+                }
+            }
+            touched.forEach(markToken);
+            Array.prototype.slice.call(scope.querySelectorAll('input, textarea')).forEach(function (input) {
+                try {
+                    if (hasToken(String(input.value || ''))) markToken(input);
+                } catch (e) { /* noop */ }
+            });
+            // Attribute carriers: rewrite the literal OUT of the attribute
+            // (display-layer only — the in-memory value is stock's own).
+            Array.prototype.slice.call(scope.querySelectorAll('[href], [src], [title], [value], [data-url]')).forEach(function (el) {
+                ['href', 'src', 'title', 'value', 'data-url'].forEach(function (attr) {
+                    try {
+                        var v = el.getAttribute(attr);
+                        if (hasToken(v)) {
+                            var nv = v;
+                            tokens.forEach(function (t) { nv = nv.split(t).join('XXXXXXXXXX'); });
+                            el.setAttribute(attr, nv);
+                            el.setAttribute('data-arcade-token-scrubbed', '1');
+                            markToken(el);
+                        }
+                    } catch (e) { /* noop */ }
+                });
+            });
+        } catch (e) { /* token masking is best-effort dressing, never fatal */ }
+    }
+
     function maskSessionIdSurfaces(doc, root) {
         if (!doc) return;
+        maskSpotifyTokenSurfaces(doc, root); // TASK-71 — the token rides the same schedule as the session id
         withShellSessionId(function (id) {
             if (!id) return;
             // S50 sweep list: the id, its lowercase form, and the derived
@@ -14637,6 +14778,9 @@
             if (deckDiagnosticsView === 'interface') {
                 deckSetStockStage(null);
                 renderDeckInterface(stage);
+            } else if (deckDiagnosticsView === 'build') {
+                deckSetStockStage(null);
+                renderDeckBuild(stage);
             } else {
                 deckSetStockStage(deckDiagnosticsView);
             }
@@ -14664,7 +14808,8 @@
         [
             { id: 'dashboard', label: 'Status and Logs' },
             { id: 'sessions', label: 'Sessions' },
-            { id: 'interface', label: 'Interface' }
+            { id: 'interface', label: 'Interface' },
+            { id: 'build', label: 'Build' }
         ].forEach(function (view) {
             var btn = document.createElement('button');
             btn.type = 'button';
@@ -14674,12 +14819,13 @@
             btn.addEventListener('click', function () {
                 deckDiagnosticsView = view.id;
                 renderDeckDiagnosticsSubNav();
-                if (view.id === 'interface') {
+                if (view.id === 'interface' || view.id === 'build') {
                     deckSetStockStage(null);
                     var stage = document.getElementById('arcade-deck-stage');
                     if (stage) {
                         stage.innerHTML = '';
-                        renderDeckInterface(stage);
+                        if (view.id === 'interface') renderDeckInterface(stage);
+                        else renderDeckBuild(stage);
                         focusFirstInteractiveIn(stage, stage); // H17-B — focus lands IN the destination
                     }
                 } else {
@@ -14861,6 +15007,174 @@
         zoomCard.appendChild(zoomBody);
         stage.appendChild(zoomCard);
         syncUiZoomButtons();
+    }
+
+    // --------------------------------------------------------------------
+    // TASK-71 (item 1, H24-A ruled) — Diagnostics → Build: the version
+    // stamp. scripts/updateSocialStreamFallback.js writes build-info.json
+    // into the bundle at refresh/stamp time (fork short commit + BFT build
+    // date + every TRACKED bundle file's git blob id); this view reads it
+    // back through the ssappFallback bridge and RE-PROVES the live bundle
+    // against the tracked one — drift names the files, clean reads "bundle
+    // matches build". The Admiral matches the fork hash against the GitHub
+    // commit list at a glance.
+    // --------------------------------------------------------------------
+    // Git blob ids are sha1("blob <byteLen>\0" + bytes) — a compact SHA-1
+    // over the file's UTF-8 bytes reproduces them exactly, no IPC needed.
+    function arcadeGitBlobSha1(text) {
+        var bytes = new TextEncoder().encode(text);
+        var header = new TextEncoder().encode('blob ' + bytes.length + '\0');
+        var contentLen = header.length + bytes.length;
+        // pad: 0x80, zeros to 56 mod 64, then the 64-bit big-endian bit length
+        var msg = new Uint8Array(contentLen + 1 + ((56 - ((contentLen + 1) % 64) + 64) % 64) + 8);
+        msg.set(header); msg.set(bytes, header.length);
+        var bitLen = contentLen * 8;
+        var i = contentLen;
+        msg[i] = 0x80;
+        // tail: 64-bit big-endian bit length (sha1 over < 2^32 bits here)
+        var dv = new DataView(msg.buffer);
+        dv.setUint32(msg.length - 4, bitLen >>> 0);
+        dv.setUint32(msg.length - 8, Math.floor(bitLen / 4294967296));
+        var h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+        var w = new Int32Array(80);
+        var rotl = function (x, n) { return (x << n) | (x >>> (32 - n)); };
+        for (var block = 0; block < msg.length; block += 64) {
+            for (i = 0; i < 16; i++) w[i] = dv.getInt32(block + i * 4);
+            for (i = 16; i < 80; i++) w[i] = rotl(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+            var a = h0, b = h1, c = h2, d = h3, e = h4, f, k, tmp;
+            for (i = 0; i < 80; i++) {
+                if (i < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+                else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+                else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+                else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+                tmp = (rotl(a, 5) + f + e + k + w[i]) | 0;
+                e = d; d = c; c = rotl(b, 30); b = a; a = tmp;
+            }
+            h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+        }
+        var hex = function (n) { return ('00000000' + (n >>> 0).toString(16)).slice(-8); };
+        return hex(h0) + hex(h1) + hex(h2) + hex(h3) + hex(h4);
+    }
+
+    function renderDeckBuild(stage) {
+        var card = document.createElement('article');
+        card.className = 'arcade-alert-card';
+        var head = document.createElement('div');
+        head.className = 'arcade-alert-card__head';
+        var name = document.createElement('h3');
+        name.className = 'arcade-alert-card__name';
+        name.textContent = 'Build';
+        head.appendChild(name);
+        card.appendChild(head);
+        var body = document.createElement('div');
+        body.className = 'arcade-alert-card__body';
+
+        var blurb = document.createElement('p');
+        blurb.className = 'arcade-evt-blurb';
+        blurb.textContent = 'What this app is running: the fork commit the bundle was stamped against, the Bitcoin Federated Time date of that stamp, and a live proof that the bundle on disk still matches the tracked bundle. Match the fork hash against the fork’s commit list on GitHub.';
+        body.appendChild(blurb);
+
+        function addRow(label, valueText, mono, titleText) {
+            var row = document.createElement('div');
+            row.className = 'arcade-build-row';
+            var k = document.createElement('span');
+            k.className = 'arcade-k';
+            k.textContent = label;
+            row.appendChild(k);
+            var v = document.createElement('span');
+            v.className = 'arcade-build-row__value' + (mono ? ' arcade-build-row__value--mono' : '');
+            v.textContent = valueText;
+            if (titleText) v.title = titleText;
+            row.appendChild(v);
+            body.appendChild(row);
+            return v;
+        }
+
+        var freshness = addRow('Bundle freshness', 'checking…', false);
+        freshness.id = 'arcade-build-freshness';
+        freshness.setAttribute('role', 'status');
+        freshness.setAttribute('aria-live', 'polite');
+
+        var recheckBtn = document.createElement('button');
+        recheckBtn.type = 'button';
+        recheckBtn.className = 'arcade-btn arcade-btn--sm';
+        recheckBtn.textContent = 'Re-check bundle';
+        recheckBtn.title = 'Re-run the live-vs-tracked comparison now';
+        recheckBtn.addEventListener('click', function () { fillBuildRows(); });
+        body.appendChild(recheckBtn);
+
+        card.appendChild(body);
+        stage.appendChild(card);
+
+        function fillBuildRows() {
+            freshness.textContent = 'checking…';
+            freshness.classList.remove('arcade-build-ok', 'arcade-build-drift');
+            var fb = window.ssappFallback;
+            if (!fb || typeof fb.readJson !== 'function' || typeof fb.readFile !== 'function') {
+                addRow('Fork build', 'unavailable', true);
+                freshness.textContent = 'the bundle bridge is unavailable in this context';
+                freshness.classList.add('arcade-build-drift');
+                return;
+            }
+            // Rebuild the static rows on re-check (drop prior ones, keep the
+            // freshness row + button).
+            Array.prototype.slice.call(body.querySelectorAll('.arcade-build-row')).forEach(function (r) {
+                if (r.contains(freshness)) return;
+                r.parentNode.removeChild(r);
+            });
+            fb.readJson('build-info.json').then(function (info) {
+                if (!info || !info.forkCommit) {
+                    addRow('Fork build', 'no build stamp', true);
+                    freshness.textContent = 'no build-info.json in the bundle — run npm run update:fallback (or --stamp-only) to stamp this build';
+                    freshness.classList.add('arcade-build-drift');
+                    return;
+                }
+                addRow('Fork build', info.forkCommit, true,
+                    (info.forkCommitFull || info.forkCommit) + ' — branch ' + (info.forkBranch || '?') + '. Match me: github.com/AdminPacman/social_stream_ninja commits');
+                addRow('Built (BFT)', (info.bftDate || 'BFT —') + (info.bftHeight ? ' · block ' + info.bftHeight : ''), false,
+                    'Stamped ' + (info.refreshedAt || 'unknown') + (info.stampMode === 'refresh' ? ' by a full bundle refresh' : ' by a stamp-only run'));
+                if (info.upstreamCommit) {
+                    addRow('Upstream social_stream', info.upstreamCommit + '@' + (info.upstreamBranch || 'main'), true, info.upstreamCommitFull || info.upstreamCommit);
+                }
+                // The freshness proof: re-hash every tracked bundle file as
+                // a git blob and compare against the stamp's fingerprints.
+                var tracked = info.trackedFiles || {};
+                var names = Object.keys(tracked);
+                if (!names.length) {
+                    freshness.textContent = 'the stamp carries no file fingerprints — re-stamp to enable this check';
+                    freshness.classList.add('arcade-build-drift');
+                    return;
+                }
+                var drifted = [];
+                var step = function (idx) {
+                    if (idx >= names.length) {
+                        if (!drifted.length) {
+                            freshness.textContent = 'bundle matches build — ' + names.length + ' tracked file' + (names.length === 1 ? '' : 's') + ' verified';
+                            freshness.classList.add('arcade-build-ok');
+                        } else {
+                            freshness.textContent = 'DRIFTED — live bundle differs from the tracked build: ' + drifted.slice(0, 6).join(', ') + (drifted.length > 6 ? ' (+' + (drifted.length - 6) + ' more)' : '');
+                            freshness.classList.add('arcade-build-drift');
+                        }
+                        return;
+                    }
+                    var rel = names[idx];
+                    fb.readFile(rel).then(function (text) {
+                        if (text === null || text === undefined) {
+                            drifted.push(rel + ' (missing)');
+                        } else if (arcadeGitBlobSha1(text) !== tracked[rel]) {
+                            drifted.push(rel);
+                        }
+                    }).catch(function () { drifted.push(rel + ' (unreadable)'); })
+                        .finally(function () { step(idx + 1); });
+                };
+                step(0);
+            }).catch(function (e) {
+                console.error('[arcade-shell] build-info read failed:', e);
+                freshness.textContent = 'build stamp unreadable — see console';
+                freshness.classList.add('arcade-build-drift');
+            });
+        }
+        fillBuildRows();
     }
 
     function deckSwitchInterface(mode, btn) {

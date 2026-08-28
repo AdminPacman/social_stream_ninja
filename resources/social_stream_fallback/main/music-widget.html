@@ -11,15 +11,29 @@
   artist + progress. Transparent-capable background; honest idle state;
   never fakes a track outside of explicit ?demo mode.
 
-  TOKEN SUPPLY (pick one):
-    ?token=SPOTIFY_ACCESS_TOKEN     (or ?access_token=)
+  TRACK SUPPLY (pick one):
+    ?session=SSN_SESSION            THE STOCK WAY (TASK-71, H28 ruled) — no
+                                    token anywhere near this page. SSN's
+                                    background (spotify.js, token in the
+                                    spotifyTokens store) polls the Spotify
+                                    API and pushes track-only payloads to
+                                    peers labeled "spotify"; this widget
+                                    listens on that same feed (the exact
+                                    mechanism of stock spotify-overlay.html:
+                                    hidden vdo bridge iframe, label=spotify,
+                                    overlayNinja.spotify messages).
+    ?token=SPOTIFY_ACCESS_TOKEN     (or ?access_token=) — standalone fallback
+                                    only (no SSN session); a credential in a
+                                    URL, avoid where the session feed exists.
     postMessage {type:"spotifyAuthCallback", accessToken, refreshToken, ...}
-    postMessage {type:"spotify-token", token:"…"}
-  In production the token arrives from SSN's onTrackUpdate plumbing / the
-  spotify-auth.html handoff — the operator never pastes it into OBS.
+    postMessage {type:"spotify-token", token:"…"} — same standalone fallback.
+  In production the token NEVER reaches this page: it lives in SSN's
+  background page; only track data crosses the session feed.
 
   ── FULL URL PARAM LIST (Tuna-level customization) ──────────────────────────
-  token / access_token  Spotify access token (see above)
+  session   SSN session id — the stock token-free feed (see TRACK SUPPLY)
+  password  session password (default "false", stock's own convention)
+  token / access_token  Spotify access token (standalone fallback only)
   layout    horizontal (default) | vertical | compact
             compact = smaller preset: 48px art, 14px title, 11px artist,
             tighter padding, thin 2px progress line, times hidden
@@ -240,6 +254,7 @@ function onoff(name, dflt) {
 }
 var cfg = {
   token: P.get("token") || P.get("access_token") || "",
+  session: P.get("session") || P.get("room") || "",
   layout: param("layout", "horizontal"),
   art: onoff("art", true),
   artsize: param("artsize", ""),
@@ -379,8 +394,56 @@ async function poll() {
   }
 }
 
+/* ---- the SSN session feed (stock's token-free mechanism, verbatim idiom) -----
+   Stock spotify-overlay.html:365-367,553-585: the overlay URL carries ONLY the
+   session; a hidden vdo.ninja bridge iframe joins with label=spotify; SSN's
+   background page (which alone holds the token) pushes track-only payloads
+   {spotify: {track, status, isPlaying, progressMs, durationMs, receivedAt}}
+   via sendSpotifyOverlay → sendToLabel (background.js:11711-11750). The token
+   never crosses to this page — it is never in the URL, the DOM, or a message. */
+var feedIframe = null;
+function feedTrack(raw) {
+  var p = (raw && raw.spotify) || raw;                 /* stock's own tolerant unwrap */
+  if (!p || typeof p !== "object") return;
+  var t = p.track || null;
+  if (!t) { showIdle(); return; }                      /* stopped/idle — honest */
+  var url = "";
+  if (t.uri && t.uri.indexOf("spotify:track:") === 0) {
+    url = "https://open.spotify.com/track/" + t.uri.split(":")[2];
+  }
+  showTrack({
+    title: t.name || "Unknown track",
+    artist: t.artist || "Unknown artist",
+    artUrl: t.imageUrl || "",
+    url: url,
+    progressMs: (p.progressMs != null ? p.progressMs : t.progress) || 0,
+    durationMs: p.durationMs || t.duration || 0,
+    playing: p.isPlaying != null ? !!p.isPlaying : !!t.isPlaying
+  });
+}
+function startSessionFeed() {
+  showIdle();
+  titleEl.textContent = cfg.idle + " — listening for SSN";   /* honest waiting state */
+  var password = P.get("password") || "false";
+  feedIframe = document.createElement("iframe");
+  feedIframe.src = "https://vdo.socialstream.ninja/?ln&salt=vdo.ninja&password=" + encodeURIComponent(password) +
+    "&solo&view=" + encodeURIComponent(cfg.session) + "&novideo&noaudio&label=spotify&cleanoutput&room=" + encodeURIComponent(cfg.session);
+  feedIframe.style.cssText = "width:0;height:0;border:0;position:absolute;left:-200px;top:-200px;";
+  feedIframe.setAttribute("aria-hidden", "true");
+  feedIframe.title = "SSN session feed bridge (no media)";
+  document.body.appendChild(feedIframe);
+}
+
 /* ---- token via postMessage (from spotify-auth.html / SSN) --------------------- */
 window.addEventListener("message", function (ev) {
+  /* The session-feed bridge is cross-origin vdo.ninja — stock's own check is
+     the SOURCE iframe, not an origin allowlist (spotify-overlay.html:580). */
+  if (feedIframe && ev.source === feedIframe.contentWindow) {
+    if (ev.data && ev.data.dataReceived && ev.data.dataReceived.overlayNinja) {
+      feedTrack(ev.data.dataReceived.overlayNinja);
+    }
+    return;
+  }
   /* SECURITY: verify the sender BEFORE touching any token material.
      Messages from origins outside ?trustOrigin= are ignored outright. */
   if (trustedOrigins.indexOf(ev.origin) === -1) return;
@@ -428,6 +491,8 @@ if (cfg.demo) {
       track.stamp = Date.now();
     }, 1000);
   }
+} else if (cfg.session) {
+  startSessionFeed();          /* stock's way: track feed, no token on this page */
 } else {
   poll();
   setInterval(poll, cfg.poll);
