@@ -12219,8 +12219,11 @@
     // step, left-Riemann — the previous sample's viewer total is credited for
     // the interval up to the next sample). Genuinely derived, never fabricated,
     // and — like peak viewers — SINCE BOOT only (no viewer history predates
-    // this shell), so its sub says "since boot · est" and it does NOT honor the
-    // period selector. Confirmed by a points.js trace (0018.05.25): SSN has NO
+    // this shell), so its sub says "since boot" (renderWatchTime) and it does
+    // NOT honor the period selector. The sub once carried a "· est" suffix —
+    // TASK-69 cut it: the value is a real integral, and branding real data as
+    // estimated lies the other way (the honest-time law cuts both). Confirmed
+    // by a points.js trace (0018.05.25): SSN has NO
     // native per-user watch-time — the points system (enablePointsSystem) is
     // message-engagement-based (points per ~15min engagement window on chat
     // activity; no presence timer, no watchtime field, no importer). Documented
